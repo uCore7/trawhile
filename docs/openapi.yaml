@@ -1,0 +1,2162 @@
+openapi: 3.1.0
+
+info:
+  title: Trawhile API
+  version: 0.1.0
+  description: |
+    REST API for the self-hosted time tracking application.
+    One instance = one company.
+
+    **Authentication**: Spring Security session cookie (`JSESSIONID`, HttpOnly, SameSite=Strict).
+    All endpoints require an authenticated session unless `security: []` is noted.
+    OAuth2 login flows are handled by Spring Security at `/oauth2/authorization/{provider}`
+    and `/login/oauth2/code/{provider}` — not documented here.
+
+    **Authorization**: Recursive. A grant on node N is effective on N and all descendants.
+    Levels: `view` ⊂ `track` ⊂ `admin`. Only Node Admins (effective `admin`) may grant or
+    revoke authorizations.
+
+    **Errors**: All error responses use `{ code, message }`. Rate-limited requests return 429.
+
+    **SSE**: Live state is pushed via `GET /api/v1/events`. See that endpoint for event types.
+
+servers:
+  - url: /api/v1
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: auth
+  - name: settings
+  - name: root-admins
+    description: System Admin only — manage Node Admins of root
+  - name: users
+  - name: invitations
+  - name: nodes
+  - name: authorizations
+  - name: requests
+  - name: tracking
+  - name: time-entries
+  - name: quick-access
+  - name: reports
+  - name: account
+  - name: security-events
+    description: System Admin only
+  - name: lifecycle
+  - name: about
+  - name: events
+    description: SSE live sync
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+
+  schemas:
+
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: LAST_ADMIN
+        message:
+          type: string
+          example: Cannot revoke the last admin authorization on this node
+
+    AuthLevel:
+      type: string
+      enum: [view, track, admin]
+
+    NodePathEntry:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    NodeSummary:
+      type: object
+      required: [id, name, isActive, sortOrder, hasActiveChildren, scheduledForDeletion]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        hasActiveChildren:
+          type: boolean
+        effectiveAuthorization:
+          oneOf:
+            - $ref: '#/components/schemas/AuthLevel'
+            - type: 'null'
+          description: Null if user has no grant on this node or any ancestor
+        scheduledForDeletion:
+          type: boolean
+          description: True during 6-week pre-notification window if node is eligible for deletion
+
+    Node:
+      type: object
+      required: [id, name, isActive, sortOrder, createdAt, scheduledForDeletion, ancestorPath, children]
+      properties:
+        id:
+          type: string
+          format: uuid
+        parentId:
+          type: [string, 'null']
+          format: uuid
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        deactivatedAt:
+          type: [string, 'null']
+          format: date-time
+        effectiveAuthorization:
+          oneOf:
+            - $ref: '#/components/schemas/AuthLevel'
+            - type: 'null'
+        scheduledForDeletion:
+          type: boolean
+        ancestorPath:
+          type: array
+          description: |
+            Path entries from root to parent (inclusive). Included for navigation context even
+            if the user cannot see some ancestors. Those are rendered as non-interactive crumbs.
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        children:
+          type: array
+          description: Direct children visible to the requesting user
+          items:
+            $ref: '#/components/schemas/NodeSummary'
+
+    NodeAuthorization:
+      type: object
+      required: [userId, userName, authorization, inherited]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+          description: Fixed placeholder string if user is anonymised
+        authorization:
+          $ref: '#/components/schemas/AuthLevel'
+        inherited:
+          type: boolean
+          description: True if the grant originates on an ancestor node, not this node directly
+        inheritedFromNodeId:
+          type: [string, 'null']
+          format: uuid
+          description: The ancestor node where the grant originates; null if direct
+
+    UserSummary:
+      type: object
+      required: [id, isActive, isSystemAdmin, anonymised]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: [string, 'null']
+          description: Null if user is anonymised
+        pictureUrl:
+          type: [string, 'null']
+        isActive:
+          type: boolean
+        isSystemAdmin:
+          type: boolean
+        anonymised:
+          type: boolean
+
+    PendingMembership:
+      type: object
+      required: [id, email, invitedBy, invitedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        invitedBy:
+          $ref: '#/components/schemas/UserSummary'
+        invitedAt:
+          type: string
+          format: date-time
+
+    CompanySettings:
+      type: object
+      required: [id, name, timezone, retentionYears, nodeRetentionExtraYears, purgeSchedule]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        timezone:
+          type: string
+          description: IANA timezone identifier
+          example: Europe/Berlin
+        freezeDate:
+          type: [string, 'null']
+          format: date
+          description: Time entries with startedAt before this date are immutable
+        retentionYears:
+          type: integer
+          minimum: 2
+          default: 7
+        nodeRetentionExtraYears:
+          type: integer
+          minimum: 0
+          default: 1
+        purgeSchedule:
+          type: string
+          enum: [annual, semi_annual, quarterly]
+          default: annual
+
+    UpdateSettingsRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        timezone:
+          type: string
+        freezeDate:
+          type: [string, 'null']
+          format: date
+        retentionYears:
+          type: integer
+          minimum: 2
+        nodeRetentionExtraYears:
+          type: integer
+          minimum: 0
+        purgeSchedule:
+          type: string
+          enum: [annual, semi_annual, quarterly]
+
+    TimeEntry:
+      type: object
+      required: [id, userId, nodeId, nodePath, startedAt, timezone, createdAt, overlapping, scheduledForPurge]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        nodeId:
+          type: string
+          format: uuid
+        nodePath:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Null if this is the currently active entry
+        timezone:
+          type: string
+          description: IANA timezone captured from browser at tracking start
+        createdAt:
+          type: string
+          format: date-time
+        overlapping:
+          type: boolean
+        scheduledForPurge:
+          type: boolean
+          description: True during pre-notification window if startedAt is before upcoming cutoff
+
+    TrackingStatus:
+      type: object
+      required: [active]
+      properties:
+        active:
+          type: boolean
+        entryId:
+          type: [string, 'null']
+          format: uuid
+        nodeId:
+          type: [string, 'null']
+          format: uuid
+        nodePath:
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        timezone:
+          type: [string, 'null']
+        elapsedSeconds:
+          type: [integer, 'null']
+          description: Computed server-side as NOW() - startedAt in seconds
+
+    QuickAccessEntry:
+      type: object
+      required: [nodeId, nodePath, sortOrder, nonTrackable]
+      properties:
+        nodeId:
+          type: string
+          format: uuid
+        nodePath:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        sortOrder:
+          type: integer
+        nonTrackable:
+          type: boolean
+          description: True if node is deactivated or has active children
+        color:
+          type: [string, 'null']
+          description: User's personal color for this node
+
+    ReportSummaryEntry:
+      type: object
+      required: [nodeId, nodePath, totalSeconds]
+      properties:
+        nodeId:
+          type: string
+          format: uuid
+        nodePath:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        totalSeconds:
+          type: integer
+
+    ReportDetailEntry:
+      type: object
+      required: [id, userId, userName, nodeId, nodePath, startedAt, timezone, overlapping, scheduledForPurge]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: [string, 'null']
+          description: Null if user is anonymised
+        nodeId:
+          type: string
+          format: uuid
+        nodePath:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: [string, 'null']
+          format: date-time
+        timezone:
+          type: string
+        overlapping:
+          type: boolean
+        scheduledForPurge:
+          type: boolean
+
+    Report:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [summary, detailed]
+        summary:
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/ReportSummaryEntry'
+        detailed:
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/ReportDetailEntry'
+
+    RequestRecord:
+      type: object
+      required: [id, requesterId, requesterName, nodeId, template, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        requesterId:
+          type: string
+          format: uuid
+        requesterName:
+          type: [string, 'null']
+        nodeId:
+          type: string
+          format: uuid
+        template:
+          type: string
+          enum: [grant_authorization, create_child_node, free_text]
+        body:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [open, closed]
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: [string, 'null']
+          format: date-time
+        resolvedBy:
+          type: [string, 'null']
+          format: uuid
+        resolvedByName:
+          type: [string, 'null']
+
+    UserAuthorization:
+      type: object
+      required: [nodeId, nodePath, authorization]
+      properties:
+        nodeId:
+          type: string
+          format: uuid
+        nodePath:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodePathEntry'
+        authorization:
+          $ref: '#/components/schemas/AuthLevel'
+
+    SecurityEvent:
+      type: object
+      required: [id, eventType, occurredAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: [string, 'null']
+          format: uuid
+        userName:
+          type: [string, 'null']
+        eventType:
+          type: string
+          enum:
+            - OAUTH_LOGIN_SUCCESS
+            - OAUTH_LOGIN_FAILED
+            - NODE_ADMIN_GRANTED
+            - NODE_ADMIN_REVOKED
+            - ACCOUNT_ANONYMISED
+            - USER_REMOVED
+            - RATE_LIMIT_BREACH
+            - AUTHORIZATION_FAILURE
+            - ACTIVITY_PURGE_COMPLETED
+            - NODE_DELETION_COMPLETED
+        details:
+          type: [object, 'null']
+          additionalProperties: true
+        ipAddress:
+          type: [string, 'null']
+        occurredAt:
+          type: string
+          format: date-time
+
+    PurgeNotification:
+      type: object
+      required: [activityPurgeDate, activityCutoffDate, timeEntryCount, requestCount, nodeDeletionDate, nodeCutoffDate, nodeCount]
+      properties:
+        activityPurgeDate:
+          type: string
+          format: date
+        activityCutoffDate:
+          type: string
+          format: date
+        timeEntryCount:
+          type: integer
+          description: time_entries rows scheduled for purge
+        requestCount:
+          type: integer
+          description: requests rows scheduled for purge
+        nodeDeletionDate:
+          type: string
+          format: date
+        nodeCutoffDate:
+          type: string
+          format: date
+        nodeCount:
+          type: integer
+          description: Deactivated nodes scheduled for deletion
+
+    AboutInfo:
+      type: object
+      required: [version, licenses, sbomUrl]
+      properties:
+        version:
+          type: string
+        licenses:
+          type: array
+          items:
+            type: object
+            required: [component, license]
+            properties:
+              component:
+                type: string
+              license:
+                type: string
+        sbomUrl:
+          type: string
+
+  responses:
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Authenticated but not authorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Business rule violation (e.g. last admin, frozen entry, full quick-access)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: Validation error (e.g. startedAt >= endedAt, invalid timezone)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+paths:
+
+  # ---------------------------------------------------------------------------
+  # Auth
+  # ---------------------------------------------------------------------------
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      operationId: logout
+      description: Invalidates the current Spring Security session.
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # Company settings
+  # ---------------------------------------------------------------------------
+
+  /settings:
+    get:
+      tags: [settings]
+      summary: Get company settings
+      operationId: getSettings
+      description: Requires effective admin on root. SR-012.
+      responses:
+        '200':
+          description: Company settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanySettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [settings]
+      summary: Update company settings
+      operationId: updateSettings
+      description: |
+        Requires effective admin on root. All fields are optional; omitted fields are unchanged.
+        Rejects if retention_years < 2, node_retention_extra_years < 0, or invalid purge_schedule.
+        SR-013.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsRequest'
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanySettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ---------------------------------------------------------------------------
+  # Root Node Admin management — System Admin only
+  # ---------------------------------------------------------------------------
+
+  /root/admins:
+    post:
+      tags: [root-admins]
+      summary: Grant admin on root
+      operationId: grantRootAdmin
+      description: Requires is_system_admin. SR-003.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '204':
+          description: Granted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /root/admins/{userId}:
+    delete:
+      tags: [root-admins]
+      summary: Revoke admin on root
+      operationId: revokeRootAdmin
+      description: Requires is_system_admin. Blocked if target is last admin on root. SR-003/SR-004.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------------------
+  # Users
+  # ---------------------------------------------------------------------------
+
+  /users:
+    get:
+      tags: [users]
+      summary: List all users
+      operationId: listUsers
+      description: Requires effective admin on root or is_system_admin. SR-005.
+      responses:
+        '200':
+          description: All users including anonymised stubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/{userId}:
+    delete:
+      tags: [users]
+      summary: Remove user
+      operationId: removeUser
+      description: |
+        Requires effective admin on root. In one transaction: stops active tracking, deletes all
+        node authorizations, deletes user_profile (cascades to oauth providers, quick_access,
+        node_colors), sets users.is_active = false. Retains users row and time_entries. SR-010.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: User removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /users/{userId}/authorizations:
+    get:
+      tags: [users]
+      summary: List user's node authorizations
+      operationId: getUserAuthorizations
+      description: Requires effective admin on root or is_system_admin. SR-011.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Authorization assignments with full node paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAuthorization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Invitations
+  # ---------------------------------------------------------------------------
+
+  /invitations:
+    get:
+      tags: [invitations]
+      summary: List pending invitations
+      operationId: listInvitations
+      description: Requires effective admin on root. SR-006.
+      responses:
+        '200':
+          description: Pending memberships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingMembership'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [invitations]
+      summary: Invite user by email
+      operationId: createInvitation
+      description: |
+        Requires effective admin on root. Rejects if email already in pending_memberships or
+        already linked to an existing user. SR-007.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: Invitation created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingMembership'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /invitations/{invitationId}:
+    delete:
+      tags: [invitations]
+      summary: Cancel invitation
+      operationId: cancelInvitation
+      description: Requires effective admin on root. SR-009.
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Cancelled
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Nodes
+  # Note: /nodes/root must be matched before /nodes/{nodeId} in the router.
+  # ---------------------------------------------------------------------------
+
+  /nodes/root:
+    get:
+      tags: [nodes]
+      summary: Get root node
+      operationId: getRootNode
+      description: |
+        Returns the root node with its visible direct children. No authorization check beyond
+        authentication — the root node is always accessible; children are filtered by visibility.
+        SR-016.
+      responses:
+        '200':
+          description: Root node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /nodes/{nodeId}:
+    get:
+      tags: [nodes]
+      summary: Get node
+      operationId: getNode
+      description: |
+        Returns node with visible direct children. Requires at least view on node (direct or
+        inherited). SR-016.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Node with children
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [nodes]
+      summary: Update node name/description
+      operationId: updateNode
+      description: Requires effective admin on node or ancestor. SR-018.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: [string, 'null']
+      responses:
+        '200':
+          description: Updated node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{nodeId}/children:
+    post:
+      tags: [nodes]
+      summary: Create child node
+      operationId: createChildNode
+      description: |
+        Requires effective admin on the parent node or ancestor. New node is active, appended
+        after existing siblings. SR-017.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Created child node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{nodeId}/children/order:
+    put:
+      tags: [nodes]
+      summary: Reorder children
+      operationId: reorderChildren
+      description: |
+        Submit the complete ordered list of direct child IDs. Requires effective admin on node or
+        ancestor. Rejects if the list does not match the current set of direct children. SR-019.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [childIds]
+              properties:
+                childIds:
+                  type: array
+                  description: Complete ordered list of direct child node IDs
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '204':
+          description: Reordered
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /nodes/{nodeId}/deactivate:
+    post:
+      tags: [nodes]
+      summary: Deactivate node
+      operationId: deactivateNode
+      description: |
+        Requires effective admin on node or ancestor. Blocked if active children exist. An active
+        time entry on the node itself does not block deactivation — the running entry may complete
+        normally. Sets deactivated_at = NOW(). SR-020.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deactivated node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /nodes/{nodeId}/reactivate:
+    post:
+      tags: [nodes]
+      summary: Reactivate node
+      operationId: reactivateNode
+      description: Requires effective admin on node or ancestor. Clears deactivated_at. SR-021.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reactivated node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{nodeId}/move:
+    post:
+      tags: [nodes]
+      summary: Move node to different parent
+      operationId: moveNode
+      description: |
+        Requires effective admin on the moved node AND on the destination parent. Destination must
+        not be the node itself or any descendant. Sort order set to append at destination. SR-022.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destinationParentId]
+              properties:
+                destinationParentId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Moved node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /nodes/{nodeId}/color:
+    put:
+      tags: [nodes]
+      summary: Set personal color for node
+      operationId: setNodeColor
+      description: Requires at least view on node. Upserts node_colors row. SR-036.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [color]
+              properties:
+                color:
+                  type: string
+                  example: '#4f86c6'
+      responses:
+        '204':
+          description: Color set
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # Node authorizations
+  # ---------------------------------------------------------------------------
+
+  /nodes/{nodeId}/authorizations:
+    get:
+      tags: [authorizations]
+      summary: List node authorization assignments
+      operationId: listNodeAuthorizations
+      description: |
+        Requires effective admin on node or ancestor. Returns both direct assignments and those
+        inherited from ancestor nodes, distinguished by the inherited flag. SR-025.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Authorization assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeAuthorization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{nodeId}/authorizations/{userId}:
+    put:
+      tags: [authorizations]
+      summary: Grant or update authorization
+      operationId: grantAuthorization
+      description: |
+        Upserts a node_authorizations row. Requires the requesting user to have effective admin on
+        this node. SR-023.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authorization]
+              properties:
+                authorization:
+                  $ref: '#/components/schemas/AuthLevel'
+      responses:
+        '204':
+          description: Authorization granted or updated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [authorizations]
+      summary: Revoke authorization
+      operationId: revokeAuthorization
+      description: |
+        Deletes a node_authorizations row. Requires effective admin on node or ancestor. Blocked
+        if the row is the last admin-level authorization on this node. SR-024.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------------------
+  # Requests (in-app request board)
+  # ---------------------------------------------------------------------------
+
+  /nodes/{nodeId}/requests:
+    get:
+      tags: [requests]
+      summary: List requests on a node
+      operationId: listNodeRequests
+      description: |
+        Requires at least view on node. Node Admins of the node or any ancestor see all requests;
+        all others see only their own. SR-041.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequestRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [requests]
+      summary: Submit a request
+      operationId: createRequest
+      description: Requires at least view on node. SR-040.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template]
+              properties:
+                template:
+                  type: string
+                  enum: [grant_authorization, create_child_node, free_text]
+                body:
+                  type: [string, 'null']
+      responses:
+        '201':
+          description: Request submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{nodeId}/requests/{requestId}/close:
+    post:
+      tags: [requests]
+      summary: Close a request
+      operationId: closeRequest
+      description: Requires effective admin on node or ancestor. Blocked if already closed. SR-042.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Closed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------------------
+  # Tracking
+  # ---------------------------------------------------------------------------
+
+  /tracking:
+    get:
+      tags: [tracking]
+      summary: Get current tracking status
+      operationId: getTrackingStatus
+      description: Returns active time entry with elapsed seconds, or empty state. SR-026.
+      responses:
+        '200':
+          description: Tracking status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tracking/history:
+    get:
+      tags: [tracking]
+      summary: Recent time entry history
+      operationId: getTrackingHistory
+      description: |
+        Returns recent time entries for the authenticated user, descending startedAt, with overlap
+        flags. SR-027.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Paginated time entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimeEntry'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tracking/start:
+    post:
+      tags: [tracking]
+      summary: Start or switch tracking
+      operationId: startTracking
+      description: |
+        Starts tracking on the target node. If already tracking, atomically stops current entry
+        and starts new one (switch). Node must be active, have no active children, and user must
+        have at least track authorization. Client must supply IANA timezone. SR-028/SR-029.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeId, timezone]
+              properties:
+                nodeId:
+                  type: string
+                  format: uuid
+                timezone:
+                  type: string
+                  description: IANA timezone from browser
+                  example: Europe/Berlin
+      responses:
+        '200':
+          description: New tracking status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /tracking/stop:
+    post:
+      tags: [tracking]
+      summary: Stop tracking
+      operationId: stopTracking
+      description: Stops the active session. Returns empty tracking state. SR-030.
+      responses:
+        '200':
+          description: Empty tracking status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------------------
+  # Time entries (manual / retroactive management)
+  # ---------------------------------------------------------------------------
+
+  /time-entries:
+    post:
+      tags: [time-entries]
+      summary: Create retroactive time entry
+      operationId: createTimeEntry
+      description: |
+        Node must be active, have no active children, and user must have at least track
+        authorization. startedAt must be before endedAt. SR-032.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeId, startedAt, endedAt, timezone]
+              properties:
+                nodeId:
+                  type: string
+                  format: uuid
+                startedAt:
+                  type: string
+                  format: date-time
+                endedAt:
+                  type: string
+                  format: date-time
+                timezone:
+                  type: string
+      responses:
+        '201':
+          description: Created time entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /time-entries/{entryId}:
+    put:
+      tags: [time-entries]
+      summary: Edit time entry
+      operationId: updateTimeEntry
+      description: |
+        All fields optional; omitted fields unchanged. Blocked if startedAt is before freeze_date.
+        If nodeId changes, the new node must satisfy the same constraints as tracking start.
+        SR-033.
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nodeId:
+                  type: string
+                  format: uuid
+                startedAt:
+                  type: string
+                  format: date-time
+                endedAt:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [time-entries]
+      summary: Delete time entry
+      operationId: deleteTimeEntry
+      description: Blocked if startedAt is before freeze_date. SR-034.
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /time-entries/{entryId}/duplicate:
+    post:
+      tags: [time-entries]
+      summary: Duplicate time entry
+      operationId: duplicateTimeEntry
+      description: Creates a new entry from an existing one with a new time range. SR-035.
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [startedAt, endedAt]
+              properties:
+                startedAt:
+                  type: string
+                  format: date-time
+                endedAt:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Duplicated entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ---------------------------------------------------------------------------
+  # Quick access
+  # ---------------------------------------------------------------------------
+
+  /quick-access:
+    get:
+      tags: [quick-access]
+      summary: Get quick-access list
+      operationId: getQuickAccess
+      description: |
+        Returns personal quick-access list. Non-trackable entries (deactivated or has active
+        children) are annotated with nonTrackable = true and not auto-removed. SR-031.
+      responses:
+        '200':
+          description: Quick-access entries in sort order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuickAccessEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [quick-access]
+      summary: Add node to quick-access list
+      operationId: addQuickAccess
+      description: Blocked if list already has 9 entries. SR-031.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeId]
+              properties:
+                nodeId:
+                  type: string
+                  format: uuid
+      responses:
+        '204':
+          description: Added
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /quick-access/{nodeId}:
+    delete:
+      tags: [quick-access]
+      summary: Remove node from quick-access list
+      operationId: removeQuickAccess
+      description: SR-031.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /quick-access/order:
+    put:
+      tags: [quick-access]
+      summary: Reorder quick-access list
+      operationId: reorderQuickAccess
+      description: Submit the complete ordered list of node IDs. SR-031.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeIds]
+              properties:
+                nodeIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '204':
+          description: Reordered
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  # ---------------------------------------------------------------------------
+  # Reports
+  # ---------------------------------------------------------------------------
+
+  /reports:
+    get:
+      tags: [reports]
+      summary: Get time report
+      operationId: getReport
+      description: |
+        Filtered to nodes visible to requesting user. When nodeId is supplied, includes all
+        entries for the node and its visible subtree. All timestamps in company timezone. SR-037/
+        SR-038.
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [summary, detailed]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+            description: Inclusive start date in company timezone
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+            description: Inclusive end date in company timezone
+        - name: userId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: nodeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reports/export:
+    get:
+      tags: [reports]
+      summary: Export report as CSV
+      operationId: exportReport
+      description: Same filters as GET /reports. SR-039.
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [summary, detailed]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: userId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: nodeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CSV download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # Data export / import (company data, not reports)
+  # ---------------------------------------------------------------------------
+
+  /data/export:
+    get:
+      tags: [settings]
+      summary: Export all company data to CSV
+      operationId: exportData
+      description: |
+        Requires effective admin on root. Exports nodes, time_entries, requests,
+        node_authorizations. Anonymised users appear as placeholder. SR-014.
+      responses:
+        '200':
+          description: CSV download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /data/import:
+    post:
+      tags: [settings]
+      summary: Import company data from CSV
+      operationId: importData
+      description: |
+        Requires effective admin on root. Blocked if any nodes beyond root, time_entries, or
+        users beyond bootstrap admin exist. SR-015.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '204':
+          description: Imported
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------------------
+  # Account
+  # ---------------------------------------------------------------------------
+
+  /account:
+    get:
+      tags: [account]
+      summary: Get own profile
+      operationId: getProfile
+      description: Returns stored name, picture, and linked OAuth2 providers. SR-043.
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, name, providers]
+                properties:
+                  userId:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  pictureUrl:
+                    type: [string, 'null']
+                  providers:
+                    type: array
+                    items:
+                      type: string
+                      enum: [github, google]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /account/authorizations:
+    get:
+      tags: [account]
+      summary: Get own node authorization assignments
+      operationId: getOwnAuthorizations
+      description: Returns all node_authorizations rows for the authenticated user with full node paths. SR-046.
+      responses:
+        '200':
+          description: Authorization assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAuthorization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /account/providers:
+    post:
+      tags: [account]
+      summary: Link additional OAuth2 provider
+      operationId: linkProvider
+      description: |
+        Initiates OAuth2 linking flow for an additional provider. In practice, the client
+        redirects to /oauth2/authorization/{provider} with a linking flag. This endpoint
+        records the completed link after the OAuth2 callback. SR-044.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [github, google]
+      responses:
+        '204':
+          description: Provider linked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /account/providers/{provider}:
+    delete:
+      tags: [account]
+      summary: Unlink OAuth2 provider
+      operationId: unlinkProvider
+      description: Blocked if only one provider remains linked. SR-045.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [github, google]
+      responses:
+        '204':
+          description: Unlinked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /account/anonymize:
+    post:
+      tags: [account]
+      summary: Anonymise own account
+      operationId: anonymizeAccount
+      description: |
+        Irreversible. In one transaction: stops active tracking, deletes node_authorizations,
+        deletes user_profile (cascades to oauth providers, quick_access, node_colors). Retains
+        users row and time_entries. Session is invalidated. Re-registration requires a new
+        invitation and creates a new identity. SR-047.
+      responses:
+        '204':
+          description: Anonymised; session invalidated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # Security events — System Admin only
+  # ---------------------------------------------------------------------------
+
+  /security-events:
+    get:
+      tags: [security-events]
+      summary: List security events
+      operationId: listSecurityEvents
+      description: Requires is_system_admin. SR-050.
+      parameters:
+        - name: eventType
+          in: query
+          schema:
+            type: string
+        - name: userId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Security events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SecurityEvent'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------------------
+  # Data lifecycle
+  # ---------------------------------------------------------------------------
+
+  /lifecycle/notification:
+    get:
+      tags: [lifecycle]
+      summary: Get purge pre-notification
+      operationId: getPurgeNotification
+      description: |
+        Requires effective admin on root or is_system_admin. Returns upcoming purge counts if
+        within the 6-week pre-notification window before the next scheduled activity purge date.
+        Returns null outside the window. Counts are computed dynamically (not stored). SR-056.
+      responses:
+        '200':
+          description: Purge notification or null
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PurgeNotification'
+                  - type: 'null'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------------------
+  # About
+  # ---------------------------------------------------------------------------
+
+  /about:
+    get:
+      tags: [about]
+      summary: About page
+      operationId: getAbout
+      description: Application version, third-party licenses, SBOM download link. No auth required. SR-048.
+      security: []
+      responses:
+        '200':
+          description: About information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AboutInfo'
+
+  # ---------------------------------------------------------------------------
+  # SSE
+  # ---------------------------------------------------------------------------
+
+  /events:
+    get:
+      tags: [events]
+      summary: Server-Sent Events stream
+      operationId: getEventStream
+      description: |
+        Persistent SSE connection for live state synchronisation. SR-062.
+
+        **Event types and recipients:**
+
+        `tracking` — Tracking state changed.
+        Data: `TrackingStatus`.
+        Recipients: all sessions of the same user.
+
+        `node` — Node tree changed (create, update, reorder, deactivate, reactivate, move).
+        Data: `{ nodeId, parentId, changeType: "created"|"updated"|"reordered"|"deactivated"|"reactivated"|"moved" }`.
+        Recipients: all sessions of users with at least view on the affected node.
+
+        `authorization` — Authorization assignment changed for the authenticated user.
+        Data: `UserAuthorization | { nodeId, revoked: true }`.
+        Recipients: all sessions of the affected user.
+
+        `request` — Request created or closed.
+        Data: `RequestRecord`.
+        Recipients: all sessions of Node Admins of the relevant node and all ancestors.
+
+        `purge-notification` — Purge notification counts updated (window opened, counts changed,
+        or window closed).
+        Data: `PurgeNotification | null`.
+        Recipients: all sessions of Node Admins of root and System Admins.
+      responses:
+        '200':
+          description: SSE stream (text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'

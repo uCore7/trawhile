@@ -1,4 +1,4 @@
-# Time tracker — agent instructions
+# trawhile — agent instructions
 
 Before starting any work, read the following files in order:
 
@@ -6,6 +6,8 @@ Before starting any work, read the following files in order:
 2. `docs/epics.md` — feature list, role model, key invariants
 3. `docs/requirements-sr.md` — 62 system requirements (SR-001–SR-062)
 4. `docs/requirements-ur.md` — 51 user requirements (UR-001–UR-051)
+5. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
+6. `docs/openapi.yaml` — REST API contract (46 endpoints)
 
 These are the authoritative source of truth. Code, tests, and migrations must be consistent
 with them. If implementation forces a change to a requirement, update the relevant doc file
