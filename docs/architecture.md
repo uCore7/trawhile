@@ -24,8 +24,8 @@ orchestrated by Docker Compose. The Angular SPA is served as static files from S
 
 | Dependency | Version |
 |---|---|
-| Java | 21 (LTS) |
-| Spring Boot | 3.x |
+| Java | 25 (LTS) |
+| Spring Boot | 4.x |
 | Spring Data JDBC | via Spring Boot BOM |
 | Flyway | via Spring Boot BOM |
 | Spring Security | via Spring Boot BOM |
@@ -324,9 +324,9 @@ All migrations in `src/main/resources/db/migration/`, named `V{n}__{description}
 
 | Dependency | Version |
 |---|---|
-| Angular | 18.x |
-| PrimeNG | 17.x |
-| Tailwind CSS | 3.x |
+| Angular | 21.x |
+| PrimeNG | 21.x |
+| Tailwind CSS | 4.x |
 | TypeScript | 5.x |
 
 ### Project structure

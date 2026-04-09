@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.3.5</version>
+    <version>4.0.3</version>
     <relativePath/>
   </parent>
 
@@ -18,15 +18,15 @@
   <description>Self-hosted time tracking for a single company</description>
 
   <properties>
-    <java.version>21</java.version>
-    <bucket4j.version>8.10.1</bucket4j.version>
-    <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
+    <java.version>25</java.version>
+    <bucket4j.version>8.17.0</bucket4j.version>
+    <spotbugs-maven-plugin.version>4.9.8.3</spotbugs-maven-plugin.version>
     <findsecbugs.version>1.13.0</findsecbugs.version>
-    <dependency-check.version>10.0.4</dependency-check.version>
-    <cyclonedx-maven-plugin.version>2.8.1</cyclonedx-maven-plugin.version>
-    <frontend-maven-plugin.version>1.15.0</frontend-maven-plugin.version>
-    <node.version>v22.11.0</node.version>
-    <npm.version>10.9.0</npm.version>
+    <dependency-check.version>12.2.0</dependency-check.version>
+    <cyclonedx-maven-plugin.version>2.9.1</cyclonedx-maven-plugin.version>
+    <frontend-maven-plugin.version>2.0.0</frontend-maven-plugin.version>
+    <node.version>v22.22.0</node.version>
+    <npm.version>10.9.2</npm.version>
   </properties>
 
   <dependencies>
@@ -79,11 +79,13 @@
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>junit-jupiter</artifactId>
+      <version>1.21.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>postgresql</artifactId>
+      <version>1.21.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
