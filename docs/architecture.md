@@ -328,6 +328,7 @@ All migrations in `src/main/resources/db/migration/`, named `V{n}__{description}
 | PrimeNG | 21.x |
 | Tailwind CSS | 4.x |
 | TypeScript | 5.x |
+| ngx-translate | 16.x |
 
 ### Project structure
 
@@ -359,7 +360,7 @@ src/app/
     admin/                     — Epics 1, 7, 8: user management, settings, security log
   shared/
     components/
-      node-picker/             — recursive tree picker (reused in tracking, reports, requests)
+      node-picker/             — work item picker widget (reused in tracking, reports, requests)
       node-path/               — breadcrumb display
     pipes/
       duration.pipe.ts         — seconds → HH:mm:ss
@@ -397,8 +398,9 @@ it. This is sufficient for a small app with a clear server-as-source-of-truth mo
 ### Authentication flow
 
 1. `AuthGuard` checks a `/api/v1/account` call on app init. If 401 → navigate to `/login`.
-2. `/login` page shows "Login with GitHub" and "Login with Google" buttons pointing to
-   `/oauth2/authorization/github` and `/oauth2/authorization/google`.
+2. `/login` page shows "Login with GitHub", "Login with Google", and "Sign in with Apple" buttons
+   pointing to `/oauth2/authorization/github`, `/oauth2/authorization/google`, and
+   `/oauth2/authorization/apple`.
 3. Spring redirects back after OAuth2; session cookie is set; app navigates to `/`.
 4. `csrf.interceptor.ts` reads the `XSRF-TOKEN` cookie on every mutating request.
 

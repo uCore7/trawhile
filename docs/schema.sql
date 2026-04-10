@@ -14,7 +14,8 @@ CREATE TABLE company_settings (
   freeze_date                DATE,                                   -- entries before this date are immutable
   retention_years            INTEGER NOT NULL DEFAULT 7,            -- minimum 2
   node_retention_extra_years INTEGER NOT NULL DEFAULT 1,            -- minimum 0; nodes deleted retention_years + node_retention_extra_years after deactivation
-  purge_schedule             TEXT    NOT NULL DEFAULT 'annual'
+  purge_schedule             TEXT    NOT NULL DEFAULT 'annual',
+  privacy_notice_url         TEXT                               -- optional; shown on first login alongside built-in data summary
   -- purge_schedule: 'annual' | 'semi_annual' | 'quarterly'
   -- annual:      activity Dec 31       / node Jan 31
   -- semi_annual: activity Jun 30+Dec31 / node Jul 31+Jan 31
@@ -36,13 +37,18 @@ CREATE TABLE nodes (
   is_active      BOOLEAN     NOT NULL DEFAULT TRUE,
   sort_order     INTEGER     NOT NULL DEFAULT 0,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deactivated_at TIMESTAMPTZ                         -- set on deactivation, cleared on reactivation
+  deactivated_at TIMESTAMPTZ,                        -- set on deactivation, cleared on reactivation
+  color          TEXT,                               -- CSS hex color e.g. '#4A90D9'; optional
+  icon           TEXT,                               -- PrimeIcons identifier e.g. 'pi-briefcase'; optional
+  logo           BYTEA,                              -- uploaded image, max 256 KB; takes precedence over icon
+  logo_mime_type TEXT                                -- MIME type of logo e.g. 'image/png'
 );
 
 -- ---------------------------------------------------------------------------
 -- Users
 -- users: anchor record, never deleted, FK target for all historical data.
--- user_profile: personal data, deleted on anonymization (cascades to all personal tables).
+-- user_profile: personal data, deleted on anonymization (cascades to user_oauth_providers, quick_access).
+-- No picture_url stored — profile pictures dropped (privacy; no chat/mention feature to justify them).
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE users (
@@ -53,26 +59,30 @@ CREATE TABLE users (
 );
 
 CREATE TABLE user_profile (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  picture_url TEXT
+  id                    UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               UUID    NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  name                  TEXT    NOT NULL,
+  gdpr_notice_accepted  BOOLEAN NOT NULL DEFAULT FALSE,  -- set true on first-login acknowledgement
+  language              TEXT    NOT NULL DEFAULT 'en',   -- IETF language tag; supported: en, de, fr, es
+  last_report_settings  JSONB                            -- last used report filter state; persisted for multi-device consistency
 );
 
 CREATE TABLE user_oauth_providers (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   profile_id UUID NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
-  provider   TEXT NOT NULL,  -- 'github' | 'google'
+  provider   TEXT NOT NULL,  -- 'github' | 'google' | 'apple'
   subject    TEXT NOT NULL,  -- provider's subject ID (never email)
   UNIQUE (provider, subject)
 );
 
 -- Email-only invitations. Matched on first OAuth2 login then deleted. Email never stored in users.
+-- Automatically purged after 90 days if not accepted (GDPR storage limitation).
 CREATE TABLE pending_memberships (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   email      TEXT        NOT NULL UNIQUE,
   invited_by UUID        NOT NULL REFERENCES users(id),
-  invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '90 days'
 );
 
 -- ---------------------------------------------------------------------------
@@ -99,13 +109,14 @@ CREATE TABLE node_authorizations (
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE time_entries (
-  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    UUID        NOT NULL REFERENCES users(id),
-  node_id    UUID        NOT NULL REFERENCES nodes(id),
-  started_at TIMESTAMPTZ NOT NULL,
-  ended_at   TIMESTAMPTZ,
-  timezone   TEXT        NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users(id),
+  node_id     UUID        NOT NULL REFERENCES nodes(id),
+  started_at  TIMESTAMPTZ NOT NULL,
+  ended_at    TIMESTAMPTZ,
+  timezone    TEXT        NOT NULL,             -- IANA string from browser; private (discloses coarse location) — protected by per-owner access control on time_entries
+  description TEXT,                             -- optional short note by the member
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX time_entries_one_active_per_user
@@ -121,14 +132,6 @@ CREATE TABLE quick_access (
   profile_id UUID    NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
   node_id    UUID    NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  UNIQUE (profile_id, node_id)
-);
-
-CREATE TABLE node_colors (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  profile_id UUID NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
-  node_id    UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
-  color      TEXT NOT NULL,
   UNIQUE (profile_id, node_id)
 );
 
@@ -180,6 +183,25 @@ CREATE TABLE purge_jobs (
   deleted_counts  JSONB,
   last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ---------------------------------------------------------------------------
+-- MCP access tokens (Epic 9)
+-- Raw token never stored. Only SHA-256 hash retained.
+-- Revocation: soft-delete via revoked_at. Hard-delete not needed (hash is useless after revoke).
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE mcp_tokens (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID        NOT NULL REFERENCES users(id),
+  token_hash   TEXT        NOT NULL UNIQUE,  -- SHA-256 hex of the raw token
+  label        TEXT        NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ,
+  expires_at   TIMESTAMPTZ,                  -- NULL = non-expiring
+  revoked_at   TIMESTAMPTZ                   -- NULL = active
+);
+
+CREATE INDEX mcp_tokens_user_id_idx ON mcp_tokens (user_id);
 
 -- ---------------------------------------------------------------------------
 -- Core authorization queries (reference)

@@ -30,7 +30,7 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 | ID | Statement |
 |---|---|
 | A-1 | One deployed instance serves exactly one company |
-| A-2 | Authentication is delegated entirely to GitHub and/or Google OAuth2 |
+| A-2 | Authentication is delegated entirely to GitHub, Google, and/or Apple OAuth2/OIDC |
 | A-3 | No email server is required; invitation emails are generated as mailto: links only |
 | A-4 | The company timezone is the reference for date boundaries in reports and freeze date evaluation |
 | C-1 | All timestamps are stored in UTC |
@@ -56,7 +56,8 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 - UR-005: The Node Admin of root shall be able to view all pending invitations. [Goal: G-1]
 - UR-006: The Node Admin of root shall be able to invite a person by email address. [Goal: G-1]
 - UR-007: The Node Admin of root shall be able to cancel a pending invitation. [Goal: G-1]
-- UR-008: The Node Admin of root shall be able to remove a user from the company. [Goal: G-1, G-4]
+- UR-008: The Node Admin of root shall be able to remove a user from the company via a guided
+  confirmation wizard. [Goal: G-1, G-4]
 - UR-009: The Node Admin of root shall be able to view all node authorization assignments of a user
   across the tree. [Goal: G-2]
 
@@ -67,8 +68,9 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 
 **Data**
 - UR-012: The Node Admin of root shall be able to export all company data to CSV. [Goal: G-3]
-- UR-013: The Node Admin of root shall be able to import company data from CSV on a clean
-  instance. [Goal: G-1]
+- UR-013: The Node Admin of root shall be able to import company data from CSV on a clean instance
+  via a guided confirmation wizard that shows the current instance state before confirming.
+  [Goal: G-1]
 
 ## Epic 2 — Node administration
 
@@ -76,8 +78,9 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
   their scope. [Goal: G-1]
 - UR-015: The Node Admin shall be able to create a child node under any node within their
   scope. [Goal: G-1]
-- UR-016: The Node Admin shall be able to edit the name and description of any node within their
-  scope. [Goal: G-1]
+- UR-016: The Node Admin shall be able to edit the name, description, color, icon, and logo of
+  any node within their scope. Logo uploads are limited to 256 KB and common image formats.
+  [Goal: G-1]
 - UR-017: The Node Admin shall be able to reorder the child nodes of any node within their
   scope. [Goal: G-1]
 - UR-018: The Node Admin shall be able to deactivate any node within their scope that has no
@@ -99,8 +102,9 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 - UR-024: The User shall be able to view their current tracking status, including the node being
   tracked, elapsed time, and start time. [Goal: G-1]
 - UR-025: The User shall be able to view their recent time entry history, with overlapping entries
-  visually flagged. [Goal: G-1]
-- UR-026: The User shall be able to start tracking a task by navigating the node tree. [Goal: G-1]
+  and gaps between consecutive entries visually flagged. [Goal: G-1]
+- UR-026: The User shall be able to start tracking a task by navigating the node tree using the
+  work item picker widget. [Goal: G-1]
 - UR-027: The User shall be able to start tracking a task from a personal quick-access list of up
   to 9 nodes. [Goal: G-1]
 - UR-028: The User shall be able to switch to a different node atomically, without an explicit
@@ -109,15 +113,15 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 - UR-030: The User shall be able to add, remove, and reorder nodes in their quick-access
   list. [Goal: G-1]
 - UR-031: The User shall be able to create a time entry retroactively for any node they can
-  track. [Goal: G-1]
-- UR-032: The User shall be able to edit the node, start time, and end time of any of their own
-  time entries, provided the entry is not in a frozen period. [Goal: G-1]
+  track, with an optional short description. [Goal: G-1]
+- UR-032: The User shall be able to edit the node, start time, end time, and description of any
+  of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
 - UR-033: The User shall be able to delete any of their own time entries, provided the entry is
   not in a frozen period. [Goal: G-1]
 - UR-034: The User shall be able to duplicate a time entry, specifying a new start and end
-  time. [Goal: G-1]
-- UR-035: The User shall be able to assign a personal color to any node visible to
-  them. [Goal: G-1]
+  time; the description is copied from the original. [Goal: G-1]
+- UR-035: (removed — per-user node colors replaced by company-wide node color/icon/logo set by
+  Node Admins)
 
 ## Epic 4 — Reporting & export
 
@@ -139,17 +143,20 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 
 ## Epic 6 — Account
 
-- UR-043: The User shall be able to view their stored profile information (name, picture). [Goal: G-4]
-- UR-044: The User shall be able to link an additional OAuth2 provider to their
-  account. [Goal: G-1]
+- UR-043: The User shall be able to view their stored profile information (name). [Goal: G-4]
+- UR-044: The User shall be able to link an additional OAuth2 provider (GitHub, Google, or Apple)
+  to their account. [Goal: G-1]
 - UR-045: The User shall be able to unlink an OAuth2 provider from their account, provided at
   least one other provider remains linked. [Goal: G-1]
 - UR-046: The User shall be able to view all their node authorization assignments across the
   tree. [Goal: G-2]
-- UR-047: The User shall be able to anonymise their own account, replacing all personal data with
-  a placeholder while preserving time entry history. [Goal: G-4]
-- UR-048: The User shall be able to view the About page, including application version,
-  third-party licenses, and a downloadable SBOM. [Goal: G-5]
+- UR-047: The User shall be able to anonymise their own account via a guided confirmation wizard,
+  replacing all personal data with a placeholder while preserving time entry history. [Goal: G-4]
+- UR-048: Any visitor shall be able to view the About page, including application version,
+  third-party licenses, a downloadable SBOM, a downloadable OpenAPI specification, and a permanent
+  summary of what personal data is stored and how long it is retained. Users with at least one
+  effective node authorization shall additionally see a link to the company Privacy Notice if one
+  has been configured. [Goal: G-4, G-5]
 
 ## Epic 7 — Security & audit
 
@@ -163,3 +170,36 @@ Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
 - UR-051: The Node Admin of root and System Admin shall be able to view a unified pre-notification
   starting 6 weeks before each scheduled purge, showing upcoming purge and node deletion dates and
   affected record counts. [Goal: G-4]
+- UR-059: The User shall be informed of the upcoming activity cutoff date once the pre-notification
+  period is active, and shall see which of their own time entries fall before that cutoff date.
+  [Goal: G-4]
+- UR-060: On first login, the User shall be presented with a summary of what personal data is
+  stored, how long it is retained, and their right to anonymise their account, before accessing
+  any other part of the application. If the sysadmin has configured a Privacy Notice URL and the
+  user has at least one node authorization, a link to it shall also be displayed. [Goal: G-4]
+- UR-061: The User shall be able to set their preferred language (English, German, French, or
+  Spanish) from their account page; all UI text including GDPR-sensitive screens shall be rendered
+  in that language. [Goal: G-4]
+- UR-062: The System Admin shall be able to complete a guided setup wizard after first bootstrap
+  login, covering company name, timezone, and optional Privacy Notice URL. [Goal: G-1]
+
+## Epic 4 addition — member daily summaries
+
+- UR-052: The User shall be able to view the total time tracked by other members on nodes visible
+  to them, aggregated over any full-day interval (daily, weekly, monthly, yearly, year-to-date,
+  month-to-date), with a data quality flag per bucket indicating the presence of overlapping
+  entries or gaps, and the ability to filter by that flag; individual time entry details shall not
+  be visible. [Goal: G-1, G-4]
+
+## Epic 9 — MCP integration
+
+- UR-053: The User shall be able to generate a named MCP access token from their account page,
+  receiving the raw token value exactly once. [Goal: G-1]
+- UR-054: The User shall be able to view their own active MCP tokens, including label, creation
+  date, and last-used date. [Goal: G-1]
+- UR-055: The User shall be able to revoke any of their own MCP tokens. [Goal: G-1]
+- UR-056: The System Admin shall be able to view all active MCP tokens across all users, including
+  the owning user, label, creation date, and last-used date. [Goal: G-5]
+- UR-057: The System Admin shall be able to revoke any MCP token regardless of owner. [Goal: G-5]
+- UR-058: The User shall be guided through the full Claude.ai MCP connection setup within the
+  application, without requiring external documentation. [Goal: G-1]

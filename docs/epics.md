@@ -14,13 +14,20 @@ to all state across all sessions — it is a general UX principle, not specific 
   and security log access
 - **Node Admin** — user with `admin` authorization on a node, effective recursively over all
   descendants
-- Authorization levels: `view` ⊂ `track` ⊂ `admin`
+- Permission levels: `view` ⊂ `track` ⊂ `admin` (called "authorizations" internally in schema and code)
 
 ## Epic 1 — Company administration
 
 **Bootstrap**
+- F1.0 — On first login (any user), display GDPR notice screen before any other view: built-in
+  summary of stored data, retention period, and right to anonymise; optional link to company
+  Privacy Notice URL if configured (shown only to users with at least one node authorization);
+  user must acknowledge to proceed; rendered in the user's language per fallback chain (stored
+  preference → Accept-Language header → English)
 - F1.1 — On first startup, if `BOOTSTRAP_ADMIN_EMAIL` is set and no root Node Admin exists, grant
   that user `admin` on root on first OAuth2 login
+- F1.1a — After bootstrap admin's first login (after GDPR notice), display a guided setup wizard:
+  configure company name and timezone; optionally set Privacy Notice URL; invite first members
 
 **Root Node Admin management (System Admin)**
 - F1.2 — Grant `admin` authorization on root to an existing user
@@ -29,25 +36,28 @@ to all state across all sessions — it is a general UX principle, not specific 
 **User management (Node Admin of root)**
 - F1.4 — View all users
 - F1.5 — View all pending invitations
-- F1.6 — Invite a user by email (creates pending membership)
-- F1.7 — Cancel a pending invitation
-- F1.8 — Remove a user (stops active tracking session, removes all node authorization assignments)
+- F1.6 — Invite a user by email (creates pending membership); UI shows mailto: link to send manually
+- F1.7 — Cancel a pending invitation (also expires automatically after 90 days)
+- F1.8 — Remove a user via guided confirmation wizard (stops active tracking session, removes all
+  node authorization assignments)
 - F1.9 — View authorization assignments of a user across the tree
 
 **Company settings (Node Admin of root)**
-- F1.10 — View company settings (name, timezone, freeze date, retention years, purge schedule)
-- F1.11 — Update company settings
+- F1.10 — View company settings (name, timezone, freeze date, retention years, purge schedule,
+  privacy notice URL)
+- F1.11 — Update company settings (including optional Privacy Notice URL)
 
 **Data (Node Admin of root)**
 - F1.12 — Export all company data to CSV
-- F1.13 — Import company data from CSV (blocked if any nodes beyond root, time entries, or users
-  beyond the bootstrap admin exist)
+- F1.13 — Import company data from CSV via guided confirmation wizard (blocked if any nodes beyond
+  root, time entries, or users beyond the bootstrap admin exist; wizard shows current instance
+  state before confirming)
 
 ## Epic 2 — Node administration (Node Admin of the node or any ancestor)
 
 - F2.1 — View node details and children
 - F2.2 — Create a child node
-- F2.3 — Edit node (name, description)
+- F2.3 — Edit node (name, description, color, icon, logo)
 - F2.4 — Reorder child nodes (`sort_order` in schema)
 - F2.5 — Deactivate a node (blocked if active children exist; active time entry on the node itself
   does not block deactivation)
@@ -63,7 +73,7 @@ to all state across all sessions — it is a general UX principle, not specific 
 
 **Current status**
 - F3.1 — View current tracking status (node path, elapsed time, start time)
-- F3.2 — View recent time entry history (overlapping entries flagged)
+- F3.2 — View recent time entry history (overlapping entries flagged, gaps between consecutive entries flagged)
 
 **Tracking**
 - F3.3 — Start tracking by navigating the node tree (active leaf nodes with `track` only)
@@ -78,13 +88,13 @@ to all state across all sessions — it is a general UX principle, not specific 
 - Note: non-trackable nodes remain in list, annotated with a non-trackable flag; not auto-removed
 
 **Manual entry management**
-- F3.10 — Create a time entry retroactively (node, start time, end time)
-- F3.11 — Edit a time entry (node, start time, end time); blocked if entry is in frozen period
+- F3.10 — Create a time entry retroactively (node, start time, end time, optional description)
+- F3.11 — Edit a time entry (node, start time, end time, description); blocked if entry is in frozen period
 - F3.12 — Delete a time entry; blocked if entry is in frozen period
-- F3.13 — Duplicate a time entry (prompts for new start and end time)
+- F3.13 — Duplicate a time entry (prompts for new start and end time; description copied)
 
 **Personal preference**
-- F3.14 — Set a personal color for a node (inline in tree navigation)
+- F3.14 — (removed — per-user node colors replaced by company-wide node color/icon/logo)
 
 ## Epic 4 — Reporting & export (all users, filtered to visible nodes)
 
@@ -93,6 +103,10 @@ to all state across all sessions — it is a general UX principle, not specific 
 - F4.2 — Toggle between summary view (totals per node) and detailed view (individual entries)
 - F4.3 — Flag overlapping entries in detailed view
 - F4.4 — Export current report view to CSV
+- F4.5 — View aggregated time per member on visible nodes over any full-day interval (daily,
+  weekly, monthly, yearly, year-to-date, month-to-date); each bucket shows a data quality flag
+  (`has_data_quality_issues`) when overlaps or gaps exist in that member's entries for that period;
+  filterable by flag; individual entry detail is never exposed to users other than the entry owner
 
 ## Epic 5 — Requests (users with at least `view` on a node)
 
@@ -108,14 +122,18 @@ to all state across all sessions — it is a general UX principle, not specific 
 
 ## Epic 6 — Account (all users)
 
-- F6.1 — View profile (name, picture — stored from OAuth2 provider at login)
-- F6.2 — Link an additional OAuth2 provider (GitHub or Google)
+- F6.1 — View profile (name — stored from OAuth2 provider at login)
+- F6.2 — Link an additional OAuth2 provider (GitHub, Google, or Apple)
 - F6.3 — Unlink an OAuth2 provider (blocked if only one linked)
 - F6.4 — View own authorization assignments across the tree
-- F6.5 — Anonymise own account (irreversible: clears name, picture, OAuth2 links; time entries
-  attributed to anonymous placeholder; re-registration requires new invitation and creates new
-  identity)
-- F6.6 — View About page (application version, third-party licenses, downloadable SBOM)
+- F6.5 — Anonymise own account via guided confirmation wizard (irreversible: clears name, picture,
+  OAuth2 links; time entries attributed to anonymous placeholder; re-registration requires new
+  invitation and creates new identity)
+- F6.6 — View About page (application version, third-party licenses, downloadable SBOM,
+  downloadable OpenAPI specification, GDPR data summary, optional Privacy Notice link);
+  accessible without authentication
+- F6.7 — Set preferred language (en, de, fr, es); applies to all UI text including GDPR-sensitive
+  screens
 
 ## Epic 7 — Security & audit (System Admin only)
 
@@ -131,6 +149,8 @@ to all state across all sessions — it is a general UX principle, not specific 
 - F8.2 — View unified pre-notification (active 6 weeks before each scheduled activity purge):
   next activity purge date + affected record counts, next node deletion date + affected node
   counts; flagged records and nodes visible inline throughout the UI (computed dynamically)
+- F8.5 — Members see the upcoming activity cutoff date on their own time entries once the
+  pre-notification period is active; entries falling before the cutoff are flagged
 - F8.3 — On each scheduled activity purge date at 23:59 (company timezone): purge `time_entries`
   (on `started_at`) and `requests` (on `created_at`) beyond `retention_years` cutoff; logged to
   `security_events`
@@ -153,6 +173,37 @@ to all state across all sessions — it is a general UX principle, not specific 
 - Both jobs tracked in `purge_jobs` table (status: idle/active); `cutoff_date` stored at job
   start; idempotent on application restart
 - `security_events` purged independently at 90 days on a scheduled daily basis
+
+## Epic 9 — MCP integration (Account / System Admin)
+
+MCP (Model Context Protocol) allows AI assistants such as Claude.ai to query trawhile data on
+behalf of a user, respecting the same node authorization model as the UI.
+
+**Token management (Account page)**
+- F9.1 — Generate a named MCP access token; raw value shown once, then never again
+- F9.2 — View own active tokens (label, created_at, last_used_at)
+- F9.3 — Revoke own token
+
+**Token management (System Admin)**
+- F9.4 — View all active tokens across all users (user, label, created_at, last_used_at)
+- F9.5 — Revoke any token; revocation logged to `security_events`
+
+**MCP server**
+- F9.6 — Expose MCP tools callable by a Bearer-token-authenticated client:
+  - `get_time_entries(node_id?, user_id?, date_from?, date_to?)` — returns entries visible to the token owner
+  - `get_node_tree()` — returns the subtree visible to the token owner
+  - `get_tracking_status()` — returns the token owner's current tracking state
+  - `get_member_summaries(node_id?, date_from?, date_to?, interval?)` — returns per-member aggregated totals on visible nodes for the requested interval (day/week/month/year)
+- F9.7 — Guided onboarding: after generating a token, display a step-by-step Claude.ai setup
+  wizard (MCP server URL, token entry, connection test) so the user can complete setup without
+  external documentation
+
+**Security model**
+- Raw token stored only as SHA-256 hash; never retrievable after initial display
+- Every MCP request validates the token hash, checks `revoked_at`, and updates `last_used_at`
+- MCP tools enforce identical node authorization as the REST API (recursive CTE checks)
+- Token generation, use, and revocation logged to `security_events`
+- CSRF exemption on MCP endpoints (Bearer token replaces session cookie); rate limiting applies
 
 ## Key invariants
 

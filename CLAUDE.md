@@ -3,9 +3,9 @@
 Before starting any work, read the following files in order:
 
 1. `docs/schema.sql` — PostgreSQL schema (13 tables), authorization queries
-2. `docs/epics.md` — feature list, role model, key invariants
-3. `docs/requirements-sr.md` — 62 system requirements (SR-001–SR-062)
-4. `docs/requirements-ur.md` — 51 user requirements (UR-001–UR-051)
+2. `docs/epics.md` — feature list, role model, key invariants (Epics 1–9)
+3. `docs/requirements-sr.md` — 89 system requirements (SR-001–SR-083, SR-009a, SR-043a–b, SR-057a)
+4. `docs/requirements-ur.md` — 62 user requirements (UR-001–UR-062)
 5. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
 6. `docs/openapi.yaml` — REST API contract (46 endpoints)
 
@@ -19,7 +19,7 @@ in the same commit.
 - Database: PostgreSQL
 - Frontend: Angular SPA + PrimeNG + Tailwind CSS
 - Deployment: Docker Compose + Caddy (reverse proxy + TLS)
-- Identity: GitHub OAuth2 + Google OAuth2
+- Identity: GitHub OAuth2 + Google OAuth2 + Apple Sign In (OIDC)
 - CI/CD: GitHub Actions
 
 ## Key design decisions
