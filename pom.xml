@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>4.0.3</version>
+    <version>4.0.5</version>
     <relativePath/>
   </parent>
 
@@ -22,12 +22,12 @@
     <jackson-bom.version>3.1.1</jackson-bom.version>
     <bucket4j.version>8.17.0</bucket4j.version>
     <spotbugs-maven-plugin.version>4.9.8.3</spotbugs-maven-plugin.version>
-    <findsecbugs.version>1.13.0</findsecbugs.version>
+    <findsecbugs.version>1.14.0</findsecbugs.version>
     <dependency-check.version>12.2.0</dependency-check.version>
     <cyclonedx-maven-plugin.version>2.9.1</cyclonedx-maven-plugin.version>
     <frontend-maven-plugin.version>2.0.0</frontend-maven-plugin.version>
-    <node.version>v22.22.0</node.version>
-    <npm.version>10.9.2</npm.version>
+    <node.version>v24.14.1</node.version>
+    <npm.version>11.12.1</npm.version>
   </properties>
 
   <dependencies>

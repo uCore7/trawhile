@@ -18,10 +18,10 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Set up Node 22
+      - name: Set up Node 24
         uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: '24'
 
       # Backend: compile, test, SpotBugs + Find Security Bugs, OWASP, SBOM, ng build
       - name: Build and verify

@@ -327,7 +327,7 @@ All migrations in `src/main/resources/db/migration/`, named `V{n}__{description}
 | Angular | 21.x |
 | PrimeNG | 21.x |
 | Tailwind CSS | 4.x |
-| TypeScript | 5.x |
+| TypeScript | 6.x |
 
 ### Project structure
 
