@@ -25,9 +25,8 @@ jobs:
 
       # Backend: compile, test, SpotBugs + Find Security Bugs, OWASP, SBOM, ng build
       - name: Build and verify
-        run: mvn --batch-mode verify
+        run: mvn --batch-mode verify -DnvdApiKey="${NVD_API_KEY}"
         env:
-          # OWASP NVD API key speeds up dependency check (optional)
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 
       # Angular: npm audit
