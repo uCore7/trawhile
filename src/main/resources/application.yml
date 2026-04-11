@@ -20,10 +20,26 @@ spring:
             client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID:}
             client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET:}
             scope: openid,profile,email
+          apple:
+            # Apple uses OIDC with a JWT client secret (generated from a private key).
+            # client-id: Apple Services ID (e.g. com.example.trawhile)
+            # client-secret: a short-lived JWT signed with the Apple private key.
+            # Use AppleClientSecretGenerator (custom component) to produce this at startup.
+            client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_APPLE_CLIENT_ID:}
+            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_APPLE_CLIENT_SECRET:}
+            client-authentication-method: private_key_jwt
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: openid,name,email
         provider:
           github:
             user-info-uri: https://api.github.com/user
             user-name-attribute: id   # numeric user ID, not login name
+          apple:
+            authorization-uri: https://appleid.apple.com/auth/authorize
+            token-uri: https://appleid.apple.com/auth/token
+            jwk-set-uri: https://appleid.apple.com/auth/keys
+            user-name-attribute: sub
 
 server:
   port: 8080
@@ -33,6 +49,8 @@ server:
 
 app:
   bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
+  # Cron expression for pending membership expiry purge (daily at 02:00 UTC). SR-009a.
+  pending-membership-purge-cron: "0 0 2 * * *"
 
 logging:
   level:

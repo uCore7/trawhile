@@ -13,6 +13,7 @@ public record TimeEntry(
     UUID nodeId,
     OffsetDateTime startedAt,
     OffsetDateTime endedAt,     // null = active entry
-    String timezone,            // IANA timezone captured from browser at tracking start
+    String timezone,            // IANA timezone captured from browser at tracking start; private (discloses coarse location)
+    String description,         // optional short note by the member; nullable
     OffsetDateTime createdAt
 ) {}

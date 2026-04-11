@@ -1,6 +1,7 @@
 package com.trawhile.config;
 
 import com.trawhile.domain.AuthLevel;
+import org.postgresql.util.PGobject;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -9,10 +10,13 @@ import org.springframework.data.convert.WritingConverter;
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 
+import java.sql.SQLException;
 import java.util.List;
 
 /**
- * Registers converters between Java AuthLevel (UPPER_CASE) and PostgreSQL auth_level (lowercase).
+ * Registers custom type converters for Spring Data JDBC:
+ * - AuthLevel ↔ PostgreSQL auth_level enum (lowercase string)
+ * - String ↔ PostgreSQL JSONB (for last_report_settings)
  */
 @Configuration
 public class JdbcConfig extends AbstractJdbcConfiguration {
@@ -22,7 +26,9 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
     public JdbcCustomConversions jdbcCustomConversions() {
         return new JdbcCustomConversions(List.of(
             new AuthLevelWritingConverter(),
-            new AuthLevelReadingConverter()
+            new AuthLevelReadingConverter(),
+            new JsonbWritingConverter(),
+            new JsonbReadingConverter()
         ));
     }
 
@@ -39,6 +45,36 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
         @Override
         public AuthLevel convert(String source) {
             return AuthLevel.valueOf(source.toUpperCase());
+        }
+    }
+
+    /**
+     * Writes a JSON string into a PostgreSQL JSONB column.
+     * Spring Data JDBC calls this when persisting a String field mapped to a JSONB column.
+     */
+    @WritingConverter
+    static class JsonbWritingConverter implements Converter<String, PGobject> {
+        @Override
+        public PGobject convert(String source) {
+            try {
+                PGobject obj = new PGobject();
+                obj.setType("jsonb");
+                obj.setValue(source);
+                return obj;
+            } catch (SQLException e) {
+                throw new IllegalStateException("Failed to create PGobject for JSONB", e);
+            }
+        }
+    }
+
+    /**
+     * Reads a PostgreSQL JSONB value back as a plain JSON string.
+     */
+    @ReadingConverter
+    static class JsonbReadingConverter implements Converter<PGobject, String> {
+        @Override
+        public String convert(PGobject source) {
+            return source.getValue();
         }
     }
 }

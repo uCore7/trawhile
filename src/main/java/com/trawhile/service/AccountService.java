@@ -1,9 +1,6 @@
 package com.trawhile.service;
 
-import com.trawhile.repository.NodeAuthorizationRepository;
-import com.trawhile.repository.UserOauthProviderRepository;
-import com.trawhile.repository.UserProfileRepository;
-import com.trawhile.repository.UserRepository;
+import com.trawhile.repository.*;
 import com.trawhile.sse.SseDispatcher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,19 +13,29 @@ public class AccountService {
     private final UserProfileRepository userProfileRepository;
     private final UserOauthProviderRepository oauthProviderRepository;
     private final NodeAuthorizationRepository authorizationRepository;
+    private final McpTokenRepository mcpTokenRepository;
     private final SseDispatcher sseDispatcher;
 
     public AccountService(UserRepository userRepository,
                           UserProfileRepository userProfileRepository,
                           UserOauthProviderRepository oauthProviderRepository,
                           NodeAuthorizationRepository authorizationRepository,
+                          McpTokenRepository mcpTokenRepository,
                           SseDispatcher sseDispatcher) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.oauthProviderRepository = oauthProviderRepository;
         this.authorizationRepository = authorizationRepository;
+        this.mcpTokenRepository = mcpTokenRepository;
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement F6.1–F6.5 (view profile, link/unlink provider, view authorizations, anonymize)
+    // TODO: implement F6.1 — getProfile
+    // TODO: implement F6.2 — linkProvider
+    // TODO: implement F6.3 — unlinkProvider (blocked if only one provider)
+    // TODO: implement F6.4 — getOwnAuthorizations
+    // TODO: implement F6.5 — anonymizeAccount (stops tracking, revokes MCP tokens, deletes profile + cascade)
+    // TODO: implement SR-043a — setLanguage
+    // TODO: implement SR-043b — saveReportSettings (persist last_report_settings JSONB)
+    // TODO: implement SR-057a — acknowledgeGdprNotice (set gdpr_notice_accepted = true)
 }

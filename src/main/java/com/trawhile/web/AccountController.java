@@ -4,7 +4,22 @@ import com.trawhile.service.AccountService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** /api/v1/account — profile, OAuth2 provider links, own authorizations, anonymization. */
+/**
+ * /api/v1/account — profile, OAuth2 provider links, own authorizations, anonymization,
+ * language preference, report settings, GDPR notice, own MCP token management.
+ *
+ * Endpoints:
+ *   GET    /account                    — SR-043  getProfile
+ *   PUT    /account/language           — SR-043a setLanguage
+ *   PUT    /account/report-settings    — SR-043b saveReportSettings
+ *   GET    /account/authorizations     — SR-046  getOwnAuthorizations
+ *   POST   /account/providers          — SR-044  linkProvider
+ *   DELETE /account/providers/{p}      — SR-045  unlinkProvider
+ *   POST   /account/anonymize          — SR-047  anonymizeAccount
+ *   GET    /account/mcp-tokens         — SR-065  listOwnMcpTokens
+ *   POST   /account/mcp-tokens         — SR-065  generateMcpToken
+ *   DELETE /account/mcp-tokens/{id}    — SR-066  revokeMcpToken
+ */
 @RestController
 @RequestMapping("/api/v1/account")
 public class AccountController {
@@ -15,5 +30,5 @@ public class AccountController {
         this.accountService = accountService;
     }
 
-    // TODO: implement F6.1–F6.5
+    // TODO: implement all endpoints listed above
 }

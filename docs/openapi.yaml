@@ -9,8 +9,8 @@ info:
 
     **Authentication**: Spring Security session cookie (`JSESSIONID`, HttpOnly, SameSite=Strict).
     All endpoints require an authenticated session unless `security: []` is noted.
-    OAuth2 login flows are handled by Spring Security at `/oauth2/authorization/{provider}`
-    and `/login/oauth2/code/{provider}` — not documented here.
+    OAuth2 login flows (GitHub, Google, Apple) are handled by Spring Security at
+    `/oauth2/authorization/{provider}` and `/login/oauth2/code/{provider}` — not documented here.
 
     **Authorization**: Recursive. A grant on node N is effective on N and all descendants.
     Levels: `view` ⊂ `track` ⊂ `admin`. Only Node Admins (effective `admin`) may grant or
@@ -41,6 +41,8 @@ tags:
   - name: quick-access
   - name: reports
   - name: account
+  - name: mcp
+    description: MCP access token management
   - name: security-events
     description: System Admin only
   - name: lifecycle
@@ -107,6 +109,15 @@ components:
         scheduledForDeletion:
           type: boolean
           description: True during 6-week pre-notification window if node is eligible for deletion
+        color:
+          type: [string, 'null']
+          description: CSS hex color e.g. '#4A90D9'
+        icon:
+          type: [string, 'null']
+          description: PrimeIcons identifier e.g. 'pi-briefcase'
+        logoUrl:
+          type: [string, 'null']
+          description: URL to GET /nodes/{nodeId}/logo; null if no logo uploaded
 
     Node:
       type: object
@@ -138,6 +149,15 @@ components:
             - type: 'null'
         scheduledForDeletion:
           type: boolean
+        color:
+          type: [string, 'null']
+          description: CSS hex color e.g. '#4A90D9'
+        icon:
+          type: [string, 'null']
+          description: PrimeIcons identifier e.g. 'pi-briefcase'
+        logoUrl:
+          type: [string, 'null']
+          description: URL to GET /nodes/{nodeId}/logo; null if no logo uploaded
         ancestorPath:
           type: array
           description: |
@@ -181,8 +201,6 @@ components:
         name:
           type: [string, 'null']
           description: Null if user is anonymised
-        pictureUrl:
-          type: [string, 'null']
         isActive:
           type: boolean
         isSystemAdmin:
@@ -192,7 +210,7 @@ components:
 
     PendingMembership:
       type: object
-      required: [id, email, invitedBy, invitedAt]
+      required: [id, email, invitedBy, invitedAt, expiresAt]
       properties:
         id:
           type: string
@@ -205,6 +223,10 @@ components:
         invitedAt:
           type: string
           format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: Invitation automatically expires at this time (90 days after creation)
 
     CompanySettings:
       type: object
@@ -235,6 +257,9 @@ components:
           type: string
           enum: [annual, semi_annual, quarterly]
           default: annual
+        privacyNoticeUrl:
+          type: [string, 'null']
+          description: HTTPS URL to company Privacy Notice; shown to authenticated users with at least one effective node authorization
 
     UpdateSettingsRequest:
       type: object
@@ -255,10 +280,13 @@ components:
         purgeSchedule:
           type: string
           enum: [annual, semi_annual, quarterly]
+        privacyNoticeUrl:
+          type: [string, 'null']
+          description: Must be an HTTPS URL or null
 
     TimeEntry:
       type: object
-      required: [id, userId, nodeId, nodePath, startedAt, timezone, createdAt, overlapping, scheduledForPurge]
+      required: [id, userId, nodeId, nodePath, startedAt, timezone, createdAt, overlapping, hasGapBefore, scheduledForPurge]
       properties:
         id:
           type: string
@@ -283,14 +311,24 @@ components:
         timezone:
           type: string
           description: IANA timezone captured from browser at tracking start
+        description:
+          type: [string, 'null']
+          description: Optional short note written by the member
         createdAt:
           type: string
           format: date-time
         overlapping:
           type: boolean
+        hasGapBefore:
+          type: boolean
+          description: True if there is untracked time between the previous entry's endedAt and this entry's startedAt
         scheduledForPurge:
           type: boolean
-          description: True during pre-notification window if startedAt is before upcoming cutoff
+          description: True during pre-notification window if startedAt is before upcoming activity cutoff
+        activityCutoffDate:
+          type: [string, 'null']
+          format: date
+          description: The upcoming activity cutoff date if the pre-notification window is active; null otherwise
 
     TrackingStatus:
       type: object
@@ -335,7 +373,13 @@ components:
           description: True if node is deactivated or has active children
         color:
           type: [string, 'null']
-          description: User's personal color for this node
+          description: Company-wide color set by Node Admin (CSS hex e.g. '#4A90D9')
+        icon:
+          type: [string, 'null']
+          description: PrimeIcons identifier e.g. 'pi-briefcase'
+        logoUrl:
+          type: [string, 'null']
+          description: URL to GET /nodes/{nodeId}/logo; null if no logo uploaded
 
     ReportSummaryEntry:
       type: object
@@ -353,7 +397,7 @@ components:
 
     ReportDetailEntry:
       type: object
-      required: [id, userId, userName, nodeId, nodePath, startedAt, timezone, overlapping, scheduledForPurge]
+      required: [id, userId, userName, nodeId, nodePath, startedAt, timezone, overlapping, hasGapBefore, scheduledForPurge]
       properties:
         id:
           type: string
@@ -379,8 +423,14 @@ components:
           format: date-time
         timezone:
           type: string
+        description:
+          type: [string, 'null']
+          description: Optional short note written by the member
         overlapping:
           type: boolean
+        hasGapBefore:
+          type: boolean
+          description: True if there is untracked time between the previous entry's endedAt and this entry's startedAt
         scheduledForPurge:
           type: boolean
 
@@ -399,6 +449,39 @@ components:
           type: [array, 'null']
           items:
             $ref: '#/components/schemas/ReportDetailEntry'
+
+    MemberSummaryBucket:
+      type: object
+      required: [periodStart, periodEnd, totalSeconds, hasDataQualityIssues]
+      properties:
+        periodStart:
+          type: string
+          format: date
+          description: Inclusive start of the period in company timezone
+        periodEnd:
+          type: string
+          format: date
+          description: Inclusive end of the period in company timezone
+        totalSeconds:
+          type: integer
+        hasDataQualityIssues:
+          type: boolean
+          description: True if the member's entries for this period contain overlaps or gaps
+
+    MemberSummary:
+      type: object
+      required: [userId, userName, buckets]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: [string, 'null']
+          description: Null if user is anonymised
+        buckets:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberSummaryBucket'
 
     RequestRecord:
       type: object
@@ -474,6 +557,9 @@ components:
             - AUTHORIZATION_FAILURE
             - ACTIVITY_PURGE_COMPLETED
             - NODE_DELETION_COMPLETED
+            - MCP_TOKEN_GENERATED
+            - MCP_TOKEN_USED
+            - MCP_TOKEN_REVOKED
         details:
           type: [object, 'null']
           additionalProperties: true
@@ -509,9 +595,53 @@ components:
           type: integer
           description: Deactivated nodes scheduled for deletion
 
+    McpToken:
+      type: object
+      required: [id, label, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: [string, 'null']
+          format: date-time
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: Null means the token does not expire
+
+    McpTokenWithOwner:
+      type: object
+      required: [id, userId, userName, label, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: [string, 'null']
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: [string, 'null']
+          format: date-time
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+
     AboutInfo:
       type: object
-      required: [version, licenses, sbomUrl]
+      required: [version, licenses, sbomUrl, openApiUrl, gdprSummary]
       properties:
         version:
           type: string
@@ -527,6 +657,27 @@ components:
                 type: string
         sbomUrl:
           type: string
+          description: URL to download the CycloneDX SBOM
+        openApiUrl:
+          type: string
+          description: URL to download the OpenAPI specification
+        gdprSummary:
+          type: object
+          required: [storedData, retentionPeriod, rightToErasure]
+          description: Built-in summary of personal data handling, always public, translated by Accept-Language
+          properties:
+            storedData:
+              type: string
+              description: Human-readable description of what personal data is stored
+            retentionPeriod:
+              type: string
+              description: Human-readable description of how long data is retained
+            rightToErasure:
+              type: string
+              description: Human-readable description of how to exercise the right to erasure
+        privacyNoticeUrl:
+          type: [string, 'null']
+          description: Company Privacy Notice URL; included only for authenticated users with at least one effective node authorization
 
   responses:
     Unauthorized:
@@ -584,6 +735,21 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /auth/gdpr-notice:
+    post:
+      tags: [auth]
+      summary: Acknowledge GDPR notice
+      operationId: acknowledgeGdprNotice
+      description: |
+        Records that the authenticated user has acknowledged the GDPR notice.
+        Sets gdpr_notice_accepted = true on user_profile. Must be called before any other
+        application view is accessible after first login. SR-057a.
+      responses:
+        '204':
+          description: Acknowledged
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   # ---------------------------------------------------------------------------
   # Company settings
   # ---------------------------------------------------------------------------
@@ -611,8 +777,8 @@ paths:
       operationId: updateSettings
       description: |
         Requires effective admin on root. All fields are optional; omitted fields are unchanged.
-        Rejects if retention_years < 2, node_retention_extra_years < 0, or invalid purge_schedule.
-        SR-013.
+        Rejects if retentionYears < 2, nodeRetentionExtraYears < 0, invalid purgeSchedule, or
+        privacyNoticeUrl is not an HTTPS URL. SR-013.
       requestBody:
         required: true
         content:
@@ -720,8 +886,8 @@ paths:
       operationId: removeUser
       description: |
         Requires effective admin on root. In one transaction: stops active tracking, deletes all
-        node authorizations, deletes user_profile (cascades to oauth providers, quick_access,
-        node_colors), sets users.is_active = false. Retains users row and time_entries. SR-010.
+        node authorizations, deletes user_profile (cascades to oauth providers, quick_access),
+        sets users.is_active = false. Retains users row and time_entries. SR-010.
       parameters:
         - name: userId
           in: path
@@ -900,9 +1066,12 @@ paths:
           $ref: '#/components/responses/NotFound'
     patch:
       tags: [nodes]
-      summary: Update node name/description
+      summary: Update node
       operationId: updateNode
-      description: Requires effective admin on node or ancestor. SR-018.
+      description: |
+        Requires effective admin on node or ancestor. All fields optional; omitted fields unchanged.
+        Color must be a valid CSS hex color string (e.g. '#4A90D9'). Icon must be a valid
+        PrimeIcons identifier. SR-018.
       parameters:
         - name: nodeId
           in: path
@@ -921,6 +1090,12 @@ paths:
                   type: string
                 description:
                   type: [string, 'null']
+                color:
+                  type: [string, 'null']
+                  description: CSS hex color e.g. '#4A90D9'; null to clear
+                icon:
+                  type: [string, 'null']
+                  description: PrimeIcons identifier e.g. 'pi-briefcase'; null to clear
       responses:
         '200':
           description: Updated node
@@ -934,6 +1109,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /nodes/{nodeId}/children:
     post:
@@ -1016,6 +1193,113 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+
+  /nodes/{nodeId}/logo:
+    get:
+      tags: [nodes]
+      summary: Get node logo
+      operationId: getNodeLogo
+      description: |
+        Returns the uploaded logo image. Requires at least view on node. Returns 404 if no logo
+        is set. SR-018.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Logo image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [nodes]
+      summary: Upload node logo
+      operationId: uploadNodeLogo
+      description: |
+        Requires effective admin on node or ancestor. Accepts image/png, image/jpeg, image/gif,
+        image/webp. Maximum 256 KB. Replaces any existing logo. SR-018.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [logo]
+              properties:
+                logo:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Updated node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [nodes]
+      summary: Remove node logo
+      operationId: deleteNodeLogo
+      description: Requires effective admin on node or ancestor. Clears logo and logo_mime_type. SR-018.
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Updated node (logo cleared)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /nodes/{nodeId}/deactivate:
     post:
@@ -1117,40 +1401,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-
-  /nodes/{nodeId}/color:
-    put:
-      tags: [nodes]
-      summary: Set personal color for node
-      operationId: setNodeColor
-      description: Requires at least view on node. Upserts node_colors row. SR-036.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [color]
-              properties:
-                color:
-                  type: string
-                  example: '#4f86c6'
-      responses:
-        '204':
-          description: Color set
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   # ---------------------------------------------------------------------------
   # Node authorizations
@@ -1394,7 +1644,7 @@ paths:
       operationId: getTrackingHistory
       description: |
         Returns recent time entries for the authenticated user, descending startedAt, with overlap
-        flags. SR-027.
+        and gap flags. SR-027.
       parameters:
         - name: limit
           in: query
@@ -1514,6 +1764,9 @@ paths:
                   format: date-time
                 timezone:
                   type: string
+                description:
+                  type: [string, 'null']
+                  description: Optional short note
       responses:
         '201':
           description: Created time entry
@@ -1562,6 +1815,9 @@ paths:
                 endedAt:
                   type: string
                   format: date-time
+                description:
+                  type: [string, 'null']
+                  description: Optional short note; null to clear
       responses:
         '200':
           description: Updated entry
@@ -1608,7 +1864,9 @@ paths:
       tags: [time-entries]
       summary: Duplicate time entry
       operationId: duplicateTimeEntry
-      description: Creates a new entry from an existing one with a new time range. SR-035.
+      description: |
+        Creates a new entry from an existing one with a new time range. Description is copied
+        from the original. SR-035.
       parameters:
         - name: entryId
           in: path
@@ -1657,7 +1915,8 @@ paths:
       operationId: getQuickAccess
       description: |
         Returns personal quick-access list. Non-trackable entries (deactivated or has active
-        children) are annotated with nonTrackable = true and not auto-removed. SR-031.
+        children) are annotated with nonTrackable = true and not auto-removed. Node color, icon,
+        and logoUrl are included from the node record. SR-031.
       responses:
         '200':
           description: Quick-access entries in sort order
@@ -1839,6 +2098,60 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /reports/members:
+    get:
+      tags: [reports]
+      summary: Get member time summaries
+      operationId: getMemberSummaries
+      description: |
+        Returns per-member aggregated totals on nodes visible to the requesting user. Individual
+        time entry details are never exposed — only the total per bucket. Each bucket carries a
+        hasDataQualityIssues flag (true if the member's entries for that bucket contain overlaps
+        or gaps). Filterable by that flag. SR-063.
+      parameters:
+        - name: interval
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [day, week, month, year, year_to_date, month_to_date]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+            description: Inclusive start date in company timezone (required for day/week/month/year)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+            description: Inclusive end date in company timezone (required for day/week/month/year)
+        - name: nodeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+            description: Restrict to the node's visible subtree; omit for all visible nodes
+        - name: hasDataQualityIssues
+          in: query
+          schema:
+            type: boolean
+            description: Filter to members that have at least one bucket with quality issues; omit for all
+      responses:
+        '200':
+          description: Member summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
   # ---------------------------------------------------------------------------
   # Data export / import (company data, not reports)
   # ---------------------------------------------------------------------------
@@ -1902,7 +2215,7 @@ paths:
       tags: [account]
       summary: Get own profile
       operationId: getProfile
-      description: Returns stored name, picture, and linked OAuth2 providers. SR-043.
+      description: Returns stored name, linked OAuth2 providers, language preference, and GDPR notice status. SR-043.
       responses:
         '200':
           description: Profile
@@ -1910,20 +2223,72 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [userId, name, providers]
+                required: [userId, name, providers, language, gdprNoticeAccepted]
                 properties:
                   userId:
                     type: string
                     format: uuid
                   name:
                     type: string
-                  pictureUrl:
-                    type: [string, 'null']
                   providers:
                     type: array
                     items:
                       type: string
-                      enum: [github, google]
+                      enum: [github, google, apple]
+                  language:
+                    type: string
+                    enum: [en, de, fr, es]
+                    description: User's preferred language for the UI (IETF tag)
+                  gdprNoticeAccepted:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /account/language:
+    put:
+      tags: [account]
+      summary: Set preferred language
+      operationId: setLanguage
+      description: |
+        Updates the user's preferred UI language. Applies immediately to all sessions. SR-043a.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language:
+                  type: string
+                  enum: [en, de, fr, es]
+      responses:
+        '204':
+          description: Language updated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /account/report-settings:
+    put:
+      tags: [account]
+      summary: Save last report filter state
+      operationId: saveReportSettings
+      description: |
+        Persists the user's last report filter state for multi-device consistency. The body is
+        stored as-is in last_report_settings (JSONB). SR-043b.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Arbitrary report filter state; opaque to the server
+              additionalProperties: true
+      responses:
+        '204':
+          description: Saved
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -1964,7 +2329,7 @@ paths:
               properties:
                 provider:
                   type: string
-                  enum: [github, google]
+                  enum: [github, google, apple]
       responses:
         '204':
           description: Provider linked
@@ -1985,7 +2350,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [github, google]
+            enum: [github, google, apple]
       responses:
         '204':
           description: Unlinked
@@ -2000,15 +2365,141 @@ paths:
       summary: Anonymise own account
       operationId: anonymizeAccount
       description: |
-        Irreversible. In one transaction: stops active tracking, deletes node_authorizations,
-        deletes user_profile (cascades to oauth providers, quick_access, node_colors). Retains
-        users row and time_entries. Session is invalidated. Re-registration requires a new
-        invitation and creates a new identity. SR-047.
+        Irreversible. In one transaction: stops active tracking, revokes all MCP tokens, deletes
+        node_authorizations, deletes user_profile (cascades to oauth providers, quick_access).
+        Retains users row and time_entries. Session is invalidated. Re-registration requires a
+        new invitation and creates a new identity. SR-047.
       responses:
         '204':
           description: Anonymised; session invalidated
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------------------
+  # MCP access tokens
+  # ---------------------------------------------------------------------------
+
+  /account/mcp-tokens:
+    get:
+      tags: [mcp]
+      summary: List own MCP tokens
+      operationId: listOwnMcpTokens
+      description: Returns all active (non-revoked) MCP tokens for the authenticated user. SR-065.
+      responses:
+        '200':
+          description: Active MCP tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [mcp]
+      summary: Generate MCP token
+      operationId: generateMcpToken
+      description: |
+        Generates a new MCP access token. The raw token value is returned exactly once in this
+        response and is never stored — only its SHA-256 hash is retained. SR-065.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label:
+                  type: string
+                  description: Human-readable label for the token
+                expiresAt:
+                  type: [string, 'null']
+                  format: date-time
+                  description: Optional expiry; null or omitted means non-expiring
+      responses:
+        '201':
+          description: Token created — raw value shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, mcpToken]
+                properties:
+                  token:
+                    type: string
+                    description: Raw token value — shown once, never stored
+                  mcpToken:
+                    $ref: '#/components/schemas/McpToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /account/mcp-tokens/{tokenId}:
+    delete:
+      tags: [mcp]
+      summary: Revoke own MCP token
+      operationId: revokeMcpToken
+      description: Sets revoked_at = NOW(). The token hash remains for audit. SR-066.
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/mcp-tokens:
+    get:
+      tags: [mcp]
+      summary: List all active MCP tokens (System Admin)
+      operationId: listAllMcpTokens
+      description: Requires is_system_admin. Returns all non-revoked tokens across all users. SR-067.
+      responses:
+        '200':
+          description: All active MCP tokens with owner information
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpTokenWithOwner'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/mcp-tokens/{tokenId}:
+    delete:
+      tags: [mcp]
+      summary: Revoke any MCP token (System Admin)
+      operationId: adminRevokeMcpToken
+      description: |
+        Requires is_system_admin. Sets revoked_at = NOW(). Revocation is logged to
+        security_events. SR-068.
+      parameters:
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ---------------------------------------------------------------------------
   # Security events — System Admin only
@@ -2107,7 +2598,11 @@ paths:
       tags: [about]
       summary: About page
       operationId: getAbout
-      description: Application version, third-party licenses, SBOM download link. No auth required. SR-048.
+      description: |
+        Application version, third-party licenses, SBOM download link, OpenAPI spec download
+        link, and built-in GDPR data summary. No authentication required. If the requesting user
+        is authenticated and has at least one effective node authorization, the company Privacy
+        Notice URL is also included (if configured). SR-048.
       security: []
       responses:
         '200':
@@ -2151,6 +2646,20 @@ paths:
         or window closed).
         Data: `PurgeNotification | null`.
         Recipients: all sessions of Node Admins of root and System Admins.
+
+        `activity-cutoff` — Activity cutoff date changed (pre-notification window opened or
+        closed). Members see the upcoming cutoff date on their own time entries once active.
+        Data: `{ activityCutoffDate: string (date) | null }`.
+        Recipients: all authenticated sessions.
+
+        `quick-access` — A node in the user's quick-access list has been updated (color, icon,
+        logo, name, or trackability changed).
+        Data: `QuickAccessEntry`.
+        Recipients: all sessions of users who have the affected node in their quick-access list.
+
+        `mcp-token-revoked` — One of the user's MCP tokens was revoked (e.g. by System Admin).
+        Data: `{ tokenId: string (uuid) }`.
+        Recipients: all sessions of the token owner.
       responses:
         '200':
           description: SSE stream (text/event-stream)
