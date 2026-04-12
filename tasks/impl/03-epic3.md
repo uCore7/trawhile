@@ -1,0 +1,53 @@
+# Task impl/03 — Epic 3: Time tracking
+
+## Prerequisites
+
+- `tasks/00-base-it.md` merged
+- `tasks/tests/03-epic3.md` merged (test classes exist and are failing)
+
+## Guardrails
+
+- **Do not touch `src/test/`** — never create, edit, delete, or rename any file under `src/test/`. If a test appears wrong, report it in your output and stop; do not fix the test.
+- **No git write operations** — do not run `git commit`, `git push`, `git pull`, `git fetch`, `git merge`, `git rebase`, `git reset`, `git stash`, `git branch -D`, or any command that modifies git state or remote. Read-only commands (`git status`, `git log`, `git diff`, `git show`) are permitted.
+- **No Flyway migrations** — never create or modify files under `src/main/resources/db/migration/`. Schema changes are applied separately in chat mode.
+- **Only `src/main/java/`** — never create or modify files under `src/main/frontend/`, `src/main/resources/db/migration/`, or `src/test/`.
+
+## Scope
+
+Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent entry list with overlap/gap flags, quick-access management, and manual entry CRUD.
+
+## Read first (in order)
+
+1. `docs/schema.sql` — `time_entries`, `quick_access` tables
+2. `docs/requirements-sr.md` — SR-026–SR-035
+3. `docs/openapi.yaml` — `/tracking`, `/time-entries`, `/quick-access` paths
+4. `docs/architecture.md` — §Transaction boundaries, §SSE dispatch
+5. `src/main/java/com/trawhile/config/TrawhileConfig.java` — `freezeOffsetYears()`
+6. The failing tests:
+   - `src/test/java/com/trawhile/TrackingIT.java`
+   - `src/test/java/com/trawhile/QuickAccessIT.java`
+   - `src/test/java/com/trawhile/TimeEntryIT.java`
+
+## Modify (production code only)
+
+| File | What to implement |
+|---|---|
+| `src/main/java/com/trawhile/service/TrackingService.java` | `getStatus()`, `getRecentEntries()`, `startTracking()`, `switchTracking()`, `stopTracking()`, `addQuickAccess()`, `removeQuickAccess()`, `reorderQuickAccess()`, `listQuickAccess()` |
+| `src/main/java/com/trawhile/service/TimeEntryService.java` | `createRetroactive()`, `editEntry()`, `deleteEntry()`, `duplicateEntry()` |
+| `src/main/java/com/trawhile/web/TrackingController.java` | SR-026–SR-030 endpoints |
+| `src/main/java/com/trawhile/web/QuickAccessController.java` | SR-031 endpoints |
+| `src/main/java/com/trawhile/web/TimeEntryController.java` | SR-032–SR-035 endpoints |
+
+## Acceptance criteria
+
+`mvn test -Dtest=TrackingIT,QuickAccessIT,TimeEntryIT` passes. Do not modify test files.
+
+## Watch out for
+
+- **SR-028 leaf check**: `is_active = true` AND no children with `is_active = true` — one query, not two
+- **SR-029 atomicity**: `switchTracking` is a single service method with one `@Transactional` boundary — not two separate calls from the controller
+- **SR-031 max 9**: 10th add returns 409 with code `QUICK_ACCESS_FULL`
+- **SR-031 non-trackable flag**: computed at read time — node is non-trackable when `is_active = false` OR has active children
+- **SR-033/034 freeze cutoff**: applies to `started_at`, not `ended_at`; sourced from `TrawhileConfig.freezeOffsetYears()`, not hardcoded
+- **SR-027 overlap**: both entries in an overlapping pair are flagged; overlap = `a.started_at < b.ended_at AND b.started_at < a.ended_at`
+- **SSE**: dispatch `TRACKING` to all sessions of the user after every start/switch/stop

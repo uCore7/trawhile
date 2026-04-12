@@ -9,6 +9,8 @@ Before starting any work, read the following files in order:
 5. `docs/glossary.md` — canonical definitions of all domain terms
 6. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
 7. `docs/openapi.yaml` — REST API contract
+8. `docs/process.md` — development phases, conventions, and current status
+9. `docs/decisions.md` — rationale behind non-obvious architectural and process choices
 
 These are the authoritative source of truth. Code, tests, and migrations must be consistent with them. If implementation forces a change to a requirement, update the relevant doc file in the same commit.
 
@@ -25,7 +27,7 @@ These are the authoritative source of truth. Code, tests, and migrations must be
 
 - One instance = one company. No multi-tenancy.
 - No sessions table. Sessions managed by Spring HttpSession (implementation detail).
-- No email stored for registered users (C-2). Email only in `pending_memberships`, deleted on first login match.
+- No email stored for registered users (C-2). Email only in `pending_invitations`, deleted on first login match.
 - Authorization is recursive: a grant on node N is effective on N and all descendants. Use recursive CTEs (Q1–Q4 in schema.sql) — do not flatten the tree.
 - Freeze cutoff: entries with `started_at < NOW() - freeze_offset_years * INTERVAL '1 year'` are immutable. The offset is read from `TrawhileConfig.freezeOffsetYears`. No admin override.
 - Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub and all `time_entries`. Irreversible.

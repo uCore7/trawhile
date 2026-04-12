@@ -1,0 +1,50 @@
+name: Agent boundary check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Enforces the two-phase agentic coding contract:
+#   test/* branches  → may only write to src/test/
+#   impl/* branches  → may only write to src/main/
+#
+# Neither type may modify the other side.
+# Git write operations cannot be detected here, but are prohibited in task files
+# and will surface as unexplained extra commits in the PR diff.
+
+jobs:
+  check-boundaries:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Compute changed files
+        run: |
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed_files.txt
+          echo "Changed files:"
+          cat /tmp/changed_files.txt
+
+      - name: test/* branch — must not touch src/main/
+        if: startsWith(github.head_ref, 'test/')
+        run: |
+          violations=$(grep '^src/main/' /tmp/changed_files.txt || true)
+          if [ -n "$violations" ]; then
+            echo "::error::A test/* branch must not modify src/main/. Violations:"
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no src/main/ changes on test/* branch."
+
+      - name: impl/* branch — must not touch src/test/
+        if: startsWith(github.head_ref, 'impl/')
+        run: |
+          violations=$(grep '^src/test/' /tmp/changed_files.txt || true)
+          if [ -n "$violations" ]; then
+            echo "::error::An impl/* branch must not modify src/test/. Violations:"
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no src/test/ changes on impl/* branch."
