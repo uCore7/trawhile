@@ -1,0 +1,41 @@
+# trawhile system configuration
+#
+# Copy this file to config/application.yml next to docker-compose.yml and edit as needed.
+# This file is mounted into the container at /app/config/application.yml (SR-088).
+# All properties here are under the `trawhile:` namespace.
+#
+# Secrets (database credentials, OAuth client secrets, bootstrap admin email)
+# are provided via environment variables in docker-compose.yml — do not put them here.
+
+trawhile:
+
+  # Display name shown in the browser tab title and (optionally) in the UI.
+  # Default: trawhile
+  name: "trawhile"
+
+  # IANA timezone identifier used for report date/time display and freeze cutoff calculations.
+  # Must be a valid IANA zone name (e.g. "Europe/Berlin", "America/New_York").
+  # Default: UTC
+  timezone: "UTC"
+
+  # Entries with started_at older than this many years become immutable (freeze cutoff).
+  # Must be >= 0 and <= retention-years.
+  # Default: 2
+  freeze-offset-years: 2
+
+  # Activity purge cutoff in years. Time entries and requests older than this are deleted
+  # by the nightly purge job. Must be >= 2 (GDPR minimum retention floor).
+  # Default: 5
+  retention-years: 5
+
+  # Additional years before deactivated nodes are permanently deleted after all their
+  # time entries and requests have been purged. Must be >= 0.
+  # Default: 1
+  node-retention-extra-years: 1
+
+  # Optional HTTPS URL for your privacy notice / data processing agreement.
+  # Shown to users during the GDPR first-login notice (SR-057a).
+  # Leave blank if you do not have a separate privacy notice URL.
+  # Must start with https:// if set.
+  # Default: (none)
+  privacy-notice-url: ""

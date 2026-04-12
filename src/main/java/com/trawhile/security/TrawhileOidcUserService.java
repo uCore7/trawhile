@@ -16,7 +16,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.util.Optional;
 
 /**
- * Custom OIDC user service for Google and Apple Sign In.
+ * Custom OIDC user service for all configured providers (Google, Apple, Microsoft Entra ID, Keycloak).
  *
  * Apple-specific notes:
  * - The 'name' claim is only present on the FIRST authorization (subsequent logins omit it).
@@ -33,7 +33,7 @@ public class TrawhileOidcUserService extends OidcUserService {
     private final NodeAuthorizationRepository nodeAuthorizationRepository;
     private final AuthorizationQueries authorizationQueries;
 
-    @Value("${app.bootstrap-admin-email:}")
+    @Value("${BOOTSTRAP_ADMIN_EMAIL:}")
     private String bootstrapAdminEmail;
 
     public TrawhileOidcUserService(UserOauthProviderRepository oauthProviderRepository,

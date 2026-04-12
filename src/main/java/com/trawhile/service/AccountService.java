@@ -14,6 +14,7 @@ public class AccountService {
     private final UserOauthProviderRepository oauthProviderRepository;
     private final NodeAuthorizationRepository authorizationRepository;
     private final McpTokenRepository mcpTokenRepository;
+    private final PendingInvitationRepository pendingInvitationRepository;
     private final SseDispatcher sseDispatcher;
 
     public AccountService(UserRepository userRepository,
@@ -21,12 +22,14 @@ public class AccountService {
                           UserOauthProviderRepository oauthProviderRepository,
                           NodeAuthorizationRepository authorizationRepository,
                           McpTokenRepository mcpTokenRepository,
+                          PendingInvitationRepository pendingInvitationRepository,
                           SseDispatcher sseDispatcher) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.oauthProviderRepository = oauthProviderRepository;
         this.authorizationRepository = authorizationRepository;
         this.mcpTokenRepository = mcpTokenRepository;
+        this.pendingInvitationRepository = pendingInvitationRepository;
         this.sseDispatcher = sseDispatcher;
     }
 
@@ -35,7 +38,6 @@ public class AccountService {
     // TODO: implement F6.3 — unlinkProvider (blocked if only one provider)
     // TODO: implement F6.4 — getOwnAuthorizations
     // TODO: implement F6.5 — anonymizeAccount (stops tracking, revokes MCP tokens, deletes profile + cascade)
-    // TODO: implement SR-043a — setLanguage
     // TODO: implement SR-043b — saveReportSettings (persist last_report_settings JSONB)
     // TODO: implement SR-057a — completeRegistration (inserts user_profile + user_oauth_providers, deletes pending_invitations by id)
 }

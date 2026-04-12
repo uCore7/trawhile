@@ -1,5 +1,6 @@
 package com.trawhile.web;
 
+import com.trawhile.service.ReportExportService;
 import com.trawhile.service.ReportService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReportController {
 
     private final ReportService reportService;
+    private final ReportExportService reportExportService;
 
-    public ReportController(ReportService reportService) {
+    public ReportController(ReportService reportService, ReportExportService reportExportService) {
         this.reportService = reportService;
+        this.reportExportService = reportExportService;
     }
 
     // TODO: implement F4.1–F4.4 and SR-063 (member summaries with hasDataQualityIssues flag)

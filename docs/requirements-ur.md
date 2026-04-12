@@ -99,6 +99,9 @@ The context boundary separates the relevant environment (neighboring systems and
 **Observability**
 - UR-059: The System Admin shall be able to monitor system health and receive alerts on operational failures — including purge job non-completion, database transaction errors, and abnormal event rates — via a Prometheus-compatible metrics endpoint. [Goal: G-5]
 
+**Configuration validation**
+- UR-065: The operator shall be informed of configuration errors at startup via a descriptive error message identifying the invalid property or constraint, so that misconfigured instances fail fast rather than starting in a broken or partially functional state. [Goal: G-5]
+
 ## Epic 2 — Node administration
 
 - UR-014: The Node Admin shall be able to view the details and direct children of any node within their scope. [Goal: G-1]

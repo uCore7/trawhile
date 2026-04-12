@@ -4,7 +4,7 @@
 -- Table order respects FK dependencies.
 --
 -- System configuration (name, timezone, freeze-offset-years, retention-years,
--- node-retention-extra-years, purge-schedule, privacy-notice-url) lives in
+-- node-retention-extra-years, privacy-notice-url) lives in
 -- application.yml / environment variables — not in the database.
 
 -- ---------------------------------------------------------------------------
@@ -35,8 +35,10 @@ CREATE TABLE nodes (
 --   Deleted only when no time_entries reference it (invitation expiry, withdrawal, or
 --   anonymization with no history). Otherwise retained as an anonymous stub indefinitely.
 -- user_profile: personal data; deleted on anonymization (cascades to user_oauth_providers,
---   quick_access). mcp_tokens reference users directly and are soft-revoked (revoked_at),
---   not deleted, on anonymization.
+--   quick_access). mcp_tokens reference users directly, are soft-revoked (revoked_at) on
+--   anonymization/removal, and are hard-deleted via ON DELETE CASCADE when the users row
+--   is eventually deleted.
+-- pending_invitations.invited_by: nullable; SET NULL when the inviter's users row is deleted.
 -- No picture_url stored — profile pictures dropped (privacy; no chat/mention feature).
 -- System Admin = user with admin authorization on the root node (no separate flag).
 -- ---------------------------------------------------------------------------
@@ -69,7 +71,7 @@ CREATE TABLE pending_invitations (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID        NOT NULL UNIQUE REFERENCES users(id),
   email      TEXT        NOT NULL UNIQUE,
-  invited_by UUID        NOT NULL REFERENCES users(id),
+  invited_by UUID        REFERENCES users(id) ON DELETE SET NULL,
   invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '90 days'
 );
@@ -181,7 +183,7 @@ CREATE TABLE purge_jobs (
 
 CREATE TABLE mcp_tokens (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      UUID        NOT NULL REFERENCES users(id),
+  user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash   TEXT        NOT NULL UNIQUE,  -- SHA-256 hex of the raw token
   label        TEXT        NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),

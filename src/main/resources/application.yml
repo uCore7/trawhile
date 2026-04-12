@@ -58,10 +58,17 @@ server:
     session:
       timeout: 0  # no session timeout
 
-app:
-  bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
-  # Cron expression for pending membership expiry purge (daily at 02:00 UTC). SR-009a.
-  pending-membership-purge-cron: "0 0 2 * * *"
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9090}  # SR-064: management port; not routed through Caddy
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 # System configuration (SR-088). Override in config/application.yml mounted next to docker-compose.yml.
 # Secrets (DB credentials, OAuth client secrets, bootstrap admin email) stay in environment variables.

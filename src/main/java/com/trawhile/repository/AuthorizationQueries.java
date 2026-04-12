@@ -51,7 +51,7 @@ public class AuthorizationQueries {
               UNION ALL
               SELECT n.id, n.parent_id FROM nodes n JOIN ancestors a ON n.id = a.parent_id
             )
-            SELECT MAX(na.authorization::text)
+            SELECT MAX(na.authorization)::text
             FROM ancestors a
             JOIN node_authorizations na ON na.node_id = a.id
             WHERE na.user_id = :userId

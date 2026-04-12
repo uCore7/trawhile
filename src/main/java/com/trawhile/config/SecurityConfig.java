@@ -42,6 +42,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers("/api/v1/about").permitAll()
+                .requestMatchers("/api/v1/auth/providers").permitAll()
+                .requestMatchers("/api/v1/auth/gdpr-notice").permitAll()
                 .requestMatchers("/index.html", "/", "/assets/**", "/*.js", "/*.css", "/*.ico").permitAll()
                 .anyRequest().authenticated())
 
@@ -65,7 +67,7 @@ public class SecurityConfig {
                 .contentSecurityPolicy(csp -> csp
                     .policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'"))
                 .referrerPolicy(r -> r
-                    .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)));
+                    .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)));
 
         return http.build();
     }

@@ -38,7 +38,10 @@ com.trawhile
     SecurityConfig.java        — Spring Security, OAuth2, CSRF, session, headers
     SchedulingConfig.java      — @EnableScheduling
     RateLimitConfig.java       — bucket4j beans
+    RateLimitFilter.java       — per-IP rate limiting filter; runs before security chain
+    JdbcConfig.java            — Spring Data JDBC custom converters (AuthLevel, JSONB)
     TrawhileConfig.java        — @ConfigurationProperties("trawhile"); validated on startup (SR-088)
+    StartupValidator.java      — ApplicationRunner; validates OAuth provider presence (SR-089)
   domain/
     Node.java                  — record; maps to nodes table
     TimeEntry.java
@@ -50,7 +53,6 @@ com.trawhile
     PurgeJob.java
     PendingInvitation.java
     QuickAccess.java
-    NodeColor.java
   repository/
     NodeRepository.java        — Spring Data JDBC CrudRepository
     TimeEntryRepository.java
@@ -74,11 +76,13 @@ com.trawhile
     RequestService.java
     AccountService.java
     SecurityEventService.java
+    McpTokenService.java
     ReportExportService.java
   lifecycle/
     ActivityPurgeJob.java      — @Scheduled; activity purge driver
     NodeDeletionJob.java       — @Scheduled; node deletion driver
     PurgeJobCoordinator.java   — resumes active jobs on startup; shared batch logic
+    InvitationExpiryJob.java   — @Scheduled; daily expiry of pending invitations (SR-009a)
   sse/
     SseEmitterRegistry.java    — ConcurrentHashMap<UUID, CopyOnWriteArrayList<SseEmitter>>
     SseEvent.java              — event type enum + payload wrapper

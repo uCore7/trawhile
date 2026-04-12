@@ -31,7 +31,7 @@ public class NodeController {
     }
 
     // TODO: implement all endpoints listed above
-    // Logo upload: validate MIME type (image/png, image/jpeg, image/gif, image/webp) and size (<= 256 KB)
+    // Logo upload: validate MIME type (image/png, image/jpeg, image/svg+xml, image/webp) and size (<= 256 KB)
     // Logo GET: return node.logo() as the appropriate MIME type; 404 if null
     // On node update (colour, icon, logo): dispatch SseEvent.QUICK_ACCESS to affected users
 }

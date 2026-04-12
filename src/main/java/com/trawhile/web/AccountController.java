@@ -6,19 +6,18 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * /api/v1/account — profile, OAuth2 provider links, own authorizations, anonymization,
- * language preference, report settings, GDPR notice, own MCP token management.
+ * report settings, own MCP token management.
  *
  * Endpoints:
  *   GET    /account                    — SR-043  getProfile
- *   PUT    /account/language           — SR-043a setLanguage
  *   PUT    /account/report-settings    — SR-043b saveReportSettings
  *   GET    /account/authorizations     — SR-046  getOwnAuthorizations
  *   POST   /account/providers          — SR-044  linkProvider
  *   DELETE /account/providers/{p}      — SR-045  unlinkProvider
  *   POST   /account/anonymize          — SR-047  anonymizeAccount
- *   GET    /account/mcp-tokens         — SR-065  listOwnMcpTokens
+ *   GET    /account/mcp-tokens         — SR-065a listOwnMcpTokens
  *   POST   /account/mcp-tokens         — SR-065  generateMcpToken
- *   DELETE /account/mcp-tokens/{id}    — SR-066  revokeMcpToken
+ *   DELETE /account/mcp-tokens/{id}    — SR-067  revokeMcpToken
  */
 @RestController
 @RequestMapping("/api/v1/account")

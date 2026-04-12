@@ -36,6 +36,9 @@ Roles are additive and form a hierarchy: System Admin IS-A Node Admin IS-A User.
 - F1.11 — Monitor system health via a Prometheus-compatible metrics endpoint covering infrastructure (JVM, HTTP traffic, database connection pool) and application-level events (purge job outcomes, security event rates, OAuth2 login failures, rate limit rejections, active SSE connections, active tracking sessions, MCP tool usage)
 - F1.12 — Ship ready-to-use monitoring artifacts in a `monitoring/` directory: an importable Grafana dashboard JSON, an AlertManager rules file covering critical operational alerts, and a Prometheus scrape configuration snippet; all maintained in sync with the application's metric definitions
 
+**Configuration validation**
+- F1.13 — Fail fast at startup with a descriptive error message identifying the invalid property if any system configuration is invalid (trawhile properties or OIDC provider setup); a correctly configured instance starts with all configuration validated
+
 ## Epic 2 — Node administration (Node Admin of the node or any ancestor)
 
 - F2.1 — View node details and children

@@ -13,6 +13,9 @@ dist/
 # Environment
 .env
 
+# System config (contains company-specific settings; example is in config/application.yml.example)
+config/application.yml
+
 # IDE
 .idea/
 .vscode/

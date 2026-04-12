@@ -3,7 +3,7 @@
 -- One instance = one company. No multi-tenancy.
 -- Table order respects FK dependencies.
 -- System configuration (name, timezone, freeze-offset-years, retention-years,
--- node-retention-extra-years, purge-schedule, privacy-notice-url) is read from
+-- node-retention-extra-years, privacy-notice-url) is read from
 -- application.yml / environment variables — no settings table in the database.
 
 -- ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ CREATE TABLE pending_invitations (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID        NOT NULL UNIQUE REFERENCES users(id),
   email      TEXT        NOT NULL UNIQUE,
-  invited_by UUID        NOT NULL REFERENCES users(id),
+  invited_by UUID        REFERENCES users(id) ON DELETE SET NULL,
   invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '90 days'
 );
@@ -162,7 +162,7 @@ CREATE TABLE purge_jobs (
 
 CREATE TABLE mcp_tokens (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      UUID        NOT NULL REFERENCES users(id),
+  user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash   TEXT        NOT NULL UNIQUE,
   label        TEXT        NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),

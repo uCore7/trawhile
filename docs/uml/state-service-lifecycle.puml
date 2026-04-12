@@ -1,0 +1,61 @@
+@startuml state-service-lifecycle
+title trawhile — Service Lifecycle
+
+hide empty description
+
+[*] --> Starting : JVM launch
+
+state Starting {
+  [*] --> LoadingContext : Spring context initialisation
+  LoadingContext --> ValidatingConfig : context loaded
+}
+
+state ValidatingConfig {
+  [*] --> CheckingProperties : TrawhileConfig @Validated\n(SR-088, SR-089)
+  CheckingProperties --> CheckingProviders : properties valid
+  CheckingProviders --> CheckingBootstrap : ≥1 OIDC provider configured\n(SR-089, A-2)
+  CheckingBootstrap --> ValidationOk : bootstrap admin check\n(SR-001)
+}
+
+ValidatingConfig --> Failed : any constraint violated\n(descriptive error message;\nprocess exits)
+Failed --> [*]
+
+ValidatingConfig --> Resuming : ValidationOk
+
+state Resuming {
+  [*] --> CheckingPurgeJobs : PurgeJobCoordinator\n(ApplicationRunner)
+  CheckingPurgeJobs --> ResumingActivity : activity job status = 'active'
+  CheckingPurgeJobs --> ResumingNode : node job status = 'active'
+  CheckingPurgeJobs --> ResumeComplete : both jobs idle
+  ResumingActivity --> ResumeComplete : activity purge resumed\nusing stored cutoff_date (SR-053)
+  ResumingNode --> ResumeComplete : node deletion resumed\nusing stored cutoff_date (SR-055)
+}
+
+Resuming --> Running : ResumeComplete
+
+state Running {
+  [*] --> Serving : accepting requests
+  Serving --> Serving : normal operation\n(REST, SSE, MCP, scheduled jobs)
+}
+
+Running --> ShuttingDown : SIGTERM / graceful stop\n(in-flight requests complete)
+ShuttingDown --> [*]
+
+Running --> Starting : crash / OOM / SIGKILL\n(purge_jobs row stays 'active';\nresumed on next startup)
+
+note right of Failed
+  Causes: invalid IANA timezone,
+  malformed privacy-notice-url,
+  freeze-offset-years > retention-years,
+  no OIDC provider configured
+end note
+
+note right of Running
+  Nightly at 23:59 (company timezone):
+  activity purge (SR-052) →
+  node deletion (SR-054)
+  Security event purge: daily (SR-051)
+  Invitation expiry: daily (SR-009a)
+end note
+
+@enduml

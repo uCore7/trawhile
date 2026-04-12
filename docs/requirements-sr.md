@@ -2,7 +2,7 @@
 
 Format: "The system shall [behaviour/property]. [Rationale: reason]"
 
-65 SRs total. Epics 1–9 plus cross-cutting authentication/security/observability.
+66 SRs total. Epics 1–9 plus cross-cutting authentication/security/observability.
 
 ## Epic 1 — Company administration
 
@@ -24,7 +24,7 @@ Format: "The system shall [behaviour/property]. [Rationale: reason]"
 
 **SR-009a:** The system shall, on a scheduled daily basis, transition all users to the Ready for Scrubbing state (SR-009b) whose `pending_invitations.expires_at < NOW()`. [Rationale: GDPR storage limitation]
 
-**SR-009b:** The system shall, when a user transitions to the Ready for Scrubbing state, execute within a single transaction: set `ended_at = NOW()` on any active `time_entries` row for that user; delete all `node_authorizations` rows for that user; delete the `pending_invitations` row for that user if one exists; delete the `user_profile` row for that user if one exists (cascades to `user_oauth_providers` and `quick_access`); set `revoked_at = NOW()` on any active `mcp_tokens` for that user; delete the `users` row if no `time_entries` reference it, otherwise retain it as an anonymous stub until F8.3 orphan cleanup removes it. [Rationale: SR-009, SR-009a, SR-010, SR-047]
+**SR-009b:** The system shall, when a user transitions to the Ready for Scrubbing state, execute within a single transaction: set `ended_at = NOW()` on any active `time_entries` row for that user; delete all `node_authorizations` rows for that user; delete the `pending_invitations` row for that user if one exists; delete the `user_profile` row for that user if one exists (cascades to `user_oauth_providers` and `quick_access`); set `revoked_at = NOW()` on any active `mcp_tokens` for that user; delete the `users` row if no `time_entries` and no `requests` reference it, otherwise retain it as an anonymous stub until F8.3 orphan cleanup removes it. [Rationale: SR-009, SR-009a, SR-010, SR-047]
 
 **SR-010:** The system shall transition a user to the Ready for Scrubbing state (SR-009b) when a System Admin requests their removal, via a guided confirmation wizard (SR-077). [Rationale: UR-008]
 
@@ -189,6 +189,8 @@ The UI shall also clarify that permissions are inherited downward — a permissi
 ## Epic 4 addition — member daily summaries
 
 **SR-063:** The system shall return, for a caller-supplied date range (which must align to full days in the company timezone) and node, the total duration tracked per member per interval bucket on that node and all its descendants. Supported interval buckets: day, week, month, year, year-to-date, month-to-date. Each bucket row shall include a `has_data_quality_issues` flag that is true when any of the member's time entries within that bucket overlap with another entry, or when any gap exists between consecutive entries within that bucket. The result is restricted to members for whom the requesting user has at least `view` on the relevant nodes via recursive CTE. Individual `time_entries` rows shall not be exposed to any user other than the entry owner; only the per-member per-bucket aggregate and quality flag are returned. [Rationale: UR-052; GDPR data minimisation — aggregated totals over full-day intervals are the minimum granularity necessary for team coordination; quality flag enables controllers to identify unreliable data without exposing entry detail]
+
+**SR-089:** The system shall validate all configuration at startup and fail fast with a descriptive error message identifying the invalid property if any of the following constraints are violated: any property constraint listed in SR-088; `timezone` is not a valid IANA timezone identifier; `privacy-notice-url` is non-blank but is not a syntactically valid HTTPS URL; no OIDC provider has a non-empty `client-id` configured (at least one of Google, Apple, Microsoft Entra ID, or Keycloak must be active, per A-2). [Rationale: UR-065; A-2; operator usability — a misconfigured instance must not start silently]
 
 **SR-088:** System configuration shall be provided via an external `application.yml` file mounted into the container at runtime (Spring Boot external config at `/app/config/application.yml`). The repository shall ship a `config/application.yml.example` template documenting all supported properties with their defaults and a comment on each; `config/application.yml` shall be listed in `.gitignore`. The following properties shall be supported under the `trawhile:` namespace:
 

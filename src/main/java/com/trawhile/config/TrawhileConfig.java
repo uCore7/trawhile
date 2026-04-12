@@ -1,9 +1,13 @@
 package com.trawhile.config;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
+
+import java.net.URI;
+import java.time.ZoneId;
 
 /**
  * System configuration (SR-088). Loaded from application.yml under the "trawhile:" namespace.
@@ -40,8 +44,34 @@ public class TrawhileConfig {
     @Min(0)
     private int nodeRetentionExtraYears = 1;
 
-    /** Optional HTTPS URL to the company Privacy Notice; null or blank if not configured. */
+    /** Optional HTTPS URL to the company Privacy Notice; blank if not configured. */
     private String privacyNoticeUrl = "";
+
+    @AssertTrue(message = "freeze-offset-years must not exceed retention-years")
+    public boolean isFreezeOffsetWithinRetention() {
+        return freezeOffsetYears <= retentionYears;
+    }
+
+    @AssertTrue(message = "timezone must be a valid IANA timezone identifier")
+    public boolean isTimezoneValid() {
+        try {
+            ZoneId.of(timezone);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @AssertTrue(message = "privacy-notice-url must be a valid HTTPS URL if set")
+    public boolean isPrivacyNoticeUrlValid() {
+        if (privacyNoticeUrl == null || privacyNoticeUrl.isBlank()) return true;
+        try {
+            var uri = URI.create(privacyNoticeUrl);
+            return "https".equals(uri.getScheme()) && uri.getHost() != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     // Getters and setters (required by @ConfigurationProperties)
 
