@@ -33,6 +33,6 @@ public class UserService {
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement F1.4–F1.9 (view users, invite, withdraw invite, remove user)
-    // TODO: implement expireInvitations() — called by InvitationExpiryJob (SR-009a)
+    // TODO: implement SR-F004.F01 (list users), SR-F005.F01 (list pending invitations), SR-F006.F01 (invite), SR-F011.F01 (resend invite), SR-F007.F01 (withdraw invite), SR-F008.F01 (remove user)
+    // TODO: implement expireInvitations() — called by InvitationExpiryJob (SR-C010.C01)
 }

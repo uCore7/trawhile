@@ -7,21 +7,21 @@ actor "User" as User
 
 rectangle "Time Tracking" {
     package "Tracking Control" {
-        usecase "View current tracking status\n(UR-024)" as UC_TrackStatus
-        usecase "Start tracking via node picker\n(UR-026)" as UC_StartPicker
-        usecase "Start tracking via quick-access list\n(UR-027)" as UC_StartQuick
-        usecase "Switch node (atomic)\n(UR-028)" as UC_Switch
-        usecase "Stop tracking\n(UR-029)" as UC_Stop
+        usecase "View current tracking status\n(UR-F024)" as UC_TrackStatus
+        usecase "Start tracking via node picker\n(UR-F026)" as UC_StartPicker
+        usecase "Start tracking via quick-access\n(UR-F027)" as UC_StartQuick
+        usecase "Switch node (atomic)\n(UR-F028)" as UC_Switch
+        usecase "Stop tracking\n(UR-F029)" as UC_Stop
     }
     package "Time Entry Management" {
-        usecase "View entry history\n(overlaps & gaps flagged)\n(UR-025)" as UC_History
-        usecase "Create retroactive entry\n(UR-031)" as UC_CreateEntry
-        usecase "Edit time entry\n(UR-032)" as UC_EditEntry
-        usecase "Delete time entry\n(UR-033)" as UC_DeleteEntry
-        usecase "Duplicate time entry\n(UR-034)" as UC_DuplicateEntry
+        usecase "View entry history\n(overlaps & gaps flagged)\n(UR-F025)" as UC_History
+        usecase "Create retroactive entry\n(UR-F031)" as UC_CreateEntry
+        usecase "Edit time entry\n(UR-F032)" as UC_EditEntry
+        usecase "Delete time entry\n(UR-F033)" as UC_DeleteEntry
+        usecase "Duplicate time entry\n(UR-F034)" as UC_DuplicateEntry
     }
-    package "Quick-Access List" {
-        usecase "Add / remove / reorder\nnodes in quick-access list\n(UR-030)" as UC_QuickAccess
+    package "Quick-Access" {
+        usecase "Add / remove / reorder\nnodes in quick-access\n(UR-F030)" as UC_QuickAccess
     }
 }
 

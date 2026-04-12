@@ -77,13 +77,13 @@ public class TrawhileOidcUserService extends OidcUserService {
 
         if (pending.isEmpty()) {
             // Check bootstrap path: no invitation needed for first System Admin
-            // TODO: handle bootstrap case (SR-001) — if bootstrap conditions met, store bootstrap session data
+            // TODO: handle bootstrap case (SR-F001.F01) — if bootstrap conditions met, store bootstrap session data
             throw new OAuth2AuthenticationException("NO_PENDING_INVITATION");
         }
 
-        // Store {userId, invitationId, provider, subject, name} in session; discard email (C-2)
+        // Store {userId, invitationId, provider, subject, name} in session; discard email (UR-C006)
         // For Apple: name claim only present on first login
-        // TODO: store session data and redirect to GDPR notice (SR-008)
+        // TODO: store session data and redirect to GDPR notice (SR-F060.F01)
 
         return oidcUser;
     }

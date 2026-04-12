@@ -11,28 +11,60 @@ Template for how trawhile is built and maintained. Each phase has a status, a ch
 **Steps:**
 1. Identify all stakeholders and document the system boundary and context boundary
 2. Write `docs/glossary.md` — canonical definitions of all domain terms
-3. Write `docs/epics.md` — role model, system invariants, and feature descriptions (F-codes) grouped by epic
-4. Write user requirements (URs) in IREB format with goal rationale
-5. Derive system requirements (SRs) from URs with full traceability
-6. Design the PostgreSQL schema (`docs/schema.sql`) — evaluate every data field against the GDPR necessity principle before adding it
-7. Author the REST API contract (`docs/openapi.yaml`)
+3. Write user requirements (URs) in IREB format with goal rationale; include key invariants as a closing section
+4. Derive system requirements (SRs) from URs with full traceability
+5. Design the PostgreSQL schema (`docs/schema.sql`) — evaluate every data field against the GDPR necessity principle before adding it
+6. Author the REST API contract (`docs/openapi.yaml`)
 
 **Conventions:**
 Follow the IREB standard throughout. Produce the typical IREB results: stakeholder analysis, system context, glossary, and a requirements document containing URs and SRs with full traceability. Project-specific notes:
-- Every SR traces to exactly one UR or named external constraint (GDPR, CRA, OWASP)
 - No user story format ("As a user…") — rationale in `docs/decisions.md`
+- Every SR cites its parent UR in the rationale field; a single UR may yield multiple SRs
+
+**Requirement types:**
+Both URs and SRs belong to one of three types. The type of a UR and the type of its derived SRs are independent — a UR of any type may derive SRs of any type.
+
+UR rules:
+
+| UR type | Meaning | Must have SR children? |
+|---|---|---|
+| Functional (`F`) | A stakeholder capability | Yes (≥ 1 SR of any type) |
+| Quality (`Q`) | A non-functional property required by a stakeholder | Yes (≥ 1 SR of any type) |
+| Constraint (`C`) | A design-time condition at stakeholder level (GDPR, CRA, architectural decisions); satisfied by construction, verified by review | Optional (0 or more SRs of any type) |
+
+SR rules:
+
+| SR type | Meaning | Must have TEs? |
+|---|---|---|
+| Functional (`F`) | A system behaviour that implements a stakeholder capability | Yes (≥ 1) |
+| Quality (`Q`) | A system property that realises a non-functional requirement | Yes (≥ 1) |
+| Constraint (`C`) | A technical constraint at system level; satisfied by construction, verified by review | No |
 
 **Identifier schemes:**
-- `ST-1`, `ST-2`, … — stakeholders; defined in `docs/requirements-ur.md`
-- `UR-001`, `UR-002`, … — user requirements; three-digit sequential
-- `SR-001`, `SR-007a`, `SR-064b` — system requirements; optional lowercase letter suffix for sub-requirements; letters uppercased in derived IDs (e.g., `TE-064B-01`)
-- `F1.0`, `F1.1`, `F9.6` — feature codes in `docs/epics.md`; first digit is the epic number
-- `C-1`, `C-2`, … — named constraints referenced by SRs (e.g., C-2: no email stored)
-- `TE-{SR}-{nn}` — test case IDs; defined in Phase 3
+- `ST-1`, `ST-2`, … — stakeholders
+- `UR-F012`, `UR-Q003`, `UR-C007` — user requirements; type-prefixed three-digit zero-padded sequential; no letter suffixes; each type has its own sequence
+- `SR-F012.F01`, `SR-F012.Q02`, `SR-F012.C03` — system requirements; format is `SR-{parent-UR-type}{parent-UR-number}.{SR-own-type}{nn}`; the left part (`F012`) identifies the parent UR; the right part is a type qualifier (`F`, `Q`, or `C`) plus a two-digit zero-padded sequence number that is shared across all SR children of the same parent UR (i.e. `F01`, `Q02`, `C03` … form one sequence — the type letter is a qualifier, not a separate sub-sequence)
+- `TE-F012.F01-01`, `TE-F012.Q02-01` — test cases; format is `TE-{SR-id}-{nn}`; two-digit zero-padded sequence within each SR; only SR-F and SR-Q have TEs; SR-C has none
+- Named external regulations (GDPR, CRA, OWASP) are cited in the rationale field of the UR or SR, never used as standalone identifiers
+
+**Traceability chain:**
+
+```
+UR-F012  →  SR-F012.F01, SR-F012.Q02, SR-F012.C03, …  →  TE-F012.F01-01, …; TE-F012.Q02-01, …; (none for C)
+UR-Q003  →  SR-Q003.F01, SR-Q003.Q02, …               →  TE-Q003.F01-01, …; TE-Q003.Q02-01, …
+UR-C007  →  SR-C007.C01, …  (optional)                 →  (no TEs)
+UR-C007  →  (nothing)                                   →  (no TEs)
+```
+
+Every SR of type F or Q must have at least one TE, regardless of the parent UR's type. SR-C entries never have TEs. A UR-F or UR-Q must produce at least one SR of any type. A UR-C may produce zero SRs.
+
+**ID sequence rule:** Each ID sequence (UR-F, UR-Q, UR-C, ST) is strictly increasing. New IDs must be higher than all currently assigned IDs in the same sequence. Gaps must not be filled and retired IDs must not be reused. SR and TE sequences are subordinate to their parent UR and restart per parent.
+
+**Prerequisite before renaming:** Classify all URs as F, Q, or C first. Then derive SR and TE IDs. URs drive the numbering; SRs and TEs follow.
 
 **Tool:** Chat mode. No agents.
 
-**Outputs:** `docs/requirements-ur.md`, `docs/requirements-sr.md`, `docs/schema.sql`, `docs/openapi.yaml`, `docs/glossary.md`, `docs/epics.md`
+**Outputs:** `docs/requirements-ur.md`, `docs/requirements-sr.md`, `docs/schema.sql`, `docs/openapi.yaml`, `docs/glossary.md`
 
 ---
 
@@ -61,16 +93,15 @@ Follow the IREB standard throughout. Produce the typical IREB results: stakehold
 ## Phase 3 — Test planning ✓
 
 **Steps:**
-- Define test ID scheme: `TE-{SR}-{nn}` (e.g., TE-028-03, TE-057A-02)
-- For every SR, specify at least one happy-path test and one error-path test
+- For every SR-F and SR-Q, specify at least one happy-path test and one error-path test
 - Assign each test a type: IT (Testcontainers + real DB), UT (plain JUnit 5), SIT (MockMvc, no DB), CT (Angular TestBed), E2E (Playwright)
 - Produce the traceability matrix UR → SR → TE in `docs/test-plan.md`
 - Defer frontend tests (CT, E2E) with IDs reserved
 
 **Conventions:**
-- Every SR has at least one TE
-- TE IDs are stable — never renumber; retire with a comment if a test is removed
-- `@Tag("TE-xxx-nn")` on every test method for CI filtering and traceability
+- Every SR-F and SR-Q has at least one TE. SR-C entries have no TEs.
+- TE IDs are `TE-{SR-id}-{nn}` matching the parent SR exactly (e.g., `TE-F012.F01-01`, `TE-F012.Q01-02`). When an SR is renumbered, its TEs are renumbered to match in the same commit. Retired TEs are replaced by a one-line tombstone row in the test plan table.
+- `@Tag("TE-F012.F01-01")` on every test method for CI filtering and traceability
 
 **Tool:** Chat mode. No agents.
 

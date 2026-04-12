@@ -1,19 +1,19 @@
 @startuml state-user-lifecycle
 title trawhile — User Lifecycle
 
-[*] --> Pending : System Admin\ncreates invitation record;\nusers row created\n(SR-007)
+[*] --> Pending : System Admin\ncreates invitation record;\nusers row created\n(SR-F006.F01)
 
-Pending --> Pending : expiry extended\n(SR-007a)
+Pending --> Pending : expiry extended\n(SR-F011.F01)
 
-Pending --> Active : OIDC login matches\npending email;\nGDPR notice acknowledged;\nuser_profile created\n(SR-008, SR-057a)
+Pending --> Active : OIDC login matches\npending email;\nGDPR notice acknowledged;\nuser_profile created\n(SR-F060.F01, SR-F060.F02)
 
 state Active {
     Active : tracks time, views reports,\nmanages account, uses MCP
 }
 
-Pending --> ReadyForScrubbing : invitation expires\nor is cancelled\n(SR-009, SR-009a)
+Pending --> ReadyForScrubbing : invitation expires\n(SR-C010.C01)\nor is withdrawn\n(SR-F007.F01)
 
-Active --> ReadyForScrubbing : user self-anonymises\n(SR-047) or System Admin\nremoves user (SR-010)
+Active --> ReadyForScrubbing : user self-anonymises\n(SR-F047.F01) or System Admin\nremoves user (SR-F008.F01)
 
 state "Ready for Scrubbing" as ReadyForScrubbing {
     ReadyForScrubbing : entry / stop active tracking session
@@ -25,9 +25,10 @@ state "Ready for Scrubbing" as ReadyForScrubbing {
 }
 
 note right of ReadyForScrubbing
+  Cleanup is atomic — single transaction (SR-F047.F02).
   Exits as soon as time_entries = 0.
   Immediate for pending users (no entries possible).
-  May wait for F8.3 purge for anonymised users.
+  May wait for SR-F050.F02 purge for anonymised users.
 end note
 
 ReadyForScrubbing --> [*] : users row deleted

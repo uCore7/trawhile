@@ -15,5 +15,5 @@ public class TrackingController {
         this.trackingService = trackingService;
     }
 
-    // TODO: implement F3.1, F3.3–F3.6
+    // TODO: implement SR-F024.F01 (current status), SR-F026.F01 (start), SR-F028.F01 (switch), SR-F029.F01 (stop)
 }

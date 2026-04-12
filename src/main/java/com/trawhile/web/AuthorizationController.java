@@ -15,5 +15,5 @@ public class AuthorizationController {
         this.nodeService = nodeService;
     }
 
-    // TODO: implement F2.8–F2.10
+    // TODO: implement SR-F021.F01 (grant authorization), SR-F022.F01 (revoke authorization), SR-F023.F01 (view authorizations)
 }

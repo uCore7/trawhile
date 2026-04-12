@@ -21,7 +21,7 @@ Make the failing Epic 7 tests pass. Implement security event logging, the securi
 ## Read first (in order)
 
 1. `docs/schema.sql` — `security_events` table, `event_type` enum
-2. `docs/requirements-sr.md` — SR-049, SR-050, SR-051
+2. `docs/requirements-sr.md` — SR-F049.F01, SR-F049.F02, SR-C007.F01
 3. `docs/openapi.yaml` — `/security-events` path
 4. The failing tests:
    - `src/test/java/com/trawhile/SecurityEventIT.java`
@@ -40,6 +40,6 @@ Make the failing Epic 7 tests pass. Implement security event logging, the securi
 ## Watch out for
 
 - **`log()` propagation**: use `@Transactional(propagation = REQUIRES_NEW)` so a rollback in the caller does not suppress the event
-- **SR-051**: retention is exactly 90 days — `INTERVAL '90 days'` — not from `trawhileConfig`
-- **SR-050**: requires effective `admin` on root specifically — `authorizationService.requireAdmin(userId, ROOT_NODE_ID)`
+- **SR-C007.F01**: retention is exactly 90 days — `INTERVAL '90 days'` — not from `trawhileConfig`
+- **SR-F049.F02**: requires effective `admin` on root specifically — `authorizationService.requireAdmin(userId, ROOT_NODE_ID)`
 - **`log()` userId**: may be null for failed logins where no user is identified yet

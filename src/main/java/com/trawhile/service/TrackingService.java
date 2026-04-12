@@ -25,5 +25,5 @@ public class TrackingService {
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement F3.3–F3.6 (start, switch, stop tracking)
+    // TODO: implement SR-F026.F01 (start), SR-F028.F01 (switch), SR-F029.F01 (stop)
 }

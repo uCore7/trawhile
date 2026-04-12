@@ -9,9 +9,9 @@ import org.springframework.web.bind.annotation.RestController;
  * /api/v1/reports — time report with filters, summary/detail, CSV export, member summaries.
  *
  * Endpoints:
- *   GET /reports          — SR-037/SR-038 getReport (mode=summary|detailed)
- *   GET /reports/export   — SR-039        exportReport (CSV)
- *   GET /reports/members  — SR-063        getMemberSummaries (per-member aggregated totals)
+ *   GET /reports          — SR-F036.F01/SR-F036.F02  getReport (mode=summary|detailed)
+ *   GET /reports/export   — SR-F038.F01              exportReport (CSV)
+ *   GET /reports/members  — SR-F052.F01              getMemberSummaries (per-member aggregated totals)
  */
 @RestController
 @RequestMapping("/api/v1/reports")
@@ -25,6 +25,6 @@ public class ReportController {
         this.reportExportService = reportExportService;
     }
 
-    // TODO: implement F4.1–F4.4 and SR-063 (member summaries with hasDataQualityIssues flag)
+    // TODO: implement SR-F036.F01 (report), SR-F036.F02 (overlap/gap), SR-F038.F01 (CSV export), SR-F052.F01 (member summaries with hasDataQualityIssues)
     // Member summaries: never expose individual time entry details; daily is the finest granularity
 }

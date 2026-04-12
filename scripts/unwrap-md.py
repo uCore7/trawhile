@@ -19,7 +19,6 @@ import sys
 import os
 
 DEFAULT_FILES = [
-    "docs/epics.md",
     "docs/requirements-ur.md",
     "docs/requirements-sr.md",
     "docs/glossary.md",

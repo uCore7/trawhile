@@ -60,7 +60,7 @@ server:
 
 management:
   server:
-    port: ${MANAGEMENT_PORT:9090}  # SR-064: management port; not routed through Caddy
+    port: ${MANAGEMENT_PORT:9090}  # SR-F059.F01: management port; not routed through Caddy
   endpoints:
     web:
       exposure:
@@ -70,7 +70,7 @@ management:
       prometheus:
         enabled: true
 
-# System configuration (SR-088). Override in config/application.yml mounted next to docker-compose.yml.
+# System configuration (SR-F050.F05). Override in config/application.yml mounted next to docker-compose.yml.
 # Secrets (DB credentials, OAuth client secrets, bootstrap admin email) stay in environment variables.
 trawhile:
   name: "trawhile"

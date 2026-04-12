@@ -17,8 +17,8 @@ import java.util.ArrayList;
  *
  * POST /auth/logout is handled directly by Spring Security (configured in SecurityConfig).
  * POST /auth/gdpr-notice — reads pending registration data from HTTP session and executes the
- * account creation transaction (SR-057a). Returns privacyNoticeUrl if configured.
- * GET  /auth/providers — returns configured OIDC provider registration IDs (SR-085). Permit-all.
+ * account creation transaction (SR-F060.F02). Returns privacyNoticeUrl if configured.
+ * GET  /auth/providers — returns configured OIDC provider registration IDs (SR-F067.F02). Permit-all.
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -36,11 +36,11 @@ public class AuthController {
     @PostMapping("/gdpr-notice")
     public ResponseEntity<Void> acknowledgeGdprNotice() {
         // TODO: read PENDING_GDPR session data; call accountService.completeRegistration(sessionData)
-        // Returns 400 if no pending registration data in session (SR-057a)
+        // Returns 400 if no pending registration data in session (SR-F060.F02)
         return ResponseEntity.noContent().build();
     }
 
-    /** SR-085 — permit-all; used by login page to render sign-in buttons for active providers. */
+    /** SR-F067.F02 — permit-all; used by login page to render sign-in buttons for active providers. */
     @GetMapping("/providers")
     public List<String> getProviders() {
         var providers = new ArrayList<String>();

@@ -20,7 +20,7 @@ Make the failing Epic 6 tests pass. Implement profile, provider link/unlink, own
 ## Read first (in order)
 
 1. `docs/schema.sql` — `user_profile`, `user_oauth_providers`, `node_authorizations`
-2. `docs/requirements-sr.md` — SR-043, SR-043b, SR-044, SR-045, SR-046, SR-047, SR-048
+2. `docs/requirements-sr.md` — SR-F043.F01, SR-F066.F01, SR-F044.F01, SR-F045.F01, SR-F047.F01, SR-F047.F03, SR-F048.F01
 3. `docs/openapi.yaml` — `/account`, `/account/providers`, `/account/authorizations`, `/account/anonymize`, `/about`
 4. `docs/architecture.md` — §4 OAuth2 flows (provider linking path)
 5. The failing tests:
@@ -42,9 +42,9 @@ Make the failing Epic 6 tests pass. Implement profile, provider link/unlink, own
 
 ## Watch out for
 
-- **SR-044**: provider/subject unique across ALL users — 409 with code `PROVIDER_ALREADY_LINKED`
-- **SR-045**: 409 with code `LAST_PROVIDER` when only one linked provider remains
-- **SR-047**: delegates entirely to `UserService.scrubUser()` — no duplicated logic
-- **SR-048 privacy notice**: shown only to authenticated users with at least one effective node authorization AND when `privacyNoticeUrl` is non-blank
+- **SR-F044.F01**: provider/subject unique across ALL users — 409 with code `PROVIDER_ALREADY_LINKED`
+- **SR-F045.F01**: 409 with code `LAST_PROVIDER` when only one linked provider remains
+- **SR-F047.F01**: delegates entirely to `UserService.scrubUser()` — no duplicated logic
+- **SR-F048.F01 privacy notice**: shown only to authenticated users with at least one effective node authorization AND when `privacyNoticeUrl` is non-blank
 - **Provider linking flow**: `LINKING_PROVIDER` session attr → `loadUser()` calls `linkProvider()` → sets `LINK_COMPLETE` → success handler redirects to `/account`
-- **SR-046**: reuse the same path-annotating `AuthorizationQueries` method as SR-011
+- **SR-F043.F01 own authorizations**: reuse the same path-annotating `AuthorizationQueries` method as SR-F009.F01; response also includes last report settings (SR-F066.F01)

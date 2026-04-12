@@ -10,20 +10,20 @@ User <|-- SysAdmin
 
 rectangle "System Administration" {
     package "User Management" {
-        usecase "View all users\n(UR-004)" as UC_ViewUsers
-        usecase "View pending invitations\n(UR-005)" as UC_ViewPendingInvitations
-        usecase "Invite user by email\n(UR-006)" as UC_InviteUser
-        usecase "Resend pending invitation\n(UR-006a)" as UC_ResendInvitation
-        usecase "Withdraw pending invitation\n(UR-007)" as UC_WithdrawPendingInvitation
-        usecase "Remove user\n(UR-008)" as UC_RemoveUser
-        usecase "Manage user authorization\nassignments across tree\n(UR-009)" as UC_ManageUserAuth
+        usecase "View all users\n(UR-F004)" as UC_ViewUsers
+        usecase "View pending invitations\n(UR-F005)" as UC_ViewPendingInvitations
+        usecase "Invite user by email\n(UR-F006)" as UC_InviteUser
+        usecase "Resend pending invitation\n(UR-F011)" as UC_ResendInvitation
+        usecase "Withdraw pending invitation\n(UR-F007)" as UC_WithdrawPendingInvitation
+        usecase "Remove user\n(UR-F008)" as UC_RemoveUser
+        usecase "Manage user authorization\nassignments across tree\n(UR-F009)" as UC_ManageUserAuth
     }
     package "System Settings" {
-        usecase "First-run member invite prompt\n(UR-062)" as UC_FirstRunPrompt
-        usecase "View system settings\n(read-only, all users)\n(UR-010)" as UC_ViewSettings
+        usecase "First-run member invite prompt\n(UR-F062)" as UC_FirstRunPrompt
+        usecase "View system settings\n(read-only, all users)\n(UR-F010)" as UC_ViewSettings
     }
     package "Observability" {
-        usecase "Monitor system health\nvia Prometheus endpoint\n(UR-059)" as UC_Prometheus
+        usecase "Monitor system health\nvia Prometheus endpoint\n(UR-F059)" as UC_Prometheus
     }
 }
 

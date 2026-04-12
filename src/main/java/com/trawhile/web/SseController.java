@@ -11,9 +11,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.UUID;
 
-/** GET /api/v1/sse — SSE subscription endpoint. One connection per browser tab. */
+/** GET /api/v1/events — SSE subscription endpoint (SR-F068.F01). One connection per browser tab. */
 @RestController
-@RequestMapping("/api/v1/sse")
+@RequestMapping("/api/v1/events")
 public class SseController {
 
     private final SseEmitterRegistry registry;

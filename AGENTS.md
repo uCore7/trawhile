@@ -7,8 +7,7 @@ This file is the tool-agnostic entry point. If you are Claude Code, read `CLAUDE
 | Document | Purpose |
 |---|---|
 | `docs/schema.sql` | PostgreSQL schema, FK constraints, authorization queries Q1–Q4 |
-| `docs/epics.md` | Feature list, role model, key invariants |
-| `docs/requirements-ur.md` | Stakeholder capabilities |
+| `docs/requirements-ur.md` | Stakeholder capabilities, role model, key invariants |
 | `docs/requirements-sr.md` | System behaviours, acceptance conditions |
 | `docs/architecture.md` | Package layout, patterns, code examples |
 | `docs/openapi.yaml` | REST API contract — request/response shapes |

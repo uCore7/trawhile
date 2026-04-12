@@ -54,7 +54,7 @@ end note
 note bottom of P8
   Fully automated background jobs.
   No UI interaction — configured via
-  system config file (SR-088).
+  system config file (SR-F050.F05).
 end note
 
 @enduml

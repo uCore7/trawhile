@@ -4,11 +4,11 @@ Terms are listed alphabetically. Where a term appears in requirements or archite
 
 ---
 
-**Anonymization** Irreversible removal of a user's personal data: the `user_profile` row is deleted (cascading to `user_oauth_providers`, `quick_access`, and `mcp_tokens`), while the `users` stub and all `time_entries` are retained so that historical aggregates remain intact. The anonymised user can re-register only with a new invitation, which creates a new, unlinked identity. See SR-047.
+**Anonymization** Irreversible removal of a user's personal data: the `user_profile` row is deleted (cascading to `user_oauth_providers`, `quick_access`, and `mcp_tokens`), while the `users` stub and all `time_entries` are retained so that historical aggregates remain intact. The anonymised user can re-register only with a new invitation, which creates a new, unlinked identity. See SR-F047.F01.
 
 **Authorization level** One of three permission levels (`view`, `track`, `admin`) that can be granted to a user on a node. They form a strict subset hierarchy: `view` ⊂ `track` ⊂ `admin`. A grant of a higher level implies all lower levels. See also: *effective authorization*, *node authorization*.
 
-**Bootstrap** The one-time process of creating the first System Admin. Because no admin can exist before any user logs in, the `BOOTSTRAP_ADMIN_EMAIL` environment variable designates the email address that receives `admin` on the root node on first OIDC login. See SR-001.
+**Bootstrap** The one-time process of creating the first System Admin. Because no admin can exist before any user logs in, the `BOOTSTRAP_ADMIN_EMAIL` environment variable designates the email address that receives `admin` on the root node on first OIDC login. See SR-F001.F01.
 
 **Effective authorization** The highest authorization level a user holds on a specific node, considering both direct grants on that node and grants on any ancestor node. Resolved via recursive CTE (Q2 in schema.sql). A grant on an ancestor is effective on all descendants — this is the core authorization model.
 

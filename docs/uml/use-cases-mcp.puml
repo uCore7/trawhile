@@ -9,20 +9,20 @@ actor "MCP Client\n(e.g. Claude.ai)" as McpClient
 
 rectangle "MCP Integration" {
     package "Token Management (User)" {
-        usecase "Generate MCP access token\n(UR-053)" as UC_GenToken
-        usecase "View own MCP tokens\n(UR-054)" as UC_ViewTokens
-        usecase "Revoke own MCP token\n(UR-055)" as UC_RevokeToken
-        usecase "Claude.ai setup wizard\n(UR-058)" as UC_McpWizard
+        usecase "Generate MCP access token\n(UR-F053)" as UC_GenToken
+        usecase "View own MCP tokens\n(UR-F054)" as UC_ViewTokens
+        usecase "Revoke own MCP token\n(UR-F055)" as UC_RevokeToken
+        usecase "Claude.ai setup wizard\n(UR-F058)" as UC_McpWizard
     }
     package "Token Management (System Admin)" {
-        usecase "View all MCP tokens\nacross all users\n(UR-056)" as UC_AdminTokens
-        usecase "Revoke any MCP token\n(UR-057)" as UC_AdminRevoke
+        usecase "View all MCP tokens\nacross all users\n(UR-F056)" as UC_AdminTokens
+        usecase "Revoke any MCP token\n(UR-F057)" as UC_AdminRevoke
     }
     package "MCP Server Tools" {
-        usecase "Query time entries\n(F9.6)" as UC_McpEntries
-        usecase "Query node tree\n(F9.6)" as UC_McpTree
-        usecase "Query tracking status\n(F9.6)" as UC_McpTracking
-        usecase "Query member summaries\n(F9.6)" as UC_McpSummaries
+        usecase "Query time entries\n(UR-F069)" as UC_McpEntries
+        usecase "Query node tree\n(UR-F069)" as UC_McpTree
+        usecase "Query tracking status\n(UR-F069)" as UC_McpTracking
+        usecase "Query member summaries\n(UR-F069)" as UC_McpSummaries
     }
 }
 

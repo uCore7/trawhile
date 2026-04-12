@@ -15,5 +15,5 @@ public class TimeEntryController {
         this.timeEntryService = timeEntryService;
     }
 
-    // TODO: implement F3.2, F3.10–F3.13
+    // TODO: implement SR-F025.F01 (list entries), SR-F031.F01 (create retroactive), SR-F032.F01 (edit), SR-F033.F01 (delete), SR-F034.F01 (duplicate)
 }

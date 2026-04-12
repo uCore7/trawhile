@@ -19,7 +19,7 @@ Make the failing Epic 5 tests pass. Implement request submission, listing, and c
 ## Read first (in order)
 
 1. `docs/schema.sql` — `requests` table
-2. `docs/requirements-sr.md` — SR-040, SR-041, SR-042
+2. `docs/requirements-sr.md` — SR-F039.F01, SR-F041.F01, SR-F042.F01
 3. `docs/openapi.yaml` — `/requests` paths
 4. The failing tests:
    - `src/test/java/com/trawhile/RequestIT.java`
@@ -37,8 +37,8 @@ Make the failing Epic 5 tests pass. Implement request submission, listing, and c
 
 ## Watch out for
 
-- **SR-042 idempotency**: re-closing returns 409 with code `REQUEST_ALREADY_CLOSED`
-- **SR-041 visibility**: at least `view` via recursive CTE — not a direct lookup
-- **SR-042 admin**: effective `admin` on the node or any ancestor — Q3 CTE
+- **SR-F042.F01 idempotency**: re-closing returns 409 with code `REQUEST_ALREADY_CLOSED`
+- **SR-F041.F01 visibility**: at least `view` via recursive CTE — not a direct lookup
+- **SR-F042.F01 admin**: effective `admin` on the node or any ancestor — Q3 CTE
 - **SSE**: dispatch `REQUEST` event to all users with effective `admin` on the node and ancestors after submit and close
 - **requester_id nullable**: handle NULL in list responses (anonymous placeholder)

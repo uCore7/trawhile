@@ -9,15 +9,14 @@ import org.springframework.web.bind.annotation.RestController;
  * report settings, own MCP token management.
  *
  * Endpoints:
- *   GET    /account                    — SR-043  getProfile
- *   PUT    /account/report-settings    — SR-043b saveReportSettings
- *   GET    /account/authorizations     — SR-046  getOwnAuthorizations
- *   POST   /account/providers          — SR-044  linkProvider
- *   DELETE /account/providers/{p}      — SR-045  unlinkProvider
- *   POST   /account/anonymize          — SR-047  anonymizeAccount
- *   GET    /account/mcp-tokens         — SR-065a listOwnMcpTokens
- *   POST   /account/mcp-tokens         — SR-065  generateMcpToken
- *   DELETE /account/mcp-tokens/{id}    — SR-067  revokeMcpToken
+ *   GET    /account                    — SR-F043.F01  getProfile (profile + providers + authorizations + last report settings)
+ *   PUT    /account/report-settings    — SR-F066.F01  saveReportSettings
+ *   POST   /account/providers          — SR-F044.F01  linkProvider
+ *   DELETE /account/providers/{p}      — SR-F045.F01  unlinkProvider
+ *   POST   /account/anonymize          — SR-F047.F01  anonymizeAccount
+ *   GET    /account/mcp-tokens         — SR-F054.F01  listOwnMcpTokens
+ *   POST   /account/mcp-tokens         — SR-F053.F01  generateMcpToken
+ *   DELETE /account/mcp-tokens/{id}    — SR-F055.F01  revokeMcpToken
  */
 @RestController
 @RequestMapping("/api/v1/account")

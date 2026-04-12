@@ -10,7 +10,7 @@ import java.net.URI;
 import java.time.ZoneId;
 
 /**
- * System configuration (SR-088). Loaded from application.yml under the "trawhile:" namespace.
+ * System configuration (SR-F050.F05). Loaded from application.yml under the "trawhile:" namespace.
  * Validated on startup — application fails fast if any constraint is violated.
  *
  * Secrets (DB credentials, OAuth client secrets, BOOTSTRAP_ADMIN_EMAIL) are provided via

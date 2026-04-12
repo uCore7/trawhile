@@ -1,6 +1,7 @@
 # User requirements (UR)
 
-Format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
+Functional requirements use the format: "The [stakeholder] shall be able to [capability]. [Goal: reason]"
+Constraint requirements state design-time conditions that are satisfied by construction and verified by review.
 
 ## Stakeholders
 
@@ -65,114 +66,158 @@ The context boundary separates the relevant environment (neighboring systems and
 | G-5 | Comply with EU Cyber Resilience Act (CRA) security and transparency requirements |
 | G-6 | Operate securely with no persistent secrets beyond OAuth2 provider credentials |
 
-## Assumptions and constraints
-
-| ID | Statement |
-|---|---|
-| A-1 | One deployed instance serves exactly one company |
-| A-2 | Authentication is delegated entirely to OIDC; supported providers: Google, Apple, Microsoft Entra ID, Keycloak; at least one must be configured |
-| A-3 | No email server is required; invitation emails are generated as mailto: links only |
-| A-4 | The company timezone is the reference for date boundaries in reports and freeze cutoff evaluation |
-| C-1 | All timestamps are stored in UTC |
-| C-2 | No email addresses are stored for registered users |
-| C-3 | Security event logs are retained for exactly 90 days |
-| C-4 | Data retention period is operator-configurable with a minimum of 2 years |
-| C-5 | The system must be deployable via Docker Compose on a single VPS |
+---
 
 ## Epic 1 — System administration
 
 **Bootstrap**
-- UR-001: The operator shall be able to designate a first System Admin so that the system can be bootstrapped without prior in-app user management. [Goal: G-2]
+- UR-F001: The operator shall be able to designate a first System Admin so that the system can be bootstrapped without prior in-app user management. [Goal: G-2]
 
 **User management**
-- UR-004: The System Admin shall be able to view all registered users. [Goal: G-1]
-- UR-005: The System Admin shall be able to view all pending invitations. [Goal: G-1]
-- UR-006: The System Admin shall be able to create an invitation for a person by email address, generating a mailto: link to send manually. [Goal: G-1]
-- UR-006a: The System Admin shall be able to resend a pending invitation, resetting its expiry and generating a fresh mailto: link, without affecting the user record or assigned authorizations. [Goal: G-1]
-- UR-007: The System Admin shall be able to withdraw a pending invitation. [Goal: G-1]
-- UR-008: The System Admin shall be able to remove a user from the company via a guided confirmation wizard. [Goal: G-1, G-4]
-- UR-009: The System Admin shall be able to manage node authorization assignments of a user across the tree: view all assignments, and grant or revoke authorizations on any node within their scope (same operation as UR-021/UR-022, accessed via node picker rather than user picker). [Goal: G-2]
+- UR-F004: The System Admin shall be able to view all registered users. [Goal: G-1]
+- UR-F005: The System Admin shall be able to view all pending invitations. [Goal: G-1]
+- UR-F006: The System Admin shall be able to create an invitation for a person by email address, generating a mailto: link to send manually. [Goal: G-1]
+- UR-F007: The System Admin shall be able to withdraw a pending invitation. [Goal: G-1]
+- UR-F008: The System Admin shall be able to remove a user from the company via a guided confirmation wizard. [Goal: G-1, G-4]
+- UR-F009: The System Admin shall be able to manage node authorization assignments of a user across the tree: view all assignments, and grant or revoke authorizations on any node within their scope (same operation as UR-F021/UR-F022, accessed via node picker rather than user picker). [Goal: G-2]
+- UR-F011: The System Admin shall be able to resend a pending invitation, resetting its expiry and generating a fresh mailto: link, without affecting the user record or assigned authorizations. [Goal: G-1]
 
 **System settings**
-- UR-010: Any User shall be able to view the current system configuration. [Goal: G-1, G-4]
+- UR-F010: Any User shall be able to view the current system configuration. [Goal: G-1, G-4]
 
 **Observability**
-- UR-059: The System Admin shall be able to monitor system health and receive alerts on operational failures — including purge job non-completion, database transaction errors, and abnormal event rates — via a Prometheus-compatible metrics endpoint. [Goal: G-5]
+- UR-F059: The System Admin shall be able to monitor system health and receive alerts on operational failures — including purge job non-completion, database transaction errors, and abnormal event rates — via a Prometheus-compatible metrics endpoint. [Goal: G-5]
 
 **Configuration validation**
-- UR-065: The operator shall be informed of configuration errors at startup via a descriptive error message identifying the invalid property or constraint, so that misconfigured instances fail fast rather than starting in a broken or partially functional state. [Goal: G-5]
+- UR-F065: The operator shall be informed of configuration errors at startup via a descriptive error message identifying the invalid property or constraint, so that misconfigured instances fail fast rather than starting in a broken or partially functional state. [Goal: G-5]
+
+**Authentication**
+- UR-F067: The User shall be able to sign in using an OIDC provider account already linked to their profile. [Goal: G-6]
 
 ## Epic 2 — Node administration
 
-- UR-014: The Node Admin shall be able to view the details and direct children of any node within their scope. [Goal: G-1]
-- UR-015: The Node Admin shall be able to create a child node under any node within their scope. [Goal: G-1]
-- UR-016: The Node Admin shall be able to edit the name, description, color, icon, and logo of any node within their scope. Logo uploads are limited to 256 KB and common image formats. [Goal: G-1]
-- UR-017: The Node Admin shall be able to reorder the child nodes of any node within their scope. [Goal: G-1]
-- UR-018: The Node Admin shall be able to deactivate any node within their scope that has no active children. [Goal: G-1]
-- UR-019: The Node Admin shall be able to reactivate any deactivated node within their scope. [Goal: G-1]
-- UR-020: The Node Admin shall be able to move a node to a different parent, provided they have admin rights on both the node and the destination parent, and the destination is not within the node's own subtree. [Goal: G-1]
-- UR-021: The Node Admin shall be able to grant `view`, `track`, or `admin` authorization on any node within their scope to any existing user; this operation is accessible both from the node view and from the user view (UR-009). Granting `admin` on the root node makes the user a System Admin. [Goal: G-2]
-- UR-022: The Node Admin shall be able to revoke a user's authorization on any node within their scope, provided the user is not the last `admin` of that node; this operation is accessible both from the node view and from the user view (UR-009). Revoking `admin` on the root node removes System Admin rights. [Goal: G-2]
-- UR-023: The Node Admin shall be able to view all authorization assignments on a node, distinguishing direct assignments from those inherited from ancestors. [Goal: G-2]
+- UR-F014: The Node Admin shall be able to view the details and direct children of any node within their scope. [Goal: G-1]
+- UR-F015: The Node Admin shall be able to create a child node under any node within their scope. [Goal: G-1]
+- UR-F016: The Node Admin shall be able to edit the name, description, color, icon, and logo of any node within their scope. Logo uploads are limited to 256 KB and common image formats. [Goal: G-1]
+- UR-F017: The Node Admin shall be able to reorder the child nodes of any node within their scope. [Goal: G-1]
+- UR-F018: The Node Admin shall be able to deactivate any node within their scope that has no active children. [Goal: G-1]
+- UR-F019: The Node Admin shall be able to reactivate any deactivated node within their scope. [Goal: G-1]
+- UR-F020: The Node Admin shall be able to move a node to a different parent, provided they have admin rights on both the node and the destination parent, and the destination is not within the node's own subtree. [Goal: G-1]
+- UR-F021: The Node Admin shall be able to grant `view`, `track`, or `admin` authorization on any node within their scope to any existing user; this operation is accessible both from the node view and from the user view (UR-F009). Granting `admin` on the root node makes the user a System Admin. [Goal: G-2]
+- UR-F022: The Node Admin shall be able to revoke a user's authorization on any node within their scope, provided the user is not the last `admin` of that node; this operation is accessible both from the node view and from the user view (UR-F009). Revoking `admin` on the root node removes System Admin rights. [Goal: G-2]
+- UR-F023: The Node Admin shall be able to view all authorization assignments on a node, distinguishing direct assignments from those inherited from ancestors. [Goal: G-2]
 
 ## Epic 3 — Time tracking
 
-- UR-024: The User shall be able to view their current tracking status, including the node being tracked, elapsed time, and start time. [Goal: G-1]
-- UR-025: The User shall be able to view their recent time entry history, with overlapping entries and gaps between consecutive entries visually flagged. [Goal: G-1]
-- UR-026: The User shall be able to start tracking a task by navigating the node tree using the node picker widget. [Goal: G-1]
-- UR-027: The User shall be able to start tracking a task from a personal quick-access list of up to 9 nodes. [Goal: G-1]
-- UR-028: The User shall be able to switch to a different node atomically, without an explicit stop step. [Goal: G-1]
-- UR-029: The User shall be able to stop tracking. [Goal: G-1]
-- UR-030: The User shall be able to add, remove, and reorder nodes in their quick-access list. [Goal: G-1]
-- UR-031: The User shall be able to create a time entry retroactively for any node they can track, with an optional short description. [Goal: G-1]
-- UR-032: The User shall be able to edit the node, start time, end time, and description of any of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
-- UR-033: The User shall be able to delete any of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
-- UR-034: The User shall be able to duplicate a time entry, specifying a new start and end time; the description is copied from the original. [Goal: G-1]
-- UR-035: (removed — per-user node colors replaced by company-wide node color/icon/logo set by Node Admins)
+- UR-F024: The User shall be able to view their current tracking status, including the node being tracked, elapsed time, and start time. [Goal: G-1]
+- UR-F025: The User shall be able to view their recent time entry history, with overlapping entries and gaps between consecutive entries visually flagged. [Goal: G-1]
+- UR-F026: The User shall be able to start tracking a task by navigating the node tree using the node picker widget. [Goal: G-1]
+- UR-F027: The User shall be able to start tracking a task from a personal quick-access list of up to 9 nodes. [Goal: G-1]
+- UR-F028: The User shall be able to switch to a different node atomically, without an explicit stop step. [Goal: G-1]
+- UR-F029: The User shall be able to stop tracking. [Goal: G-1]
+- UR-F030: The User shall be able to add, remove, and reorder nodes in their quick-access list. [Goal: G-1]
+- UR-F031: The User shall be able to create a time entry retroactively for any node they can track, with an optional short description. [Goal: G-1]
+- UR-F032: The User shall be able to edit the node, start time, end time, and description of any of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
+- UR-F033: The User shall be able to delete any of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
+- UR-F034: The User shall be able to duplicate a time entry, specifying a new start and end time; the description is copied from the original. [Goal: G-1]
+- UR-F035: *(retired — per-user node colors replaced by company-wide node color/icon/logo set by Node Admins)*
 
 ## Epic 4 — Reporting & export
 
-- UR-036: The User shall be able to view a time report filtered by date range, user, and node, limited to nodes visible to them. [Goal: G-3]
-- UR-037: The User shall be able to toggle a time report between summary view, detailed view, and chart view. [Goal: G-3]
-- UR-038: The User shall be able to export the current report view to CSV. [Goal: G-3]
-- UR-063: The User shall be able to view the following chart types in chart view, all respecting the active report filters: (1) time per node (bar or pie); (2) time over period (bar or line, bucketed by time interval); (3) per-member breakdown (stacked bar per time bucket, limited to members visible to the requesting user). [Goal: G-3]
-- UR-064: The User shall be able to export the current report view — whether a table or a chart — to PDF. [Goal: G-3]
+- UR-F036: The User shall be able to view a time report filtered by date range, user, and node, limited to nodes visible to them. [Goal: G-3]
+- UR-F037: The User shall be able to toggle a time report between summary view, detailed view, and chart view. [Goal: G-3]
+- UR-F038: The User shall be able to export the current report view to CSV. [Goal: G-3]
+- UR-F063: The User shall be able to view the following chart types in chart view, all respecting the active report filters: (1) time per node (bar or pie); (2) time over period (bar or line, bucketed by time interval); (3) per-member breakdown (stacked bar per time bucket, limited to members visible to the requesting user). [Goal: G-3]
+- UR-F064: The User shall be able to export the current report view — whether a table or a chart — to PDF. [Goal: G-3]
+- UR-F066: The User shall be able to have their report filter settings automatically persisted and restored across sessions and devices. [Goal: G-1]
 
 ## Epic 5 — Requests
 
-- UR-039: The User shall be able to submit a request against any node visible to them, using a system-defined template or free text. [Goal: G-1]
-- UR-041: The User shall be able to view all requests submitted against any node visible to them. [Goal: G-1]
-- UR-042: The Node Admin shall be able to close any open request within their scope. [Goal: G-1]
+- UR-F039: The User shall be able to submit a request against any node visible to them, using a system-defined template or free text. [Goal: G-1]
+- UR-F041: The User shall be able to view all requests submitted against any node visible to them. [Goal: G-1]
+- UR-F042: The Node Admin shall be able to close any open request within their scope. [Goal: G-1]
 
 ## Epic 6 — Account
 
-- UR-043: The User shall be able to view their stored profile information (name). [Goal: G-4]
-- UR-044: The User shall be able to link an additional configured OIDC provider (Google, Apple, Microsoft Entra ID, or Keycloak) to their account. [Goal: G-1]
-- UR-045: The User shall be able to unlink an OAuth2 provider from their account, provided at least one other provider remains linked. [Goal: G-1]
-- UR-046: The User shall be able to view all their node authorization assignments across the tree. [Goal: G-2]
-- UR-047: The User shall be able to anonymise their own account via a guided confirmation wizard, replacing all personal data with a placeholder while preserving time entry history. [Goal: G-4]
-- UR-048: Any visitor shall be able to view the About page, including application version, third-party licenses, a downloadable SBOM, a downloadable OpenAPI specification, and a permanent summary of what personal data is stored and how long it is retained. Users with at least one effective node authorization shall additionally see a link to the company Privacy Notice if one has been configured. [Goal: G-4, G-5]
+- UR-F043: The User shall be able to view their stored profile information (name). [Goal: G-4]
+- UR-F044: The User shall be able to link an additional configured OIDC provider (Google, Apple, Microsoft Entra ID, or Keycloak) to their account. [Goal: G-1]
+- UR-F045: The User shall be able to unlink an OAuth2 provider from their account, provided at least one other provider remains linked. [Goal: G-1]
+- UR-F046: The User shall be able to view all their node authorization assignments across the tree. [Goal: G-2]
+- UR-F047: The User shall be able to anonymise their own account via a guided confirmation wizard, replacing all personal data with a placeholder while preserving time entry history. [Goal: G-4]
+- UR-F048: Any visitor shall be able to view the About page, including application version, third-party licenses, a downloadable SBOM, a downloadable OpenAPI specification, and a permanent summary of what personal data is stored and how long it is retained. Users with at least one effective node authorization shall additionally see a link to the company Privacy Notice if one has been configured. [Goal: G-4, G-5]
 
 ## Epic 7 — Security & audit
 
-- UR-049: The System Admin shall be able to view the security event log, filtered by event type, user, and date range. [Goal: G-5]
+- UR-F049: The System Admin shall be able to view the security event log, filtered by event type, user, and date range. [Goal: G-5]
 
 ## Epic 8 — Data lifecycle
 
-- UR-050: The operator shall be able to configure the data retention period, node retention extra period, and purge schedule. [Goal: G-4, G-5]
-- UR-060: On first login, the User shall be presented with a summary of what personal data is stored, how long it is retained, and their right to anonymise their account, before accessing any other part of the application. If the sysadmin has configured a Privacy Notice URL and the user has at least one node authorization, a link to it shall also be displayed. [Goal: G-4]
-- UR-061: All UI text, including GDPR-sensitive screens, shall be rendered in the language derived from the user's browser locale (best match against English, German, French, Spanish; default English). [Goal: G-4]
-- UR-062: The System Admin shall be presented with a first-run prompt to invite initial members immediately after their first bootstrap login (after GDPR notice acknowledgement). [Goal: G-1]
-
-## Epic 4 addition — member daily summaries
-
-- UR-052: The User shall be able to view the total time tracked by other members on nodes visible to them, aggregated over any full-day interval (daily, weekly, monthly, yearly, year-to-date, month-to-date), with a data quality flag per bucket indicating the presence of overlapping entries or gaps, and the ability to filter by that flag; individual time entry details shall not be visible. [Goal: G-1, G-4]
+- UR-F050: The operator shall be able to configure the data retention period, node retention extra period, and purge schedule. [Goal: G-4, G-5]
+- UR-F052: The User shall be able to view the total time tracked by other members on nodes visible to them, aggregated over any full-day interval (daily, weekly, monthly, yearly, year-to-date, month-to-date), with a data quality flag per bucket indicating the presence of overlapping entries or gaps, and the ability to filter by that flag; individual time entry details shall not be visible. [Goal: G-1, G-4]
+- UR-F060: On first login, the User shall be presented with a summary of what personal data is stored, how long it is retained, and their right to anonymise their account, before accessing any other part of the application. If the sysadmin has configured a Privacy Notice URL and the user has at least one node authorization, a link to it shall also be displayed. [Goal: G-4]
+- UR-F061: All UI text, including GDPR-sensitive screens, shall be rendered in the language derived from the user's browser locale (best match against English, German, French, Spanish; default English). [Goal: G-4]
+- UR-F062: The System Admin shall be presented with a first-run prompt to invite initial members immediately after their first bootstrap login (after GDPR notice acknowledgement). [Goal: G-1]
+- UR-F068: The User shall see live updates across all their open sessions whenever their tracking state, visible node structure, their authorizations, or relevant request status changes. [Goal: G-1]
+- UR-F070: When a user's access is terminated by any means, the system shall atomically clean up all associated active state and personal data records. [Goal: G-4]
 
 ## Epic 9 — MCP integration
 
-- UR-053: The User shall be able to generate a named MCP access token from their account page, receiving the raw token value exactly once. [Goal: G-1]
-- UR-054: The User shall be able to view their own active MCP tokens, including label, creation date, and last-used date. [Goal: G-1]
-- UR-055: The User shall be able to revoke any of their own MCP tokens. [Goal: G-1]
-- UR-056: The System Admin shall be able to view all active MCP tokens across all users, including the owning user, label, creation date, and last-used date. [Goal: G-5]
-- UR-057: The System Admin shall be able to revoke any MCP token regardless of owner. [Goal: G-5]
-- UR-058: The User shall be guided through the full Claude.ai MCP connection setup within the application, without requiring external documentation. [Goal: G-1]
+- UR-F053: The User shall be able to generate a named MCP access token from their account page, receiving the raw token value exactly once. [Goal: G-1]
+- UR-F054: The User shall be able to view their own active MCP tokens, including label, creation date, and last-used date. [Goal: G-1]
+- UR-F055: The User shall be able to revoke any of their own MCP tokens. [Goal: G-1]
+- UR-F056: The System Admin shall be able to view all active MCP tokens across all users, including the owning user, label, creation date, and last-used date. [Goal: G-5]
+- UR-F057: The System Admin shall be able to revoke any MCP token regardless of owner. [Goal: G-5]
+- UR-F058: The User shall be guided through the full Claude.ai MCP connection setup within the application, without requiring external documentation. [Goal: G-1]
+- UR-F069: The MCP Client shall be able to query time entries, node tree, tracking status, and member summaries via MCP server tools. [Goal: G-1]
+
+---
+
+## Constraints (UR-C)
+
+Constraints are design-time conditions satisfied by construction and verified by review, not by automated tests.
+
+**Architectural constraints** (formerly A-x):
+- UR-C001: One deployed instance serves exactly one company. [Rationale: data isolation; GDPR data controller boundary]
+- UR-C002: Authentication is delegated entirely to OIDC; supported providers: Google, Apple, Microsoft Entra ID, Keycloak; at least one must be configured at startup. [Rationale: G-6; eliminates password storage]
+- UR-C003: No email server is required; invitation emails are generated as mailto: links only. [Rationale: G-6; reduces attack surface]
+- UR-C004: The company timezone is the reference for date boundaries in reports, freeze cutoff evaluation, and purge job scheduling. [Rationale: G-1; consistent day boundaries across the company]
+
+**Domain constraints** (formerly C-x):
+- UR-C005: All timestamps are stored in UTC. [Rationale: unambiguous time representation; GDPR audit trail integrity]
+- UR-C006: No email addresses are stored for registered users. [Rationale: G-4; GDPR Art. 5(1)(c) data minimisation]
+- UR-C007: Security event logs are retained for exactly 90 days, with no manual override. [Rationale: G-4, G-5; GDPR Art. 5(1)(e) storage limitation]
+- UR-C008: The data retention period is operator-configurable with a minimum of 2 years, below which the system shall refuse to start. [Rationale: G-4; GDPR Art. 5(1)(e)]
+- UR-C009: The system must be deployable via Docker Compose on a single VPS without a container orchestration platform. [Rationale: G-5; operational simplicity for self-hosting companies]
+- UR-C010: Pending invitations shall expire automatically after 90 days; they shall not be stored indefinitely. [Rationale: G-4; GDPR Art. 5(1)(e) storage limitation]
+
+**Security constraints**:
+- UR-C011: Request rates shall be limited on all OAuth2 and API endpoints to prevent abuse and brute-force attacks. [Rationale: G-5; CRA]
+- UR-C012: All HTTP responses shall include security headers (Content-Security-Policy, Strict-Transport-Security, X-Frame-Options, X-Content-Type-Options, Referrer-Policy). [Rationale: G-5; CRA; OWASP]
+- UR-C013: All state-mutating endpoints shall be protected against cross-site request forgery. [Rationale: G-5; OWASP]
+
+---
+
+## Key invariants
+
+Business rules that hold unconditionally across all epics. An agent reviewing or implementing any feature must verify that none of these are violated.
+
+- At most one active tracking session per user at all times.
+- Tracking only permitted on active leaf nodes (no active children) with at least `track` authorization.
+- A deactivated node may have a running time entry from before deactivation; the entry may complete normally; no new entries may start on it.
+- Time entries before the effective freeze cutoff are immutable; no admin override.
+- Overlapping time entries are flagged but allowed.
+- Cannot deactivate a node with active children.
+- Cannot revoke the last `admin` authorization on any node.
+- Cannot move a node into its own subtree.
+- All timestamps stored in UTC; time entries carry the IANA timezone captured from the browser at tracking start.
+- A user must exist before receiving any node authorization.
+- Authorization is derived recursively upward: a grant on an ancestor is effective on all descendants.
+- Only users with `admin` on a node may grant or revoke authorizations on that node or any descendant.
+- Data retention period is at least 2 years.
+- Node retention extra period is non-negative.
+- Freeze offset does not exceed the retention period.
+- Node deletion only fires after the corresponding activity purge has completed.
+- Node deletion never fires if the subtree has remaining time entries or requests.
+- Both purge jobs are idempotent on restart: an interrupted job resumes from its stored checkpoint.
+- Anonymisation is irreversible; re-registration requires a new invitation and creates a new identity with no link to the anonymised account.
+- Non-trackable nodes remain in a user's quick-access list, annotated with a non-trackable flag.

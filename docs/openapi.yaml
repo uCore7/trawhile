@@ -666,7 +666,7 @@ paths:
       description: |
         Returns the registration IDs of all OIDC providers that have a non-empty client-id
         configured at startup. Used by the login page to render only the active sign-in buttons.
-        Accessible without authentication. SR-085.
+        Accessible without authentication. SR-F067.F02.
       responses:
         '200':
           description: Active providers
@@ -702,10 +702,10 @@ paths:
       operationId: acknowledgeGdprNotice
       description: |
         Called after the user reads the GDPR notice on first login. Reads pending registration
-        data from the HTTP session (stored during OAuth2 callback per SR-008) and executes the
+        data from the HTTP session (stored during OAuth2 callback per SR-F060.F01) and executes the
         account creation transaction: inserts user_profile, user_oauth_providers, deletes
         pending_invitations. Establishes an authenticated session. Returns privacy_notice_url if
-        configured. Returns 400 if no pending registration data is in the session. SR-057a.
+        configured. Returns 400 if no pending registration data is in the session. SR-F060.F02.
       responses:
         '200':
           description: Registration complete
@@ -733,7 +733,7 @@ paths:
       operationId: getSettings
       description: |
         Returns the resolved system configuration to any authenticated user. Values are read from
-        the config file at startup and cannot be changed via the API. SR-012.
+        the config file at startup and cannot be changed via the API. SR-F010.F01.
       responses:
         '200':
           description: System settings
@@ -753,7 +753,7 @@ paths:
       tags: [users]
       summary: List all users
       operationId: listUsers
-      description: Requires System Admin. SR-005.
+      description: Requires System Admin. SR-F004.F01.
       responses:
         '200':
           description: All users (pending, active, and anonymised)
@@ -777,7 +777,7 @@ paths:
         Requires System Admin. In one transaction: stops active tracking, revokes active MCP
         tokens, deletes all node authorizations, deletes user_profile (cascades to oauth
         providers, quick_access). If the user has time entries, retains the users row as an
-        anonymous stub; otherwise deletes it. SR-010.
+        anonymous stub; otherwise deletes it. SR-F008.F01.
       parameters:
         - name: userId
           in: path
@@ -800,7 +800,7 @@ paths:
       tags: [users]
       summary: List user's node authorizations
       operationId: getUserAuthorizations
-      description: Requires System Admin. SR-011.
+      description: Requires System Admin. SR-F009.F01.
       parameters:
         - name: userId
           in: path
@@ -833,7 +833,7 @@ paths:
       tags: [invitations]
       summary: List pending invitations
       operationId: listInvitations
-      description: Requires System Admin. SR-006.
+      description: Requires System Admin. SR-F005.F01.
       responses:
         '200':
           description: Pending memberships
@@ -853,7 +853,7 @@ paths:
       operationId: createInvitation
       description: |
         Requires System Admin. Creates users row and pending_invitations row. Rejects if email already in pending_invitations or
-        already linked to an existing user. SR-007.
+        already linked to an existing user. SR-F006.F01.
       requestBody:
         required: true
         content:
@@ -891,7 +891,7 @@ paths:
       tags: [invitations]
       summary: Withdraw invitation
       operationId: withdrawInvitation
-      description: Requires System Admin. SR-009.
+      description: Requires System Admin. SR-F007.F01.
       parameters:
         - name: invitationId
           in: path
@@ -917,7 +917,7 @@ paths:
       description: |
         Requires System Admin. Resets the invitation expiry to 90 days from now and returns a
         fresh mailto: link. No new records are created; the existing user UUID and any assigned
-        node authorizations are preserved. SR-007a.
+        node authorizations are preserved. SR-F011.F01.
       parameters:
         - name: invitationId
           in: path
@@ -959,7 +959,7 @@ paths:
       description: |
         Returns the root node with its visible direct children. No authorization check beyond
         authentication — the root node is always accessible; children are filtered by visibility.
-        SR-016.
+        SR-F014.F01.
       responses:
         '200':
           description: Root node
@@ -977,7 +977,7 @@ paths:
       operationId: getNode
       description: |
         Returns node with visible direct children. Requires at least view on node (direct or
-        inherited). SR-016.
+        inherited). SR-F014.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1005,7 +1005,7 @@ paths:
       description: |
         Requires effective admin on node or ancestor. All fields optional; omitted fields unchanged.
         Color must be a valid CSS hex color string (e.g. '#4A90D9'). Icon must be a valid
-        PrimeIcons identifier. SR-018.
+        PrimeIcons identifier. SR-F016.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1053,7 +1053,7 @@ paths:
       operationId: createChildNode
       description: |
         Requires effective admin on the parent node or ancestor. New node is active, appended
-        after existing siblings. SR-017.
+        after existing siblings. SR-F015.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1094,7 +1094,7 @@ paths:
       operationId: reorderChildren
       description: |
         Submit the complete ordered list of direct child IDs. Requires effective admin on node or
-        ancestor. Rejects if the list does not match the current set of direct children. SR-019.
+        ancestor. Rejects if the list does not match the current set of direct children. SR-F017.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1135,7 +1135,7 @@ paths:
       operationId: getNodeLogo
       description: |
         Returns the uploaded logo image. Requires at least view on node. Returns 404 if no logo
-        is set. SR-018.
+        is set. SR-F016.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1175,7 +1175,7 @@ paths:
       operationId: uploadNodeLogo
       description: |
         Requires effective admin on node or ancestor. Accepts image/png, image/jpeg, image/svg+xml,
-        image/webp. Maximum 256 KB. Replaces any existing logo. SR-018.
+        image/webp. Maximum 256 KB. Replaces any existing logo. SR-F016.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1213,7 +1213,7 @@ paths:
       tags: [nodes]
       summary: Remove node logo
       operationId: deleteNodeLogo
-      description: Requires effective admin on node or ancestor. Clears logo and logo_mime_type. SR-018.
+      description: Requires effective admin on node or ancestor. Clears logo and logo_mime_type. SR-F016.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1243,7 +1243,7 @@ paths:
       description: |
         Requires effective admin on node or ancestor. Blocked if active children exist. An active
         time entry on the node itself does not block deactivation — the running entry may complete
-        normally. Sets deactivated_at = NOW(). SR-020.
+        normally. Sets deactivated_at = NOW(). SR-F018.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1272,7 +1272,7 @@ paths:
       tags: [nodes]
       summary: Reactivate node
       operationId: reactivateNode
-      description: Requires effective admin on node or ancestor. Clears deactivated_at. SR-021.
+      description: Requires effective admin on node or ancestor. Clears deactivated_at. SR-F019.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1301,7 +1301,7 @@ paths:
       operationId: moveNode
       description: |
         Requires effective admin on the moved node AND on the destination parent. Destination must
-        not be the node itself or any descendant. Sort order set to append at destination. SR-022.
+        not be the node itself or any descendant. Sort order set to append at destination. SR-F020.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1347,7 +1347,7 @@ paths:
       operationId: listNodeAuthorizations
       description: |
         Requires effective admin on node or ancestor. Returns both direct assignments and those
-        inherited from ancestor nodes, distinguished by the inherited flag. SR-025.
+        inherited from ancestor nodes, distinguished by the inherited flag. SR-F023.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1378,7 +1378,7 @@ paths:
       operationId: grantAuthorization
       description: |
         Upserts a node_authorizations row. Requires the requesting user to have effective admin on
-        this node. SR-023.
+        this node. SR-F021.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1417,7 +1417,7 @@ paths:
       operationId: revokeAuthorization
       description: |
         Deletes a node_authorizations row. Requires effective admin on node or ancestor. Blocked
-        if the row is the last admin-level authorization on this node. SR-024.
+        if the row is the last admin-level authorization on this node. SR-F022.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1453,7 +1453,7 @@ paths:
       summary: List requests on a node
       operationId: listNodeRequests
       description: |
-        Requires at least view on node. Returns all requests (open and closed). SR-041.
+        Requires at least view on node. Returns all requests (open and closed). SR-F041.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1480,7 +1480,7 @@ paths:
       tags: [requests]
       summary: Submit a request
       operationId: createRequest
-      description: Requires at least view on node. SR-040.
+      description: Requires at least view on node. SR-F039.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1520,7 +1520,7 @@ paths:
       tags: [requests]
       summary: Close a request
       operationId: closeRequest
-      description: Requires effective admin on node or ancestor. Blocked if already closed. SR-042.
+      description: Requires effective admin on node or ancestor. Blocked if already closed. SR-F042.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1559,7 +1559,7 @@ paths:
       tags: [tracking]
       summary: Get current tracking status
       operationId: getTrackingStatus
-      description: Returns active time entry with elapsed seconds, or empty state. SR-026.
+      description: Returns active time entry with elapsed seconds, or empty state. SR-F024.F01.
       responses:
         '200':
           description: Tracking status
@@ -1577,7 +1577,7 @@ paths:
       operationId: getTrackingHistory
       description: |
         Returns recent time entries for the authenticated user, descending startedAt, with overlap
-        and gap flags. SR-027.
+        and gap flags. SR-F025.F01.
       parameters:
         - name: limit
           in: query
@@ -1616,7 +1616,7 @@ paths:
       description: |
         Starts tracking on the target node. If already tracking, atomically stops current entry
         and starts new one (switch). Node must be active, have no active children, and user must
-        have at least track authorization. Client must supply IANA timezone. SR-028/SR-029.
+        have at least track authorization. Client must supply IANA timezone. SR-F026.F01/SR-F028.F01.
       requestBody:
         required: true
         content:
@@ -1653,7 +1653,7 @@ paths:
       tags: [tracking]
       summary: Stop tracking
       operationId: stopTracking
-      description: Stops the active session. Returns empty tracking state. SR-030.
+      description: Stops the active session. Returns empty tracking state. SR-F029.F01.
       responses:
         '200':
           description: Empty tracking status
@@ -1677,7 +1677,7 @@ paths:
       operationId: createTimeEntry
       description: |
         Node must be active, have no active children, and user must have at least track
-        authorization. startedAt must be before endedAt. SR-032.
+        authorization. startedAt must be before endedAt. SR-F031.F01.
       requestBody:
         required: true
         content:
@@ -1724,7 +1724,7 @@ paths:
       description: |
         All fields optional; omitted fields unchanged. Blocked if startedAt is before the effective freeze cutoff.
         If nodeId changes, the new node must satisfy the same constraints as tracking start.
-        SR-033.
+        SR-F032.F01.
       parameters:
         - name: entryId
           in: path
@@ -1772,7 +1772,7 @@ paths:
       tags: [time-entries]
       summary: Delete time entry
       operationId: deleteTimeEntry
-      description: Blocked if startedAt is before the effective freeze cutoff. SR-034.
+      description: Blocked if startedAt is before the effective freeze cutoff. SR-F033.F01.
       parameters:
         - name: entryId
           in: path
@@ -1799,7 +1799,7 @@ paths:
       operationId: duplicateTimeEntry
       description: |
         Creates a new entry from an existing one with a new time range. Description is copied
-        from the original. SR-035.
+        from the original. SR-F034.F01.
       parameters:
         - name: entryId
           in: path
@@ -1849,7 +1849,7 @@ paths:
       description: |
         Returns personal quick-access list. Non-trackable entries (deactivated or has active
         children) are annotated with nonTrackable = true and not auto-removed. Node color, icon,
-        and logoUrl are included from the node record. SR-031.
+        and logoUrl are included from the node record. SR-F027.F01.
       responses:
         '200':
           description: Quick-access entries in sort order
@@ -1865,7 +1865,7 @@ paths:
       tags: [quick-access]
       summary: Add node to quick-access list
       operationId: addQuickAccess
-      description: Blocked if list already has 9 entries. SR-031.
+      description: Blocked if list already has 9 entries. SR-F030.F01.
       requestBody:
         required: true
         content:
@@ -1892,7 +1892,7 @@ paths:
       tags: [quick-access]
       summary: Remove node from quick-access list
       operationId: removeQuickAccess
-      description: SR-031.
+      description: SR-F030.F01.
       parameters:
         - name: nodeId
           in: path
@@ -1913,7 +1913,7 @@ paths:
       tags: [quick-access]
       summary: Reorder quick-access list
       operationId: reorderQuickAccess
-      description: Submit the complete ordered list of node IDs. SR-031.
+      description: Submit the complete ordered list of node IDs. SR-F030.F01.
       requestBody:
         required: true
         content:
@@ -1946,8 +1946,8 @@ paths:
       operationId: getReport
       description: |
         Filtered to nodes visible to requesting user. When nodeId is supplied, includes all
-        entries for the node and its visible subtree. All timestamps in company timezone. SR-037/
-        SR-038.
+        entries for the node and its visible subtree. All timestamps in company timezone. SR-F036.F01/
+        SR-F036.F02.
       parameters:
         - name: mode
           in: query
@@ -1992,7 +1992,7 @@ paths:
       tags: [reports]
       summary: Export report as CSV
       operationId: exportReport
-      description: Same filters as GET /reports. SR-039.
+      description: Same filters as GET /reports. SR-F038.F01.
       parameters:
         - name: mode
           in: query
@@ -2040,7 +2040,7 @@ paths:
         Returns per-member aggregated totals on nodes visible to the requesting user. Individual
         time entry details are never exposed — only the total per bucket. Each bucket carries a
         hasDataQualityIssues flag (true if the member's entries for that bucket contain overlaps
-        or gaps). Filterable by that flag. SR-063.
+        or gaps). Filterable by that flag. SR-F052.F01.
       parameters:
         - name: interval
           in: query
@@ -2094,7 +2094,7 @@ paths:
       tags: [account]
       summary: Get own profile
       operationId: getProfile
-      description: Returns stored name and linked OAuth2 providers. SR-043.
+      description: Returns stored name and linked OAuth2 providers. SR-F043.F01.
       responses:
         '200':
           description: Profile
@@ -2117,7 +2117,7 @@ paths:
                   lastReportSettings:
                     type: [object, 'null']
                     additionalProperties: true
-                    description: Last saved report filter state; null if not yet set. SR-043b.
+                    description: Last saved report filter state; null if not yet set. SR-F066.F01.
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -2128,7 +2128,7 @@ paths:
       operationId: saveReportSettings
       description: |
         Persists the user's last report filter state for multi-device consistency. The body is
-        stored as-is in last_report_settings (JSONB). SR-043b.
+        stored as-is in last_report_settings (JSONB). SR-F066.F01.
       requestBody:
         required: true
         content:
@@ -2148,7 +2148,7 @@ paths:
       tags: [account]
       summary: Get own node authorization assignments
       operationId: getOwnAuthorizations
-      description: Returns all node_authorizations rows for the authenticated user with full node paths. SR-046.
+      description: Returns all node_authorizations rows for the authenticated user with full node paths. SR-F043.F01.
       responses:
         '200':
           description: Authorization assignments
@@ -2169,7 +2169,7 @@ paths:
       description: |
         Initiates OAuth2 linking flow for an additional provider. In practice, the client
         redirects to /oauth2/authorization/{provider} with a linking flag. This endpoint
-        records the completed link after the OAuth2 callback. SR-044.
+        records the completed link after the OAuth2 callback. SR-F044.F01.
       requestBody:
         required: true
         content:
@@ -2194,7 +2194,7 @@ paths:
       tags: [account]
       summary: Unlink OAuth2 provider
       operationId: unlinkProvider
-      description: Blocked if only one provider remains linked. SR-045.
+      description: Blocked if only one provider remains linked. SR-F045.F01.
       parameters:
         - name: provider
           in: path
@@ -2219,7 +2219,7 @@ paths:
         Irreversible. Stops active tracking, revokes all MCP tokens, removes all node
         authorizations, and deletes personal data. Time entries are retained anonymously. Session
         is invalidated. Re-registration requires a new invitation and creates a new identity.
-        SR-047.
+        SR-F047.F01.
       responses:
         '204':
           description: Anonymised; session invalidated
@@ -2235,7 +2235,7 @@ paths:
       tags: [mcp]
       summary: List own MCP tokens
       operationId: listOwnMcpTokens
-      description: Returns all active (non-revoked) MCP tokens for the authenticated user. SR-065a.
+      description: Returns all active (non-revoked) MCP tokens for the authenticated user. SR-F054.F01.
       responses:
         '200':
           description: Active MCP tokens
@@ -2253,7 +2253,7 @@ paths:
       operationId: generateMcpToken
       description: |
         Generates a new MCP access token. The raw token value is returned exactly once in this
-        response and is never stored — only its SHA-256 hash is retained. SR-065.
+        response and is never stored — only its SHA-256 hash is retained. SR-F053.F01.
       requestBody:
         required: true
         content:
@@ -2291,7 +2291,7 @@ paths:
       tags: [mcp]
       summary: Revoke own MCP token
       operationId: revokeMcpToken
-      description: Soft-revokes the token. The token hash is retained for audit. SR-067.
+      description: Soft-revokes the token. The token hash is retained for audit. SR-F055.F01.
       parameters:
         - name: tokenId
           in: path
@@ -2312,7 +2312,7 @@ paths:
       tags: [mcp]
       summary: List all active MCP tokens (System Admin)
       operationId: listAllMcpTokens
-      description: Requires System Admin. Returns all non-revoked tokens across all users. SR-068.
+      description: Requires System Admin. Returns all non-revoked tokens across all users. SR-F056.F01.
       responses:
         '200':
           description: All active MCP tokens with owner information
@@ -2332,7 +2332,7 @@ paths:
       tags: [mcp]
       summary: Revoke any MCP token (System Admin)
       operationId: adminRevokeMcpToken
-      description: Requires System Admin. Soft-revokes any token; revocation is logged to the security event log. SR-069.
+      description: Requires System Admin. Soft-revokes any token; revocation is logged to the security event log. SR-F057.F01.
       parameters:
         - name: tokenId
           in: path
@@ -2359,7 +2359,7 @@ paths:
       tags: [security-events]
       summary: List security events
       operationId: listSecurityEvents
-      description: Requires System Admin. SR-050.
+      description: Requires System Admin. SR-F049.F02.
       parameters:
         - name: eventType
           in: query
@@ -2424,7 +2424,7 @@ paths:
         Application version, third-party licenses, SBOM download link, OpenAPI spec download
         link, and built-in GDPR data summary. No authentication required. If the requesting user
         is authenticated and has at least one effective node authorization, the company Privacy
-        Notice URL is also included (if configured). SR-048.
+        Notice URL is also included (if configured). SR-F048.F01.
       security: []
       responses:
         '200':
@@ -2444,7 +2444,7 @@ paths:
       summary: Server-Sent Events stream
       operationId: getEventStream
       description: |
-        Persistent SSE connection for live state synchronisation. SR-062.
+        Persistent SSE connection for live state synchronisation. SR-F068.F01.
 
         **Event types and recipients:**
 

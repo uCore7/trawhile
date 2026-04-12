@@ -24,6 +24,6 @@ public class SecurityEventService {
         ));
     }
 
-    // TODO: implement F7.2–F7.3 (view and filter security event log)
-    // TODO: implement 90-day retention purge (scheduled daily)
+    // TODO: implement SR-F049.F02 (list and filter security event log)
+    // TODO: implement SR-C007.F01 (90-day retention purge, scheduled daily)
 }

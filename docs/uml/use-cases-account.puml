@@ -4,20 +4,29 @@ title trawhile — Account (Epic 6)
 left to right direction
 
 actor "Visitor" as Visitor
-actor "New registrant\n(OIDC authenticated,\nnot yet in DB)" as Registrant
 actor "User" as User
+actor "Returning User\n(OIDC authenticated,\nalready in DB)" as ReturningUser
+actor "New Registrant\n(OIDC authenticated,\nnot yet in DB)" as Registrant
 
 rectangle "Account" {
-    usecase "Acknowledge GDPR notice\n(completes registration)\n(UR-060)" as UC_GdprNotice
-    usecase "View profile\n(UR-043)" as UC_ViewProfile
-    usecase "Link OIDC provider\n(UR-044)" as UC_LinkProvider
-    usecase "Unlink OIDC provider\n(UR-045)" as UC_UnlinkProvider
-    usecase "View own authorization\nassignments\n(UR-046)" as UC_OwnAuths
-    usecase "Anonymise own account\n(UR-047)" as UC_Anonymise
-    usecase "View About page\n(UR-048)" as UC_About
+    package "Authentication" {
+        usecase "Sign in with linked\nOIDC provider\n(UR-F067)" as UC_SignIn
+        usecase "Acknowledge GDPR notice\n(completes registration)\n(UR-F060)" as UC_GdprNotice
+    }
+    package "Profile & Access" {
+        usecase "View profile\n(UR-F043)" as UC_ViewProfile
+        usecase "Link OIDC provider\n(UR-F044)" as UC_LinkProvider
+        usecase "Unlink OIDC provider\n(UR-F045)" as UC_UnlinkProvider
+        usecase "View own authorization\nassignments\n(UR-F046)" as UC_OwnAuths
+        usecase "Anonymise own account\n(UR-F047)" as UC_Anonymise
+    }
+    package "Public" {
+        usecase "View About page\n(UR-F048)" as UC_About
+    }
 }
 
 Visitor --> UC_About
+ReturningUser --> UC_SignIn
 Registrant --> UC_GdprNotice
 User --> UC_ViewProfile
 User --> UC_LinkProvider

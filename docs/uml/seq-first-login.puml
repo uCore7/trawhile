@@ -30,13 +30,15 @@ Spring -> DB : SELECT FROM pending_invitations\nWHERE email = ?
 
 alt no valid invitation (not found or expired)
   Spring -> Browser : redirect /login?error=not_invited
+  note right of Spring : SR-C002.F01
 else valid invitation
 
   note right of Spring
     Store { pending_invitations.id, user_id, provider, subject, name }
-    in HTTP session. Discard email immediately (C-2).
+    in HTTP session. Discard email immediately (UR-C006).
     No DB writes at this point.
     (users row already exists — created at invite time)
+    SR-F060.F01
   end note
 
   Spring -> Browser : redirect → /gdpr-notice
@@ -53,14 +55,14 @@ else valid invitation
   Spring  -> DB      : INSERT INTO user_oauth_providers\n(provider, subject from session)
   Spring  -> DB      : DELETE FROM pending_invitations\nWHERE id = ? (from session)
   note right of DB
-    Bootstrap path only (SR-001):
+    Bootstrap path only (SR-F001.F01):
     also INSERT INTO users and
     INSERT INTO node_authorizations (admin on root)
   end note
   Spring  -> DB      : COMMIT
 
   Spring  -> Spring  : establish authenticated session
-  Spring  -> Browser : 200 OK { privacyNoticeUrl } + session cookie
+  Spring  -> Browser : 200 OK { privacyNoticeUrl } + session cookie\n(SR-F060.F02)
   Browser -> Browser : redirect → main application
 
 end

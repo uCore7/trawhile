@@ -21,5 +21,5 @@ public class RequestService {
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement F5.1–F5.3 (submit, view, close requests)
+    // TODO: implement SR-F039.F01 (submit), SR-F041.F01 (view), SR-F042.F01 (close)
 }

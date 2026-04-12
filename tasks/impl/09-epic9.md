@@ -20,7 +20,7 @@ Make the failing Epic 9 tests pass. Implement MCP token lifecycle and the MCP to
 ## Read first (in order)
 
 1. `docs/schema.sql` — `mcp_tokens`
-2. `docs/requirements-sr.md` — SR-065, SR-065a, SR-066, SR-067, SR-068, SR-069, SR-070
+2. `docs/requirements-sr.md` — SR-F053.F01, SR-F054.F01, SR-F053.F02, SR-F055.F01, SR-F056.F01, SR-F057.F01, SR-F069.F01
 3. `docs/openapi.yaml` — `/account/mcp-tokens`, `/admin/mcp-tokens`, `/mcp` paths
 4. The failing tests:
    - `src/test/java/com/trawhile/McpTokenIT.java`
@@ -42,8 +42,8 @@ Make the failing Epic 9 tests pass. Implement MCP token lifecycle and the MCP to
 ## Watch out for
 
 - **Raw token never stored**: store only `SHA-256(rawToken)` as hex; raw token returned once in response only
-- **SR-066 authenticate()**: compute hash, query by `token_hash`, check `revoked_at IS NULL` and `expires_at` — return 401 without distinguishing which check failed; update `last_used_at` on success
-- **SR-068 admin**: requires effective `admin` on root — `authorizationService.requireAdmin(userId, ROOT_NODE_ID)`
-- **SR-070 cross-user**: if `user_id ≠ token owner`, must have at least `view` on relevant nodes AND return aggregated daily totals only — reuse `ReportService.getMemberSummaries()` semantics
+- **SR-F053.F02 authenticate()**: compute hash, query by `token_hash`, check `revoked_at IS NULL` and `expires_at` — return 401 without distinguishing which check failed; update `last_used_at` on success
+- **SR-F056.F01 admin**: requires effective `admin` on root — `authorizationService.requireAdmin(userId, ROOT_NODE_ID)`
+- **SR-F069.F01 cross-user**: if `user_id ≠ token owner`, must have at least `view` on relevant nodes AND return aggregated daily totals only — reuse `ReportService.getMemberSummaries()` semantics
 - **Security events**: log `MCP_TOKEN_GENERATED`, `MCP_TOKEN_REVOKED`, `MCP_TOOL_INVOKED` (one per call)
 - **Bearer extraction**: `Authorization: Bearer <token>` header; 401 if absent or malformed

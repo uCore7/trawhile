@@ -6,7 +6,7 @@ left to right direction
 actor "System Admin" as SysAdmin
 
 rectangle "Security & Audit" {
-    usecase "View security event log\n(filtered by type, user, date)\n(UR-049)" as UC_SecurityLog
+    usecase "View security event log\n(filtered by type, user, date)\n(UR-F049)" as UC_SecurityLog
 }
 
 SysAdmin --> UC_SecurityLog

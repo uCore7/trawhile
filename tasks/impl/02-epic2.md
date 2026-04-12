@@ -19,7 +19,7 @@ Make the failing Epic 2 tests pass. Implement node CRUD, logo management, deacti
 ## Read first (in order)
 
 1. `docs/schema.sql` — `nodes`, `node_authorizations`; Q1–Q4 authorization CTEs
-2. `docs/requirements-sr.md` — SR-016–SR-025
+2. `docs/requirements-sr.md` — SR-F014.F01–SR-F023.F01
 3. `docs/openapi.yaml` — `/nodes` and `/nodes/{nodeId}/authorizations` paths
 4. `docs/architecture.md` — §1 Data access (recursive CTEs), §5 Authorization checks
 5. The failing tests:
@@ -30,9 +30,9 @@ Make the failing Epic 2 tests pass. Implement node CRUD, logo management, deacti
 
 | File | What to implement |
 |---|---|
-| `src/main/java/com/trawhile/service/NodeService.java` | All F2.1–F2.10: `getNode`, `createChild`, `updateNode`, `uploadLogo`, `getLogo`, `deleteLogo`, `reorderChildren`, `deactivateNode`, `reactivateNode`, `moveNode`, `grantAuthorization`, `revokeAuthorization`, `listAuthorizations` |
-| `src/main/java/com/trawhile/web/NodeController.java` | All endpoints: SR-016–SR-022 |
-| `src/main/java/com/trawhile/web/AuthorizationController.java` | SR-023, SR-024, SR-025 |
+| `src/main/java/com/trawhile/service/NodeService.java` | All node operations: `getNode`, `createChild`, `updateNode`, `uploadLogo`, `getLogo`, `deleteLogo`, `reorderChildren`, `deactivateNode`, `reactivateNode`, `moveNode`, `grantAuthorization`, `revokeAuthorization`, `listAuthorizations` |
+| `src/main/java/com/trawhile/web/NodeController.java` | All endpoints: SR-F014.F01–SR-F020.F01 |
+| `src/main/java/com/trawhile/web/AuthorizationController.java` | SR-F021.F01, SR-F022.F01, SR-F023.F01 |
 
 ## Acceptance criteria
 
@@ -41,10 +41,10 @@ Make the failing Epic 2 tests pass. Implement node CRUD, logo management, deacti
 ## Watch out for
 
 - **Authorization is recursive**: use Q3 via `AuthorizationService` — not a direct `node_authorizations` lookup
-- **SR-020**: active time entry on the node itself does NOT block deactivation
-- **SR-022 move**: three guards — admin on node, admin on destination, destination not in own subtree; check (c) via recursive CTE
-- **SR-023 upsert**: `INSERT ... ON CONFLICT (user_id, node_id) DO UPDATE SET authorization = EXCLUDED.authorization`
-- **SR-024 last-admin**: 409 with code `LAST_ADMIN` when deleting the last `admin` row on a node
+- **SR-F018.F01**: active time entry on the node itself does NOT block deactivation
+- **SR-F020.F01 move**: three guards — admin on node, admin on destination, destination not in own subtree; check (c) via recursive CTE
+- **SR-F021.F01 upsert**: `INSERT ... ON CONFLICT (user_id, node_id) DO UPDATE SET authorization = EXCLUDED.authorization`
+- **SR-F022.F01 last-admin**: 409 with code `LAST_ADMIN` when deleting the last `admin` row on a node
 - **Logo MIME**: validate `Content-Type` of the multipart part — not the file extension; allowed: `image/png`, `image/jpeg`, `image/svg+xml`, `image/webp`
 - **SSE**: dispatch `NODE_CHANGE` after create, update, reorder, deactivate, reactivate, move — to all users with at least `view` on the affected node
-- **SR-025 direct vs. inherited**: determined in the query, not post-processed in Java
+- **SR-F023.F01 direct vs. inherited**: determined in the query, not post-processed in Java

@@ -19,7 +19,7 @@ Make the failing cross-cutting tests pass. Complete OAuth2 auth flows, HTTP secu
 
 ## Read first (in order)
 
-1. `docs/requirements-sr.md` — SR-057, SR-057a, SR-058, SR-059, SR-060, SR-061, SR-062, SR-064, SR-064a, SR-064b, SR-085, SR-088, SR-089
+1. `docs/requirements-sr.md` — SR-F067.F01, SR-F067.F02, SR-F060.F02, SR-C002.F01, SR-C011.C01, SR-C012.C01, SR-C013.C01, SR-F068.F01, SR-F059.F01, SR-F059.F02, SR-F059.F03, SR-F050.F05, SR-F065.F01
 2. `docs/architecture.md` — §2 SSE, §7 Spring Security
 3. `src/main/java/com/trawhile/config/SecurityConfig.java`
 4. `src/main/java/com/trawhile/config/TrawhileConfig.java`
@@ -40,11 +40,11 @@ Make the failing cross-cutting tests pass. Complete OAuth2 auth flows, HTTP secu
 
 | File | What to verify / complete |
 |---|---|
-| `src/main/java/com/trawhile/config/SecurityConfig.java` | All 5 headers (SR-060); CSRF cookie (SR-061); permit-all for `/api/v1/auth/providers` and `/api/v1/about` |
-| `src/main/java/com/trawhile/config/RateLimitFilter.java` | 429 on breach; calls `SecurityEventService.log()` (SR-059) |
-| `src/main/java/com/trawhile/sse/SseDispatcher.java` | All event types (SR-062); sends `synchronized(emitter)` |
-| `src/main/java/com/trawhile/config/TrawhileConfig.java` | All `@AssertTrue` validators (SR-088/089) |
-| `src/main/java/com/trawhile/config/StartupValidator.java` | No-provider check (SR-089) |
+| `src/main/java/com/trawhile/config/SecurityConfig.java` | All 5 headers (SR-C012.C01); CSRF cookie (SR-C013.C01); permit-all for `/api/v1/auth/providers` and `/api/v1/about` |
+| `src/main/java/com/trawhile/config/RateLimitFilter.java` | 429 on breach; calls `SecurityEventService.log()` (SR-C011.C01) |
+| `src/main/java/com/trawhile/sse/SseDispatcher.java` | All event types (SR-F068.F01); sends `synchronized(emitter)` |
+| `src/main/java/com/trawhile/config/TrawhileConfig.java` | All `@AssertTrue` validators (SR-F050.F05/SR-F065.F01) |
+| `src/main/java/com/trawhile/config/StartupValidator.java` | No-provider check (SR-F065.F01) |
 
 ## Acceptance criteria
 
@@ -52,9 +52,9 @@ Make the failing cross-cutting tests pass. Complete OAuth2 auth flows, HTTP secu
 
 ## Watch out for
 
-- **SR-060 Referrer-Policy**: exact value must be `no-referrer`
-- **SR-061**: `GET`/`HEAD` do not require CSRF token; `POST`/`PUT`/`PATCH`/`DELETE` do
+- **SR-C012.C01 Referrer-Policy**: exact value must be `no-referrer`
+- **SR-C013.C01**: `GET`/`HEAD` do not require CSRF token; `POST`/`PUT`/`PATCH`/`DELETE` do
 - **SSE sends**: `synchronized(emitter)` prevents concurrent writes; dead emitters removed immediately
 - **Management port**: use `@LocalManagementPort` in tests — not `@LocalServerPort`
-- **`TE-064B-*`**: reads files from `Paths.get("monitoring/...")` — project root, not classpath
+- **`TE-F059.F03-*`**: reads files from `Paths.get("monitoring/...")` — project root, not classpath
 - **`TrawhileConfigTest`**: use `Validation.buildDefaultValidatorFactory().getValidator()` directly — no Spring context needed

@@ -40,8 +40,8 @@ com.trawhile
     RateLimitConfig.java       — bucket4j beans
     RateLimitFilter.java       — per-IP rate limiting filter; runs before security chain
     JdbcConfig.java            — Spring Data JDBC custom converters (AuthLevel, JSONB)
-    TrawhileConfig.java        — @ConfigurationProperties("trawhile"); validated on startup (SR-088)
-    StartupValidator.java      — ApplicationRunner; validates OAuth provider presence (SR-089)
+    TrawhileConfig.java        — @ConfigurationProperties("trawhile"); validated on startup (SR-F050.F05)
+    StartupValidator.java      — ApplicationRunner; validates OAuth provider presence (SR-F065.F01)
   domain/
     Node.java                  — record; maps to nodes table
     TimeEntry.java
@@ -82,7 +82,7 @@ com.trawhile
     ActivityPurgeJob.java      — @Scheduled; activity purge driver
     NodeDeletionJob.java       — @Scheduled; node deletion driver
     PurgeJobCoordinator.java   — resumes active jobs on startup; shared batch logic
-    InvitationExpiryJob.java   — @Scheduled; daily expiry of pending invitations (SR-009a)
+    InvitationExpiryJob.java   — @Scheduled; daily expiry of pending invitations (SR-C010.C01)
   sse/
     SseEmitterRegistry.java    — ConcurrentHashMap<UUID, CopyOnWriteArrayList<SseEmitter>>
     SseEvent.java              — event type enum + payload wrapper
@@ -166,7 +166,7 @@ public SseEmitter register(UUID userId) {
 }
 ```
 
-`SseDispatcher` is called by services after every state mutation. It determines which userIds should receive the event (per SR-062), then iterates the registry and sends. Sends are `synchronized (emitter)` to prevent concurrent writes to the same emitter from different threads. Dead emitters (`IOException` on send) are removed immediately and never retried — the client `EventSource` reconnects automatically.
+`SseDispatcher` is called by services after every state mutation. It determines which userIds should receive the event (per SR-F068.F01), then iterates the registry and sends. Sends are `synchronized (emitter)` to prevent concurrent writes to the same emitter from different threads. Dead emitters (`IOException` on send) are removed immediately and never retried — the client `EventSource` reconnects automatically.
 
 **No reactive dependencies added.** `spring-boot-starter-web` only.
 
@@ -225,13 +225,13 @@ else:
     → check user_oauth_providers for provider+subject
     → if found: create session (cascade guarantees user_profile exists), redirect to /
     → if not found: check pending_invitations by email
-        → if found: store session data, redirect to /gdpr-notice (SR-008)
+        → if found: store session data, redirect to /gdpr-notice (SR-F060.F01)
         → if not found: redirect /login?error=not_invited
 ```
 
 The session attribute `LINKING_PROVIDER` is set before redirecting to `/oauth2/authorization/{provider}` from the account page. Spring's OAuth2 filter picks it up on the callback.
 
-**Bootstrap detection**: `OAuth2UserService` checks for the SR-001 condition after creating the user row. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches, inserts `node_authorizations` for root within the same transaction.
+**Bootstrap detection**: `OAuth2UserService` checks for the SR-F001.F01 condition after creating the user row. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches, inserts `node_authorizations` for root within the same transaction.
 
 ### 5. Authorization checks — service layer
 
@@ -400,7 +400,7 @@ services:
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
     volumes:
-      - ./config/application.yml:/app/config/application.yml  # system config (SR-088)
+      - ./config/application.yml:/app/config/application.yml  # system config (SR-F050.F05)
     depends_on:
       - db
 

@@ -11,14 +11,14 @@ import java.security.SecureRandom;
 import java.util.HexFormat;
 
 /**
- * MCP access token management. SR-065–SR-068.
+ * MCP access token management. SR-F053.F01, SR-F054.F01, SR-F055.F01, SR-F056.F01, SR-F057.F01.
  *
  * Token generation:
  *   1. Generate 32 random bytes → hex string (64 chars) — the raw token, shown once.
  *   2. SHA-256 hash the raw token → store only the hash.
  *   3. Return raw token + McpToken record to caller.
  *
- * Token authentication (SR-069):
+ * Token authentication (SR-F053.F02):
  *   1. Hash the incoming Bearer token with SHA-256.
  *   2. Look up by token_hash.
  *   3. Check revokedAt IS NULL and expiresAt IS NULL OR expiresAt > NOW().

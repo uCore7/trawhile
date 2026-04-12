@@ -5,14 +5,18 @@ note as N
   Epic 8 is fully automated — no UI interaction required.
 
   Retention periods and node retention are configured via
-  the system config file (SR-088).
+  the system config file (SR-F050.F05).
 
-  Activity purge (F8.3) runs nightly at 23:59 (company
-  timezone), deleting whatever crossed the rolling retention
-  cutoff as of that night. Node deletion (F8.4) runs
-  immediately after each nightly activity purge. Both jobs
-  are idempotent and resume on application restart using
-  stored cutoff_date.
+  Activity purge (SR-F050.F01/F02) runs nightly at 23:59
+  (company timezone), deleting whatever crossed the rolling
+  retention cutoff as of that night. Node deletion
+  (SR-F050.F03/F04) runs immediately after each nightly
+  activity purge. Both jobs are idempotent and resume on
+  application restart using stored cutoff_date.
+
+  Invitation auto-expiry (SR-C010.C01) runs daily,
+  transitioning users with expired pending_invitations
+  to the Ready for Scrubbing state (SR-F047.F02).
 
   See state-purge-lifecycle.puml for entity lifecycle states
   and cross-entity deletion dependencies.

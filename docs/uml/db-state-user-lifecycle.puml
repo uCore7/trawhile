@@ -39,13 +39,13 @@ note bottom of PhPending
   before user_profile is written.
   user_profile presence = GDPR accepted.
   pending_invitations row deleted on
-  GDPR acknowledgement (SR-057a).
+  GDPR acknowledgement (SR-F060.F02).
 end note
 
 note bottom of PhAnonStub
   Stub deleted automatically after
   activity purge removes last time_entries
-  (F8.3 orphan cleanup).
+  (SR-F050.F02 orphan cleanup).
 end note
 
 @enduml

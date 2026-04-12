@@ -25,6 +25,6 @@ public class TimeEntryService {
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement F3.10–F3.13 (create, edit, delete, duplicate)
+    // TODO: implement SR-F031.F01 (create retroactive), SR-F032.F01 (edit), SR-F033.F01 (delete), SR-F034.F01 (duplicate)
     // Freeze check: startedAt < Instant.now().minus(config.getFreezeOffsetYears() * 365, ChronoUnit.DAYS)
 }

@@ -11,10 +11,10 @@ state Starting {
 }
 
 state ValidatingConfig {
-  [*] --> CheckingProperties : TrawhileConfig @Validated\n(SR-088, SR-089)
+  [*] --> CheckingProperties : TrawhileConfig @Validated\n(SR-F050.F05, SR-F065.F01)
   CheckingProperties --> CheckingProviders : properties valid
-  CheckingProviders --> CheckingBootstrap : ≥1 OIDC provider configured\n(SR-089, A-2)
-  CheckingBootstrap --> ValidationOk : bootstrap admin check\n(SR-001)
+  CheckingProviders --> CheckingBootstrap : ≥1 OIDC provider configured\n(SR-F065.F01, UR-C002)
+  CheckingBootstrap --> ValidationOk : bootstrap admin check\n(SR-F001.F01)
 }
 
 ValidatingConfig --> Failed : any constraint violated\n(descriptive error message;\nprocess exits)
@@ -27,8 +27,8 @@ state Resuming {
   CheckingPurgeJobs --> ResumingActivity : activity job status = 'active'
   CheckingPurgeJobs --> ResumingNode : node job status = 'active'
   CheckingPurgeJobs --> ResumeComplete : both jobs idle
-  ResumingActivity --> ResumeComplete : activity purge resumed\nusing stored cutoff_date (SR-053)
-  ResumingNode --> ResumeComplete : node deletion resumed\nusing stored cutoff_date (SR-055)
+  ResumingActivity --> ResumeComplete : activity purge resumed\nusing stored cutoff_date (SR-F050.F02)
+  ResumingNode --> ResumeComplete : node deletion resumed\nusing stored cutoff_date (SR-F050.F04)
 }
 
 Resuming --> Running : ResumeComplete
@@ -52,10 +52,10 @@ end note
 
 note right of Running
   Nightly at 23:59 (company timezone):
-  activity purge (SR-052) →
-  node deletion (SR-054)
-  Security event purge: daily (SR-051)
-  Invitation expiry: daily (SR-009a)
+  activity purge (SR-F050.F01) →
+  node deletion (SR-F050.F03)
+  Security event purge: daily (SR-C007.F01)
+  Invitation expiry: daily (SR-C010.C01)
 end note
 
 @enduml

@@ -15,5 +15,5 @@ public class SecurityEventController {
         this.securityEventService = securityEventService;
     }
 
-    // TODO: implement F7.2–F7.3
+    // TODO: implement SR-F049.F02 (list and filter security event log)
 }

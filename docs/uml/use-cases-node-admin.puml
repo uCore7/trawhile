@@ -7,24 +7,24 @@ actor "Node Admin" as NodeAdmin
 
 rectangle "Node Administration" {
     package "Node Tree Management" {
-        usecase "View node details\nand children\n(UR-014)" as UC_ViewNode
-        usecase "Create child node\n(UR-015)" as UC_CreateNode
-        usecase "Edit node\n(name, description,\ncolour, icon, logo)\n(UR-016)" as UC_EditNode
-        usecase "Reorder child nodes\n(UR-017)" as UC_ReorderNodes
-        usecase "Deactivate node\n(UR-018)" as UC_Deactivate
-        usecase "Reactivate node\n(UR-019)" as UC_Reactivate
-        usecase "Move node\n(UR-020)" as UC_MoveNode
+        usecase "View node details\nand children\n(UR-F014)" as UC_ViewNode
+        usecase "Create child node\n(UR-F015)" as UC_CreateNode
+        usecase "Edit node\n(name, description,\ncolour, icon, logo)\n(UR-F016)" as UC_EditNode
+        usecase "Reorder child nodes\n(UR-F017)" as UC_ReorderNodes
+        usecase "Deactivate node\n(UR-F018)" as UC_Deactivate
+        usecase "Reactivate node\n(UR-F019)" as UC_Reactivate
+        usecase "Move node\n(UR-F020)" as UC_MoveNode
     }
     package "Node Authorizations" {
-        usecase "Grant authorization\non node\n(UR-021)" as UC_GrantAuth
-        usecase "Revoke authorization\nfrom node\n(UR-022)" as UC_RevokeAuth
-        usecase "View node authorization\nassignments\n(UR-023)" as UC_ViewNodeAuths
+        usecase "Grant authorization\non node\n(UR-F021)" as UC_GrantAuth
+        usecase "Revoke authorization\nfrom node\n(UR-F022)" as UC_RevokeAuth
+        usecase "View node authorization\nassignments\n(UR-F023)" as UC_ViewNodeAuths
     }
 }
 
 note bottom of UC_GrantAuth
   Also accessible from the user list
-  (UR-009): node picker replaces
+  (UR-F009): node picker replaces
   user picker as the selection point.
   Same applies to UC_RevokeAuth.
 end note

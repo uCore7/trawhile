@@ -15,5 +15,5 @@ public class UserController {
         this.userService = userService;
     }
 
-    // TODO: implement F1.4, F1.8–F1.9
+    // TODO: implement SR-F004.F01 (list users), SR-F008.F01 (remove user), SR-F011.F01 (resend invite)
 }

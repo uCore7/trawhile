@@ -9,9 +9,9 @@ actor "Node Admin" as NodeAdmin
 User <|-- NodeAdmin
 
 rectangle "Requests" {
-    usecase "Submit request on a node\n(UR-039)" as UC_Submit
-    usecase "View all requests on\nvisible nodes\n(UR-041)" as UC_ViewRequests
-    usecase "Close a request\n(UR-042)" as UC_Close
+    usecase "Submit request on a node\n(UR-F039)" as UC_Submit
+    usecase "View all requests on\nvisible nodes\n(UR-F041)" as UC_ViewRequests
+    usecase "Close a request\n(UR-F042)" as UC_Close
 }
 
 User --> UC_Submit

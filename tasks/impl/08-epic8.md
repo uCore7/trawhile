@@ -19,7 +19,7 @@ Make the failing Epic 8 tests pass. Implement the nightly activity purge job and
 ## Read first (in order)
 
 1. `docs/schema.sql` — `purge_jobs`, `time_entries`, `requests`, `nodes`
-2. `docs/requirements-sr.md` — SR-052, SR-053, SR-054, SR-055
+2. `docs/requirements-sr.md` — SR-F050.F01, SR-F050.F02, SR-F050.F03, SR-F050.F04
 3. `docs/architecture.md` — §3 Purge jobs (chunked transactions, startup resume)
 4. `src/main/java/com/trawhile/lifecycle/ActivityPurgeJob.java`
 5. `src/main/java/com/trawhile/lifecycle/NodeDeletionJob.java`
@@ -32,8 +32,8 @@ Make the failing Epic 8 tests pass. Implement the nightly activity purge job and
 
 | File | What to implement |
 |---|---|
-| `src/main/java/com/trawhile/lifecycle/ActivityPurgeJob.java` | `runNightly()` SR-052; `resume()` SR-053 — chunked delete with `REQUIRES_NEW` per batch |
-| `src/main/java/com/trawhile/lifecycle/NodeDeletionJob.java` | `runAfterActivityPurge()` SR-054; `resume()` SR-055 — bottom-up iterative delete |
+| `src/main/java/com/trawhile/lifecycle/ActivityPurgeJob.java` | `runNightly()` SR-F050.F01; `resume()` SR-F050.F02 — chunked delete with `REQUIRES_NEW` per batch |
+| `src/main/java/com/trawhile/lifecycle/NodeDeletionJob.java` | `runAfterActivityPurge()` SR-F050.F03; `resume()` SR-F050.F04 — bottom-up iterative delete |
 | `src/main/java/com/trawhile/lifecycle/PurgeJobCoordinator.java` | `run()` — resume active jobs on startup |
 
 ## Acceptance criteria
@@ -44,7 +44,7 @@ Make the failing Epic 8 tests pass. Implement the nightly activity purge job and
 
 - **Chunked transaction**: outer loop is NOT `@Transactional`; each batch calls a `REQUIRES_NEW` method
 - **Cutoff stored, not recomputed**: read `cutoff_date` from `purge_jobs` row on resume — never recompute
-- **SR-055 bottom-up**: only delete current leaf nodes; loop until none qualify; do NOT try to process the whole tree in one query
-- **SR-055 `NOT EXISTS` checks**: on the node itself only — subtree is already empty by the time it becomes a leaf
+- **SR-F050.F04 bottom-up**: only delete current leaf nodes; loop until none qualify; do NOT try to process the whole tree in one query
+- **SR-F050.F04 `NOT EXISTS` checks**: on the node itself only — subtree is already empty by the time it becomes a leaf
 - **Prometheus metrics**: update `trawhile_purge_job_last_completed_seconds`, increment `trawhile_purge_job_deleted_total` and (on exception) `trawhile_purge_job_failures_total`
 - **Security event**: log one `security_events` row per completed job run via `SecurityEventService.log()`

@@ -60,7 +60,7 @@ Each entry records a non-obvious choice, the alternatives considered, and why th
 
 **Apple note:** Apple Sign In was considered and deferred — non-standard OIDC (POST callback instead of GET, name only on first login), developer account cost, and complexity outweigh the benefit at this stage.
 
-**Schema implication:** The `users` table stores `provider + subject_id`, not email. Email is stored only in `pending_invitations` and deleted on first login match (GDPR C-2). This was decided before writing the first migration to avoid a painful retrofit.
+**Schema implication:** The `users` table stores `provider + subject_id`, not email. Email is stored only in `pending_invitations` and deleted on first login match (UR-C006). This was decided before writing the first migration to avoid a painful retrofit.
 
 ---
 
@@ -119,9 +119,9 @@ SR format: "The system shall [behaviour/property]. [Rationale: reason]"
 GDPR compliance is a hard constraint on every design decision, not a feature to be added later. Works council and DPO are named stakeholders in `docs/requirements-ur.md`. Any new data field must be evaluated against the necessity principle before it is added to the schema.
 
 Key implications already baked into the design:
-- No email stored for registered users (`users` table stores provider + subject only; C-2)
+- No email stored for registered users (`users` table stores provider + subject only; UR-C006)
 - Time tracking is always user-initiated, never system-initiated (no covert monitoring)
-- Anonymization is self-service and irreversible (SR-047)
-- Security event log capped at exactly 90 days (SR-051)
-- Activity data retention is configurable with a minimum of 2 years (SR-052–053)
+- Anonymization is self-service and irreversible (SR-F047.F01)
+- Security event log capped at exactly 90 days (SR-C007.F01)
+- Activity data retention is configurable with a minimum of 2 years (SR-F050.F01/SR-F050.F02)
 - Every new data field requires a GDPR necessity justification before it enters the schema

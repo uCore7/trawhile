@@ -19,7 +19,7 @@ Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent
 ## Read first (in order)
 
 1. `docs/schema.sql` — `time_entries`, `quick_access` tables
-2. `docs/requirements-sr.md` — SR-026–SR-035
+2. `docs/requirements-sr.md` — SR-F024.F01–SR-F034.F01; SR-F027.F01, SR-F030.F01
 3. `docs/openapi.yaml` — `/tracking`, `/time-entries`, `/quick-access` paths
 4. `docs/architecture.md` — §Transaction boundaries, §SSE dispatch
 5. `src/main/java/com/trawhile/config/TrawhileConfig.java` — `freezeOffsetYears()`
@@ -32,11 +32,11 @@ Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent
 
 | File | What to implement |
 |---|---|
-| `src/main/java/com/trawhile/service/TrackingService.java` | `getStatus()`, `getRecentEntries()`, `startTracking()`, `switchTracking()`, `stopTracking()`, `addQuickAccess()`, `removeQuickAccess()`, `reorderQuickAccess()`, `listQuickAccess()` |
+| `src/main/java/com/trawhile/service/TrackingService.java` | `getStatus()`, `getRecentEntries()`, `startTracking()`, `switchTracking()`, `stopTracking()` |
 | `src/main/java/com/trawhile/service/TimeEntryService.java` | `createRetroactive()`, `editEntry()`, `deleteEntry()`, `duplicateEntry()` |
-| `src/main/java/com/trawhile/web/TrackingController.java` | SR-026–SR-030 endpoints |
-| `src/main/java/com/trawhile/web/QuickAccessController.java` | SR-031 endpoints |
-| `src/main/java/com/trawhile/web/TimeEntryController.java` | SR-032–SR-035 endpoints |
+| `src/main/java/com/trawhile/web/TrackingController.java` | SR-F024.F01–SR-F029.F01 endpoints |
+| `src/main/java/com/trawhile/web/QuickAccessController.java` | SR-F027.F01 (list), SR-F030.F01 (add/remove/reorder) endpoints |
+| `src/main/java/com/trawhile/web/TimeEntryController.java` | SR-F031.F01–SR-F034.F01 endpoints |
 
 ## Acceptance criteria
 
@@ -44,10 +44,10 @@ Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent
 
 ## Watch out for
 
-- **SR-028 leaf check**: `is_active = true` AND no children with `is_active = true` — one query, not two
-- **SR-029 atomicity**: `switchTracking` is a single service method with one `@Transactional` boundary — not two separate calls from the controller
-- **SR-031 max 9**: 10th add returns 409 with code `QUICK_ACCESS_FULL`
-- **SR-031 non-trackable flag**: computed at read time — node is non-trackable when `is_active = false` OR has active children
-- **SR-033/034 freeze cutoff**: applies to `started_at`, not `ended_at`; sourced from `TrawhileConfig.freezeOffsetYears()`, not hardcoded
-- **SR-027 overlap**: both entries in an overlapping pair are flagged; overlap = `a.started_at < b.ended_at AND b.started_at < a.ended_at`
+- **SR-F026.F01 leaf check**: `is_active = true` AND no children with `is_active = true` — one query, not two
+- **SR-F028.F01 atomicity**: `switchTracking` is a single service method with one `@Transactional` boundary — not two separate calls from the controller
+- **SR-F030.F01 max 9**: 10th add returns 409 with code `QUICK_ACCESS_FULL`
+- **SR-F027.F01 non-trackable flag**: computed at read time — node is non-trackable when `is_active = false` OR has active children
+- **SR-F032.F01/SR-F033.F01 freeze cutoff**: applies to `started_at`, not `ended_at`; sourced from `TrawhileConfig.freezeOffsetYears()`, not hardcoded
+- **SR-F025.F01 overlap**: both entries in an overlapping pair are flagged; overlap = `a.started_at < b.ended_at AND b.started_at < a.ended_at`
 - **SSE**: dispatch `TRACKING` to all sessions of the user after every start/switch/stop

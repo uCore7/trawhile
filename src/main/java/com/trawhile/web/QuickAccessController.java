@@ -15,5 +15,5 @@ public class QuickAccessController {
         this.trackingService = trackingService;
     }
 
-    // TODO: implement F3.7–F3.9
+    // TODO: implement SR-F027.F01 (list quick access), SR-F030.F01 (add, remove, reorder)
 }

@@ -12,16 +12,16 @@ import java.util.UUID;
 
 public interface McpTokenRepository extends ListCrudRepository<McpToken, UUID> {
 
-    /** All active (non-revoked) tokens for a user. SR-065. */
+    /** All active (non-revoked) tokens for a user. SR-F054.F01. */
     List<McpToken> findByUserIdAndRevokedAtIsNull(UUID userId);
 
-    /** All active tokens across all users. SR-067. */
+    /** All active tokens across all users. SR-F056.F01. */
     List<McpToken> findAllByRevokedAtIsNull();
 
-    /** Lookup by token hash for authentication. SR-069. */
+    /** Lookup by token hash for authentication. SR-F053.F02. */
     Optional<McpToken> findByTokenHash(String tokenHash);
 
-    /** Update last_used_at after a successful MCP request. SR-069. */
+    /** Update last_used_at after a successful MCP request. SR-F053.F02. */
     @Modifying
     @Query("UPDATE mcp_tokens SET last_used_at = :lastUsedAt WHERE id = :id")
     void updateLastUsedAt(UUID id, OffsetDateTime lastUsedAt);
@@ -31,7 +31,7 @@ public interface McpTokenRepository extends ListCrudRepository<McpToken, UUID> {
     @Query("UPDATE mcp_tokens SET revoked_at = NOW() WHERE id = :id AND revoked_at IS NULL")
     void revokeById(UUID id);
 
-    /** Revoke all tokens for a user (used during anonymization). SR-047. */
+    /** Revoke all tokens for a user (used during anonymization). SR-F047.F02. */
     @Modifying
     @Query("UPDATE mcp_tokens SET revoked_at = NOW() WHERE user_id = :userId AND revoked_at IS NULL")
     void revokeAllByUserId(UUID userId);

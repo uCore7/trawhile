@@ -15,5 +15,5 @@ public class InvitationController {
         this.userService = userService;
     }
 
-    // TODO: implement F1.5–F1.7
+    // TODO: implement SR-F005.F01 (list pending invitations), SR-F006.F01 (invite user), SR-F007.F01 (withdraw invitation)
 }
