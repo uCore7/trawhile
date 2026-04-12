@@ -1,0 +1,21 @@
+@startuml use-cases-data-lifecycle
+title trawhile — Data Lifecycle (Epic 8)
+
+note as N
+  Epic 8 is fully automated — no UI interaction required.
+
+  Retention periods and node retention are configured via
+  the system config file (SR-088).
+
+  Activity purge (F8.3) runs nightly at 23:59 (company
+  timezone), deleting whatever crossed the rolling retention
+  cutoff as of that night. Node deletion (F8.4) runs
+  immediately after each nightly activity purge. Both jobs
+  are idempotent and resume on application restart using
+  stored cutoff_date.
+
+  See state-purge-lifecycle.puml for entity lifecycle states
+  and cross-entity deletion dependencies.
+end note
+
+@enduml

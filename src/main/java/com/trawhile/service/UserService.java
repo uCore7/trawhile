@@ -30,5 +30,5 @@ public class UserService {
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement F1.4–F1.9 (view users, invite, cancel invite, remove user)
+    // TODO: implement F1.4–F1.9 (view users, invite, withdraw invite, remove user)
 }

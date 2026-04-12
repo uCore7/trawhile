@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
  * /api/v1/auth — authentication lifecycle endpoints.
  *
  * POST /auth/logout is handled directly by Spring Security (configured in SecurityConfig).
- * POST /auth/gdpr-notice acknowledges the GDPR notice on first login (SR-057a).
+ * POST /auth/gdpr-notice — reads pending registration data from HTTP session and executes the
+ * account creation transaction (SR-057a). Returns privacyNoticeUrl if configured.
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -24,7 +25,8 @@ public class AuthController {
 
     @PostMapping("/gdpr-notice")
     public ResponseEntity<Void> acknowledgeGdprNotice() {
-        // TODO: get authenticated user from SecurityContext; call accountService.acknowledgeGdprNotice(userId)
+        // TODO: read pending registration data from HttpSession; call accountService.completeRegistration(sessionData)
+        // Returns 400 if no pending registration data in session (SR-057a)
         return ResponseEntity.noContent().build();
     }
 }

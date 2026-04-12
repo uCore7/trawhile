@@ -1,0 +1,40 @@
+@startuml use-cases-tracking
+title trawhile — Time Tracking (Epic 3)
+
+left to right direction
+
+actor "User" as User
+
+rectangle "Time Tracking" {
+    package "Tracking Control" {
+        usecase "View current tracking status\n(UR-024)" as UC_TrackStatus
+        usecase "Start tracking via node picker\n(UR-026)" as UC_StartPicker
+        usecase "Start tracking via quick-access list\n(UR-027)" as UC_StartQuick
+        usecase "Switch node (atomic)\n(UR-028)" as UC_Switch
+        usecase "Stop tracking\n(UR-029)" as UC_Stop
+    }
+    package "Time Entry Management" {
+        usecase "View entry history\n(overlaps & gaps flagged)\n(UR-025)" as UC_History
+        usecase "Create retroactive entry\n(UR-031)" as UC_CreateEntry
+        usecase "Edit time entry\n(UR-032)" as UC_EditEntry
+        usecase "Delete time entry\n(UR-033)" as UC_DeleteEntry
+        usecase "Duplicate time entry\n(UR-034)" as UC_DuplicateEntry
+    }
+    package "Quick-Access List" {
+        usecase "Add / remove / reorder\nnodes in quick-access list\n(UR-030)" as UC_QuickAccess
+    }
+}
+
+User --> UC_TrackStatus
+User --> UC_StartPicker
+User --> UC_StartQuick
+User --> UC_Switch
+User --> UC_Stop
+User --> UC_History
+User --> UC_CreateEntry
+User --> UC_EditEntry
+User --> UC_DeleteEntry
+User --> UC_DuplicateEntry
+User --> UC_QuickAccess
+
+@enduml

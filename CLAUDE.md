@@ -2,16 +2,15 @@
 
 Before starting any work, read the following files in order:
 
-1. `docs/schema.sql` — PostgreSQL schema (13 tables), authorization queries
+1. `docs/schema.sql` — PostgreSQL schema, authorization queries
 2. `docs/epics.md` — feature list, role model, key invariants (Epics 1–9)
-3. `docs/requirements-sr.md` — 89 system requirements (SR-001–SR-083, SR-009a, SR-043a–b, SR-057a)
-4. `docs/requirements-ur.md` — 62 user requirements (UR-001–UR-062)
-5. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
-6. `docs/openapi.yaml` — REST API contract (46 endpoints)
+3. `docs/requirements-ur.md` — user requirements; stakeholders, system boundary, context boundary
+4. `docs/requirements-sr.md` — system requirements
+5. `docs/glossary.md` — canonical definitions of all domain terms
+6. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
+7. `docs/openapi.yaml` — REST API contract
 
-These are the authoritative source of truth. Code, tests, and migrations must be consistent
-with them. If implementation forces a change to a requirement, update the relevant doc file
-in the same commit.
+These are the authoritative source of truth. Code, tests, and migrations must be consistent with them. If implementation forces a change to a requirement, update the relevant doc file in the same commit.
 
 ## Stack
 
@@ -26,15 +25,11 @@ in the same commit.
 
 - One instance = one company. No multi-tenancy.
 - No sessions table. Sessions managed by Spring HttpSession (implementation detail).
-- No email stored for registered users (C-2). Email only in `pending_memberships`, deleted on
-  first login match.
-- Authorization is recursive: a grant on node N is effective on N and all descendants.
-  Use recursive CTEs (Q1–Q4 in schema.sql) — do not flatten the tree.
-- Freeze date: entries with `started_at < freeze_date` are immutable. No admin override.
-- Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub and
-  all `time_entries`. Irreversible.
-- Purge jobs are idempotent. On startup, any `purge_jobs` row with `status = 'active'` is
-  resumed using stored `cutoff_date`.
+- No email stored for registered users (C-2). Email only in `pending_memberships`, deleted on first login match.
+- Authorization is recursive: a grant on node N is effective on N and all descendants. Use recursive CTEs (Q1–Q4 in schema.sql) — do not flatten the tree.
+- Freeze cutoff: entries with `started_at < NOW() - freeze_offset_years * INTERVAL '1 year'` are immutable. The offset is read from `TrawhileConfig.freezeOffsetYears`. No admin override.
+- Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub and all `time_entries`. Irreversible.
+- Purge jobs are idempotent. On startup, any `purge_jobs` row with `status = 'active'` is resumed using stored `cutoff_date`.
 - SSE is a general UX principle — all visible state is live across all sessions of a user.
 
 ## Security requirements (non-negotiable)

@@ -108,8 +108,8 @@ public class AuthorizationQueries {
             UUID.class);
     }
 
-    /** Returns true if any root admin exists (used for bootstrap detection). */
-    public boolean rootAdminExists() {
+    /** Returns true if any System Admin exists (used for bootstrap detection). */
+    public boolean systemAdminExists() {
         String sql = """
             SELECT EXISTS (
               SELECT 1 FROM node_authorizations na

@@ -1,0 +1,35 @@
+@startuml state-user-lifecycle
+title trawhile — User Lifecycle
+
+[*] --> Pending : System Admin\ncreates invitation record;\nusers row created\n(SR-007)
+
+Pending --> Pending : expiry extended\n(SR-007a)
+
+Pending --> Active : OIDC login matches\npending email;\nGDPR notice acknowledged;\nuser_profile created\n(SR-008, SR-057a)
+
+state Active {
+    Active : tracks time, views reports,\nmanages account, uses MCP
+}
+
+Pending --> ReadyForScrubbing : invitation expires\nor is cancelled\n(SR-009, SR-009a)
+
+Active --> ReadyForScrubbing : user self-anonymises\n(SR-047) or System Admin\nremoves user (SR-010)
+
+state "Ready for Scrubbing" as ReadyForScrubbing {
+    ReadyForScrubbing : entry / stop active tracking session
+    ReadyForScrubbing : entry / delete node_authorizations
+    ReadyForScrubbing : entry / delete pending_invitations (if exists)
+    ReadyForScrubbing : entry / delete user_profile (if exists;\n  cascade: user_oauth_providers, quick_access)
+    ReadyForScrubbing : entry / revoke active mcp_tokens
+    ReadyForScrubbing : [users row + time_entries (0..n) remain]
+}
+
+note right of ReadyForScrubbing
+  Exits as soon as time_entries = 0.
+  Immediate for pending users (no entries possible).
+  May wait for F8.3 purge for anonymised users.
+end note
+
+ReadyForScrubbing --> [*] : users row deleted
+
+@enduml

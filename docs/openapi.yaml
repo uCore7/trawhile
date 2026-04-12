@@ -9,7 +9,7 @@ info:
 
     **Authentication**: Spring Security session cookie (`JSESSIONID`, HttpOnly, SameSite=Strict).
     All endpoints require an authenticated session unless `security: []` is noted.
-    OAuth2 login flows (GitHub, Google, Apple) are handled by Spring Security at
+    OIDC login flows (Google, Apple, Microsoft Entra ID, Keycloak) are handled by Spring Security at
     `/oauth2/authorization/{provider}` and `/login/oauth2/code/{provider}` — not documented here.
 
     **Authorization**: Recursive. A grant on node N is effective on N and all descendants.
@@ -29,8 +29,6 @@ security:
 tags:
   - name: auth
   - name: settings
-  - name: root-admins
-    description: System Admin only — manage Node Admins of root
   - name: users
   - name: invitations
   - name: nodes
@@ -45,7 +43,6 @@ tags:
     description: MCP access token management
   - name: security-events
     description: System Admin only
-  - name: lifecycle
   - name: about
   - name: events
     description: SSE live sync
@@ -86,7 +83,7 @@ components:
 
     NodeSummary:
       type: object
-      required: [id, name, isActive, sortOrder, hasActiveChildren, scheduledForDeletion]
+      required: [id, name, isActive, sortOrder, hasActiveChildren]
       properties:
         id:
           type: string
@@ -106,9 +103,6 @@ components:
             - $ref: '#/components/schemas/AuthLevel'
             - type: 'null'
           description: Null if user has no grant on this node or any ancestor
-        scheduledForDeletion:
-          type: boolean
-          description: True during 6-week pre-notification window if node is eligible for deletion
         color:
           type: [string, 'null']
           description: CSS hex color e.g. '#4A90D9'
@@ -121,7 +115,7 @@ components:
 
     Node:
       type: object
-      required: [id, name, isActive, sortOrder, createdAt, scheduledForDeletion, ancestorPath, children]
+      required: [id, name, isActive, sortOrder, createdAt, ancestorPath, children]
       properties:
         id:
           type: string
@@ -147,8 +141,6 @@ components:
           oneOf:
             - $ref: '#/components/schemas/AuthLevel'
             - type: 'null'
-        scheduledForDeletion:
-          type: boolean
         color:
           type: [string, 'null']
           description: CSS hex color e.g. '#4A90D9'
@@ -193,28 +185,30 @@ components:
 
     UserSummary:
       type: object
-      required: [id, isActive, isSystemAdmin, anonymised]
+      required: [id, status]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: [string, 'null']
-          description: Null if user is anonymised
-        isActive:
-          type: boolean
-        isSystemAdmin:
-          type: boolean
-        anonymised:
-          type: boolean
+          description: Profile name if active; invitation email if pending; fixed placeholder if anonymised
+        status:
+          type: string
+          enum: [pending, active, anonymised]
 
-    PendingMembership:
+    PendingInvitation:
       type: object
-      required: [id, email, invitedBy, invitedAt, expiresAt]
+      required: [id, userId, email, invitedBy, invitedAt, expiresAt]
       properties:
         id:
           type: string
           format: uuid
+          description: Pending invitation record ID
+        userId:
+          type: string
+          format: uuid
+          description: The invitee's user record ID; use this to grant node authorizations before first login
         email:
           type: string
           format: email
@@ -228,65 +222,40 @@ components:
           format: date-time
           description: Invitation automatically expires at this time (90 days after creation)
 
-    CompanySettings:
+    SystemSettings:
       type: object
-      required: [id, name, timezone, retentionYears, nodeRetentionExtraYears, purgeSchedule]
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        timezone:
-          type: string
-          description: IANA timezone identifier
-          example: Europe/Berlin
-        freezeDate:
-          type: [string, 'null']
-          format: date
-          description: Time entries with startedAt before this date are immutable
-        retentionYears:
-          type: integer
-          minimum: 2
-          default: 7
-        nodeRetentionExtraYears:
-          type: integer
-          minimum: 0
-          default: 1
-        purgeSchedule:
-          type: string
-          enum: [annual, semi_annual, quarterly]
-          default: annual
-        privacyNoticeUrl:
-          type: [string, 'null']
-          description: HTTPS URL to company Privacy Notice; shown to authenticated users with at least one effective node authorization
-
-    UpdateSettingsRequest:
-      type: object
+      required: [name, timezone, freezeOffsetYears, effectiveFreezeCutoff, retentionYears, nodeRetentionExtraYears]
       properties:
         name:
           type: string
+          description: Instance name displayed in the UI
         timezone:
           type: string
-        freezeDate:
-          type: [string, 'null']
-          format: date
+          description: IANA timezone identifier; reference for date boundaries in reports and purge cutoff evaluation
+          example: Europe/Zurich
+        freezeOffsetYears:
+          type: integer
+          minimum: 0
+          description: Entries older than this many years are immutable (cannot be edited or deleted)
+        effectiveFreezeCutoff:
+          type: string
+          format: date-time
+          description: Computed as NOW() minus freezeOffsetYears; returned for display convenience
         retentionYears:
           type: integer
           minimum: 2
+          description: Activity entries and requests older than this are permanently deleted on the next purge
         nodeRetentionExtraYears:
           type: integer
           minimum: 0
-        purgeSchedule:
-          type: string
-          enum: [annual, semi_annual, quarterly]
+          description: Deactivated nodes are kept for this many additional years beyond retentionYears before deletion
         privacyNoticeUrl:
           type: [string, 'null']
-          description: Must be an HTTPS URL or null
+          description: HTTPS URL to the company Privacy Notice; shown to authenticated users with at least one effective node authorization
 
     TimeEntry:
       type: object
-      required: [id, userId, nodeId, nodePath, startedAt, timezone, createdAt, overlapping, hasGapBefore, scheduledForPurge]
+      required: [id, userId, nodeId, nodePath, startedAt, timezone, createdAt, overlapping, hasGapBefore]
       properties:
         id:
           type: string
@@ -322,13 +291,6 @@ components:
         hasGapBefore:
           type: boolean
           description: True if there is untracked time between the previous entry's endedAt and this entry's startedAt
-        scheduledForPurge:
-          type: boolean
-          description: True during pre-notification window if startedAt is before upcoming activity cutoff
-        activityCutoffDate:
-          type: [string, 'null']
-          format: date
-          description: The upcoming activity cutoff date if the pre-notification window is active; null otherwise
 
     TrackingStatus:
       type: object
@@ -397,7 +359,7 @@ components:
 
     ReportDetailEntry:
       type: object
-      required: [id, userId, userName, nodeId, nodePath, startedAt, timezone, overlapping, hasGapBefore, scheduledForPurge]
+      required: [id, userId, userName, nodeId, nodePath, startedAt, timezone, overlapping, hasGapBefore]
       properties:
         id:
           type: string
@@ -431,8 +393,6 @@ components:
         hasGapBefore:
           type: boolean
           description: True if there is untracked time between the previous entry's endedAt and this entry's startedAt
-        scheduledForPurge:
-          type: boolean
 
     Report:
       type: object
@@ -569,32 +529,6 @@ components:
           type: string
           format: date-time
 
-    PurgeNotification:
-      type: object
-      required: [activityPurgeDate, activityCutoffDate, timeEntryCount, requestCount, nodeDeletionDate, nodeCutoffDate, nodeCount]
-      properties:
-        activityPurgeDate:
-          type: string
-          format: date
-        activityCutoffDate:
-          type: string
-          format: date
-        timeEntryCount:
-          type: integer
-          description: time_entries rows scheduled for purge
-        requestCount:
-          type: integer
-          description: requests rows scheduled for purge
-        nodeDeletionDate:
-          type: string
-          format: date
-        nodeCutoffDate:
-          type: string
-          format: date
-        nodeCount:
-          type: integer
-          description: Deactivated nodes scheduled for deletion
-
     McpToken:
       type: object
       required: [id, label, createdAt]
@@ -723,6 +657,32 @@ paths:
   # Auth
   # ---------------------------------------------------------------------------
 
+  /auth/providers:
+    get:
+      tags: [auth]
+      summary: List configured OIDC providers
+      operationId: getProviders
+      security: []
+      description: |
+        Returns the registration IDs of all OIDC providers that have a non-empty client-id
+        configured at startup. Used by the login page to render only the active sign-in buttons.
+        Accessible without authentication. SR-085.
+      responses:
+        '200':
+          description: Active providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: string
+                      enum: [google, apple, microsoft, keycloak]
+                    example: [google, microsoft]
+
   /auth/logout:
     post:
       tags: [auth]
@@ -738,122 +698,51 @@ paths:
   /auth/gdpr-notice:
     post:
       tags: [auth]
-      summary: Acknowledge GDPR notice
+      summary: Acknowledge GDPR notice and complete registration
       operationId: acknowledgeGdprNotice
       description: |
-        Records that the authenticated user has acknowledged the GDPR notice.
-        Sets gdpr_notice_accepted = true on user_profile. Must be called before any other
-        application view is accessible after first login. SR-057a.
+        Called after the user reads the GDPR notice on first login. Reads pending registration
+        data from the HTTP session (stored during OAuth2 callback per SR-008) and executes the
+        account creation transaction: inserts user_profile, user_oauth_providers, deletes
+        pending_invitations. Establishes an authenticated session. Returns privacy_notice_url if
+        configured. Returns 400 if no pending registration data is in the session. SR-057a.
       responses:
-        '204':
-          description: Acknowledged
+        '200':
+          description: Registration complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  privacyNoticeUrl:
+                    type: [string, 'null']
+                    format: uri
+        '400':
+          description: No pending registration data in session
         '401':
           $ref: '#/components/responses/Unauthorized'
 
   # ---------------------------------------------------------------------------
-  # Company settings
+  # System settings (read-only; config is set via application.yml at deployment)
   # ---------------------------------------------------------------------------
 
   /settings:
     get:
       tags: [settings]
-      summary: Get company settings
+      summary: Get system settings
       operationId: getSettings
-      description: Requires effective admin on root. SR-012.
-      responses:
-        '200':
-          description: Company settings
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CompanySettings'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-    put:
-      tags: [settings]
-      summary: Update company settings
-      operationId: updateSettings
       description: |
-        Requires effective admin on root. All fields are optional; omitted fields are unchanged.
-        Rejects if retentionYears < 2, nodeRetentionExtraYears < 0, invalid purgeSchedule, or
-        privacyNoticeUrl is not an HTTPS URL. SR-013.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateSettingsRequest'
+        Returns the resolved system configuration to any authenticated user. Values are read from
+        the config file at startup and cannot be changed via the API. SR-012.
       responses:
         '200':
-          description: Updated settings
+          description: System settings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CompanySettings'
+                $ref: '#/components/schemas/SystemSettings'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-
-  # ---------------------------------------------------------------------------
-  # Root Node Admin management — System Admin only
-  # ---------------------------------------------------------------------------
-
-  /root/admins:
-    post:
-      tags: [root-admins]
-      summary: Grant admin on root
-      operationId: grantRootAdmin
-      description: Requires is_system_admin. SR-003.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [userId]
-              properties:
-                userId:
-                  type: string
-                  format: uuid
-      responses:
-        '204':
-          description: Granted
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /root/admins/{userId}:
-    delete:
-      tags: [root-admins]
-      summary: Revoke admin on root
-      operationId: revokeRootAdmin
-      description: Requires is_system_admin. Blocked if target is last admin on root. SR-003/SR-004.
-      parameters:
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Revoked
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
 
   # ---------------------------------------------------------------------------
   # Users
@@ -864,10 +753,10 @@ paths:
       tags: [users]
       summary: List all users
       operationId: listUsers
-      description: Requires effective admin on root or is_system_admin. SR-005.
+      description: Requires System Admin. SR-005.
       responses:
         '200':
-          description: All users including anonymised stubs
+          description: All users (pending, active, and anonymised)
           content:
             application/json:
               schema:
@@ -885,9 +774,10 @@ paths:
       summary: Remove user
       operationId: removeUser
       description: |
-        Requires effective admin on root. In one transaction: stops active tracking, deletes all
-        node authorizations, deletes user_profile (cascades to oauth providers, quick_access),
-        sets users.is_active = false. Retains users row and time_entries. SR-010.
+        Requires System Admin. In one transaction: stops active tracking, revokes active MCP
+        tokens, deletes all node authorizations, deletes user_profile (cascades to oauth
+        providers, quick_access). If the user has time entries, retains the users row as an
+        anonymous stub; otherwise deletes it. SR-010.
       parameters:
         - name: userId
           in: path
@@ -910,7 +800,7 @@ paths:
       tags: [users]
       summary: List user's node authorizations
       operationId: getUserAuthorizations
-      description: Requires effective admin on root or is_system_admin. SR-011.
+      description: Requires System Admin. SR-011.
       parameters:
         - name: userId
           in: path
@@ -943,7 +833,7 @@ paths:
       tags: [invitations]
       summary: List pending invitations
       operationId: listInvitations
-      description: Requires effective admin on root. SR-006.
+      description: Requires System Admin. SR-006.
       responses:
         '200':
           description: Pending memberships
@@ -952,7 +842,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PendingMembership'
+                  $ref: '#/components/schemas/PendingInvitation'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -962,7 +852,7 @@ paths:
       summary: Invite user by email
       operationId: createInvitation
       description: |
-        Requires effective admin on root. Rejects if email already in pending_memberships or
+        Requires System Admin. Creates users row and pending_invitations row. Rejects if email already in pending_invitations or
         already linked to an existing user. SR-007.
       requestBody:
         required: true
@@ -981,7 +871,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PendingMembership'
+                type: object
+                required: [mailtoLink, invitation]
+                properties:
+                  mailtoLink:
+                    type: string
+                    description: "Pre-filled mailto: URI for the admin to send to the invitee"
+                  invitation:
+                    $ref: '#/components/schemas/PendingInvitation'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -992,9 +889,9 @@ paths:
   /invitations/{invitationId}:
     delete:
       tags: [invitations]
-      summary: Cancel invitation
-      operationId: cancelInvitation
-      description: Requires effective admin on root. SR-009.
+      summary: Withdraw invitation
+      operationId: withdrawInvitation
+      description: Requires System Admin. SR-009.
       parameters:
         - name: invitationId
           in: path
@@ -1004,7 +901,44 @@ paths:
             format: uuid
       responses:
         '204':
-          description: Cancelled
+          description: Withdrawn
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /invitations/{invitationId}/resend:
+    post:
+      tags: [invitations]
+      summary: Resend invitation
+      operationId: resendInvitation
+      description: |
+        Requires System Admin. Resets the invitation expiry to 90 days from now and returns a
+        fresh mailto: link. No new records are created; the existing user UUID and any assigned
+        node authorizations are preserved. SR-007a.
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Expiry reset; fresh mailto link returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mailtoLink, invitation]
+                properties:
+                  mailtoLink:
+                    type: string
+                    description: "Pre-filled mailto: URI for the admin to send"
+                  invitation:
+                    $ref: '#/components/schemas/PendingInvitation'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1221,7 +1155,7 @@ paths:
               schema:
                 type: string
                 format: binary
-            image/gif:
+            image/svg+xml:
               schema:
                 type: string
                 format: binary
@@ -1240,7 +1174,7 @@ paths:
       summary: Upload node logo
       operationId: uploadNodeLogo
       description: |
-        Requires effective admin on node or ancestor. Accepts image/png, image/jpeg, image/gif,
+        Requires effective admin on node or ancestor. Accepts image/png, image/jpeg, image/svg+xml,
         image/webp. Maximum 256 KB. Replaces any existing logo. SR-018.
       parameters:
         - name: nodeId
@@ -1519,8 +1453,7 @@ paths:
       summary: List requests on a node
       operationId: listNodeRequests
       description: |
-        Requires at least view on node. Node Admins of the node or any ancestor see all requests;
-        all others see only their own. SR-041.
+        Requires at least view on node. Returns all requests (open and closed). SR-041.
       parameters:
         - name: nodeId
           in: path
@@ -1789,7 +1722,7 @@ paths:
       summary: Edit time entry
       operationId: updateTimeEntry
       description: |
-        All fields optional; omitted fields unchanged. Blocked if startedAt is before freeze_date.
+        All fields optional; omitted fields unchanged. Blocked if startedAt is before the effective freeze cutoff.
         If nodeId changes, the new node must satisfy the same constraints as tracking start.
         SR-033.
       parameters:
@@ -1839,7 +1772,7 @@ paths:
       tags: [time-entries]
       summary: Delete time entry
       operationId: deleteTimeEntry
-      description: Blocked if startedAt is before freeze_date. SR-034.
+      description: Blocked if startedAt is before the effective freeze cutoff. SR-034.
       parameters:
         - name: entryId
           in: path
@@ -2153,60 +2086,6 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
 
   # ---------------------------------------------------------------------------
-  # Data export / import (company data, not reports)
-  # ---------------------------------------------------------------------------
-
-  /data/export:
-    get:
-      tags: [settings]
-      summary: Export all company data to CSV
-      operationId: exportData
-      description: |
-        Requires effective admin on root. Exports nodes, time_entries, requests,
-        node_authorizations. Anonymised users appear as placeholder. SR-014.
-      responses:
-        '200':
-          description: CSV download
-          content:
-            text/csv:
-              schema:
-                type: string
-                format: binary
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /data/import:
-    post:
-      tags: [settings]
-      summary: Import company data from CSV
-      operationId: importData
-      description: |
-        Requires effective admin on root. Blocked if any nodes beyond root, time_entries, or
-        users beyond bootstrap admin exist. SR-015.
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file:
-                  type: string
-                  format: binary
-      responses:
-        '204':
-          description: Imported
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-
-  # ---------------------------------------------------------------------------
   # Account
   # ---------------------------------------------------------------------------
 
@@ -2215,7 +2094,7 @@ paths:
       tags: [account]
       summary: Get own profile
       operationId: getProfile
-      description: Returns stored name, linked OAuth2 providers, language preference, and GDPR notice status. SR-043.
+      description: Returns stored name and linked OAuth2 providers. SR-043.
       responses:
         '200':
           description: Profile
@@ -2223,7 +2102,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [userId, name, providers, language, gdprNoticeAccepted]
+                required: [userId, name, providers]
                 properties:
                   userId:
                     type: string
@@ -2234,41 +2113,13 @@ paths:
                     type: array
                     items:
                       type: string
-                      enum: [github, google, apple]
-                  language:
-                    type: string
-                    enum: [en, de, fr, es]
-                    description: User's preferred language for the UI (IETF tag)
-                  gdprNoticeAccepted:
-                    type: boolean
+                      enum: [google, apple, microsoft, keycloak]
+                  lastReportSettings:
+                    type: [object, 'null']
+                    additionalProperties: true
+                    description: Last saved report filter state; null if not yet set. SR-043b.
         '401':
           $ref: '#/components/responses/Unauthorized'
-
-  /account/language:
-    put:
-      tags: [account]
-      summary: Set preferred language
-      operationId: setLanguage
-      description: |
-        Updates the user's preferred UI language. Applies immediately to all sessions. SR-043a.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [language]
-              properties:
-                language:
-                  type: string
-                  enum: [en, de, fr, es]
-      responses:
-        '204':
-          description: Language updated
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
 
   /account/report-settings:
     put:
@@ -2329,7 +2180,7 @@ paths:
               properties:
                 provider:
                   type: string
-                  enum: [github, google, apple]
+                  enum: [google, apple, microsoft, keycloak]
       responses:
         '204':
           description: Provider linked
@@ -2350,7 +2201,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [github, google, apple]
+            enum: [google, apple, microsoft, keycloak]
       responses:
         '204':
           description: Unlinked
@@ -2365,10 +2216,10 @@ paths:
       summary: Anonymise own account
       operationId: anonymizeAccount
       description: |
-        Irreversible. In one transaction: stops active tracking, revokes all MCP tokens, deletes
-        node_authorizations, deletes user_profile (cascades to oauth providers, quick_access).
-        Retains users row and time_entries. Session is invalidated. Re-registration requires a
-        new invitation and creates a new identity. SR-047.
+        Irreversible. Stops active tracking, revokes all MCP tokens, removes all node
+        authorizations, and deletes personal data. Time entries are retained anonymously. Session
+        is invalidated. Re-registration requires a new invitation and creates a new identity.
+        SR-047.
       responses:
         '204':
           description: Anonymised; session invalidated
@@ -2384,7 +2235,7 @@ paths:
       tags: [mcp]
       summary: List own MCP tokens
       operationId: listOwnMcpTokens
-      description: Returns all active (non-revoked) MCP tokens for the authenticated user. SR-065.
+      description: Returns all active (non-revoked) MCP tokens for the authenticated user. SR-065a.
       responses:
         '200':
           description: Active MCP tokens
@@ -2440,7 +2291,7 @@ paths:
       tags: [mcp]
       summary: Revoke own MCP token
       operationId: revokeMcpToken
-      description: Sets revoked_at = NOW(). The token hash remains for audit. SR-066.
+      description: Soft-revokes the token. The token hash is retained for audit. SR-067.
       parameters:
         - name: tokenId
           in: path
@@ -2461,7 +2312,7 @@ paths:
       tags: [mcp]
       summary: List all active MCP tokens (System Admin)
       operationId: listAllMcpTokens
-      description: Requires is_system_admin. Returns all non-revoked tokens across all users. SR-067.
+      description: Requires System Admin. Returns all non-revoked tokens across all users. SR-068.
       responses:
         '200':
           description: All active MCP tokens with owner information
@@ -2481,9 +2332,7 @@ paths:
       tags: [mcp]
       summary: Revoke any MCP token (System Admin)
       operationId: adminRevokeMcpToken
-      description: |
-        Requires is_system_admin. Sets revoked_at = NOW(). Revocation is logged to
-        security_events. SR-068.
+      description: Requires System Admin. Soft-revokes any token; revocation is logged to the security event log. SR-069.
       parameters:
         - name: tokenId
           in: path
@@ -2510,7 +2359,7 @@ paths:
       tags: [security-events]
       summary: List security events
       operationId: listSecurityEvents
-      description: Requires is_system_admin. SR-050.
+      description: Requires System Admin. SR-050.
       parameters:
         - name: eventType
           in: query
@@ -2557,33 +2406,6 @@ paths:
                       $ref: '#/components/schemas/SecurityEvent'
                   total:
                     type: integer
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  # ---------------------------------------------------------------------------
-  # Data lifecycle
-  # ---------------------------------------------------------------------------
-
-  /lifecycle/notification:
-    get:
-      tags: [lifecycle]
-      summary: Get purge pre-notification
-      operationId: getPurgeNotification
-      description: |
-        Requires effective admin on root or is_system_admin. Returns upcoming purge counts if
-        within the 6-week pre-notification window before the next scheduled activity purge date.
-        Returns null outside the window. Counts are computed dynamically (not stored). SR-056.
-      responses:
-        '200':
-          description: Purge notification or null
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: '#/components/schemas/PurgeNotification'
-                  - type: 'null'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2641,16 +2463,6 @@ paths:
         `request` — Request created or closed.
         Data: `RequestRecord`.
         Recipients: all sessions of Node Admins of the relevant node and all ancestors.
-
-        `purge-notification` — Purge notification counts updated (window opened, counts changed,
-        or window closed).
-        Data: `PurgeNotification | null`.
-        Recipients: all sessions of Node Admins of root and System Admins.
-
-        `activity-cutoff` — Activity cutoff date changed (pre-notification window opened or
-        closed). Members see the upcoming cutoff date on their own time entries once active.
-        Data: `{ activityCutoffDate: string (date) | null }`.
-        Recipients: all authenticated sessions.
 
         `quick-access` — A node in the user's quick-access list has been updated (color, icon,
         logo, name, or trackability changed).

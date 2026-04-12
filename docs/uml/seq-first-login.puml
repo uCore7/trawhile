@@ -1,0 +1,68 @@
+@startuml seq-first-login
+title trawhile — First Login Sequence
+
+actor       "User"                          as User
+participant "Browser\n(Angular SPA)"        as Browser
+participant "OIDC Provider\n(Google / Apple /\nMicrosoft / Keycloak)" as Provider
+participant "Spring Security\n(TrawhileOidcUserService)" as Spring
+database    "PostgreSQL"                    as DB
+
+== OIDC callback ==
+
+User   ->  Browser : click "Login with [Provider]"
+Browser -> Provider : redirect (OIDC authorise)
+User   ->  Provider : authenticate
+Provider -> Browser : redirect with authorisation code
+Browser -> Spring   : GET /login/oauth2/code/{provider}
+
+Spring -> Provider : exchange code for tokens
+note right of Spring
+  Decode OIDC ID token → { sub, email, name }
+  Apple only: name claim present on first login only;
+  absent on subsequent logins.
+end note
+Provider -> Spring : { subject, email, name }
+
+Spring -> DB : SELECT FROM user_oauth_providers\nWHERE provider = ? AND subject = ?
+note right : not found → new user
+
+Spring -> DB : SELECT FROM pending_invitations\nWHERE email = ?
+
+alt no valid invitation (not found or expired)
+  Spring -> Browser : redirect /login?error=not_invited
+else valid invitation
+
+  note right of Spring
+    Store { pending_invitations.id, user_id, provider, subject, name }
+    in HTTP session. Discard email immediately (C-2).
+    No DB writes at this point.
+    (users row already exists — created at invite time)
+  end note
+
+  Spring -> Browser : redirect → /gdpr-notice
+
+  == GDPR notice ==
+
+  Browser -> Browser : render GDPR notice\n(static content — no auth required)
+  User    -> Browser : read & acknowledge
+
+  Browser -> Spring  : POST /auth/gdpr-notice
+  Spring  -> Spring  : read pending data from HTTP session
+  Spring  -> DB      : BEGIN TRANSACTION
+  Spring  -> DB      : INSERT INTO user_profile\n(user_id from session, name from session)
+  Spring  -> DB      : INSERT INTO user_oauth_providers\n(provider, subject from session)
+  Spring  -> DB      : DELETE FROM pending_invitations\nWHERE id = ? (from session)
+  note right of DB
+    Bootstrap path only (SR-001):
+    also INSERT INTO users and
+    INSERT INTO node_authorizations (admin on root)
+  end note
+  Spring  -> DB      : COMMIT
+
+  Spring  -> Spring  : establish authenticated session
+  Spring  -> Browser : 200 OK { privacyNoticeUrl } + session cookie
+  Browser -> Browser : redirect → main application
+
+end
+
+@enduml

@@ -37,5 +37,5 @@ public class AccountService {
     // TODO: implement F6.5 — anonymizeAccount (stops tracking, revokes MCP tokens, deletes profile + cascade)
     // TODO: implement SR-043a — setLanguage
     // TODO: implement SR-043b — saveReportSettings (persist last_report_settings JSONB)
-    // TODO: implement SR-057a — acknowledgeGdprNotice (set gdpr_notice_accepted = true)
+    // TODO: implement SR-057a — completeRegistration (inserts user_profile + user_oauth_providers, deletes pending_invitations by id)
 }

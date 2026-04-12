@@ -1,0 +1,27 @@
+@startuml use-cases-reporting
+title trawhile — Reporting & Export (Epic 4)
+
+left to right direction
+
+actor "User" as User
+
+rectangle "Reporting & Export" {
+    usecase "View time report\n(filter by date, user, node)\n(UR-036)" as UC_Report
+    usecase "Toggle summary / detailed /\nchart view\n(UR-037)" as UC_ReportMode
+    usecase "Export report to CSV\n(UR-038)" as UC_ExportCsv
+    usecase "View member time summaries\n(per-bucket data quality flag)\n(UR-052)" as UC_MemberSummaries
+    usecase "View charts\n(time per node, time over period,\nper-member breakdown)\n(UR-063)" as UC_Charts
+    usecase "Export current view to PDF\n(UR-064)" as UC_ExportPdf
+}
+
+User --> UC_Report
+User --> UC_ReportMode
+User --> UC_ExportCsv
+User --> UC_MemberSummaries
+User --> UC_Charts
+User --> UC_ExportPdf
+
+UC_Charts ..> UC_Report : <<extends>>
+UC_ExportPdf ..> UC_ReportMode : <<extends>>
+
+@enduml

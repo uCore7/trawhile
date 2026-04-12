@@ -23,5 +23,5 @@ public class McpTokenController {
         this.mcpTokenService = mcpTokenService;
     }
 
-    // TODO: implement all endpoints listed above (require is_system_admin check)
+    // TODO: implement all endpoints listed above (require System Admin check for admin endpoints)
 }

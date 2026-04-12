@@ -3,9 +3,9 @@ package com.trawhile.web;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** GET/PATCH /api/v1/settings — company settings (Node Admin of root only). */
+/** GET /api/v1/settings — system settings, read-only, any authenticated user (SR-012). */
 @RestController
 @RequestMapping("/api/v1/settings")
 public class SettingsController {
-    // TODO: implement F1.10–F1.11
+    // TODO: implement F1.10 — return TrawhileConfig values as SystemSettingsResponse
 }

@@ -8,28 +8,29 @@ Trawhile is organized around a flexible hierarchy of work items of your choice -
 
 ### Members
 
-- No fuss - no app, no registration (use your Google or Apple account), simple-to-use and works great on mobile, does not annoy you with emails
-- Does not waste your time - quickly find and fix overlapping time entries or gaps between them
-- Let's you know your work - See your activity at a glance or in detail, with powerful filters, and export in a variety of ways
-- Gives you ownership of your data - no one except you can create or alter your time entries. Know when they will be deleted automatically
-- And protects your data - others can see your daily summary but not your individual time entries, personal data like your email address is not stored in the database, use any name you like, anonymize your time entries and purge your personal data when leaving company or team
+- No fuss - no app, no registration (use Apple, Google, Microsoft Entra or Keycloak for login), simple-to-use and works great on mobile, does not annoy you with emails
+- Does not waste your time - quickly find and fix overlapping time records or gaps between them
+- Lets you know your work - See your activity at a glance or in detail, with powerful filters, and export in a variety of ways
+- Gives you ownership of your data - informs you of your rights, and no one except you can create or alter your time records. Know when old time records will be deleted automatically
+- Protects your data - others can see your aggregated totals but not your individual time records, your email address is not stored in the database, use the name you like, anonymize your time records and purge your personal data when leaving company or team
 
 ### Work item admins - project managers, work package managers, scrum masters
 
-- Adapts to your workflow - structure the hierarchy of work items to your needs and make changes to the structure at any time
-- Get meaningful reports quickly, for controlling and accounting - time summaries per-member or per-work item, burn-down charts, and export them in various ways
+- Tailor things to your needs - structure the hierarchy of work items and make changes to the structure at any time
+- Get meaningful reports quickly, for controlling and accounting, and export them in various ways
 - Choose the granularity that is right for you - assign members' view, track, and admin permissions on work items - permissions are hierarchical and composable
 - Stay in control - view member permissions at a glance, see who has what permissions on a work item
+- Hook-up AI via MCP for downstream processing of time records
 
 ### Sysadmins
 
 - Cost-effective - No monthly fee except for the hosting
-- Quick setup - Self-contained, standard deployment with Docker, easy to hook-up with Prometheus and Grafana, no SMTP server required
+- Single-step deployment - with Docker
+- Straightforward configuration with application.yml and .env - meaningful defaults enable you to start right away and customize later, no access to an SMTP server needs to be provided
 - No manual certs provisioning - let's encrypt certificates are built-in
-- No configuration required - meaningful defaults enable you to start right away and customize later
-- Facilitiates database backup and restore
-- GDPR and CRA compliant - right to erasure, configurable retention and automatic purge, SBOM, rate limiting and secure HTTP headers, security audit log with 90-day retention and automatic purge
-- Invite members, block members
+- Know when things go awry - comprehensive Prometheus metrics are built-in, and a ready-to-import Grafana dashboard and AlertManager rules are provided
+- GDPR compliant and CRA-ready - right to erasure, configurable retention and automatic purge, SBOM, rate limiting and secure HTTP headers, security audit log with 90-day retention and automatic purge
+- Friendly with neighbors - OpenAPI spec for quick integration with project management tools
 
 ## Stack
 
@@ -38,26 +39,33 @@ Trawhile is organized around a flexible hierarchy of work items of your choice -
 | Backend | Spring Boot 4, Spring Data JDBC, Spring Security (OAuth2) |
 | Database | PostgreSQL 18 |
 | Frontend | Angular 21, PrimeNG 21, Tailwind CSS 4 |
-| Auth | GitHub OAuth2, Google OAuth2, Apple Sign In |
+| Auth | Google, Apple, Microsoft Entra ID, Keycloak (OIDC) |
 | Deployment | Docker Compose, Caddy (TLS) |
 
 ## Deployment
 
-Copy `.env.example` to `.env` and fill in the values:
+**1. Secrets** — copy `.env.example` to `.env` and fill in the values:
 
 ```
 DB_PASSWORD=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 APPLE_CLIENT_ID=
 APPLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+KEYCLOAK_CLIENT_ID=
+KEYCLOAK_CLIENT_SECRET=
+KEYCLOAK_ISSUER_URI=
 BOOTSTRAP_ADMIN_EMAIL=
 DOMAIN=
 ```
 
-Then:
+Only configure the providers you want to enable; leave the rest empty.
+
+**2. System configuration** — copy `config/application.yml.example` to `config/application.yml` and adjust as needed. The defaults work for a quick start; at minimum set `trawhile.name` and `trawhile.timezone`.
+
+**3. Start**:
 
 ```bash
 docker compose up -d

@@ -1,0 +1,51 @@
+@startuml db-state-user-lifecycle
+title trawhile — Database rows by user lifecycle phase
+
+skinparam packageStyle rectangle
+skinparam defaultTextAlignment left
+
+package "Pending\n(Invited)" as PhPending {
+  card "**users**\n──────────────────────\n(id, created_at)" as UP #90EE90
+  card "**pending_invitations**\n──────────────────────\nuser_id / email\ninvited_by / expires_at" as PI #90EE90
+  card "**node_authorizations** ×0..n\n──────────────────────\nnode_id / authorization\n(assignable before first login)" as NAP #90EE90
+}
+
+package "No Longer Pending\n(expired or cancelled)" as PhGone {
+  card "(no rows in any table)\nEmail address is gone.\nusers row deleted." as NONE #DDDDDD
+}
+
+package "Active" as PhActive {
+  card "**users**\n──────────────────────\n(id, created_at)" as U #90EE90
+  card "**user_profile**\n──────────────────────\nname" as UPR #90EE90
+  card "**user_oauth_providers** ×1..n\n──────────────────────\nprovider / subject" as UOP #90EE90
+  card "**node_authorizations** ×0..n\n──────────────────────\nnode_id / authorization" as NA #90EE90
+  card "**time_entries** ×0..n\n──────────────────────\nnode_id / started_at / ended_at" as TE #90EE90
+  card "**quick_access** ×0..n\n──────────────────────\nnode_id / sort_order" as QA #90EE90
+  card "**mcp_tokens** ×0..n\n──────────────────────\ntoken_hash / label\nrevoked_at = NULL" as MT #90EE90
+}
+
+package "Anonymised\n(has time entries)" as PhAnonStub {
+  card "**users**\n──────────────────────\n(id, created_at)\nstub — retained for FK integrity" as UA #FFD580
+  card "**time_entries** ×0..n\n──────────────────────\nretained; user_id → stub" as TEA #FFD580
+  card "~~user_profile~~ → DELETED\n~~user_oauth_providers~~ → DELETED (cascade)\n~~quick_access~~ → DELETED (cascade)\n~~node_authorizations~~ → DELETED\n~~mcp_tokens~~ → revoked_at = NOW()" as DEL #FFB3B3
+}
+
+package "Fully Deleted\n(no time entries)" as PhGone2 {
+  card "(no rows in any table)\nAll records removed." as NONE2 #DDDDDD
+}
+
+note bottom of PhPending
+  GDPR notice is shown and acknowledged
+  before user_profile is written.
+  user_profile presence = GDPR accepted.
+  pending_invitations row deleted on
+  GDPR acknowledgement (SR-057a).
+end note
+
+note bottom of PhAnonStub
+  Stub deleted automatically after
+  activity purge removes last time_entries
+  (F8.3 orphan cleanup).
+end note
+
+@enduml

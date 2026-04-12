@@ -13,7 +13,5 @@ public record UserProfile(
     @Id UUID id,
     UUID userId,
     String name,
-    boolean gdprNoticeAccepted,  // set true on first-login GDPR notice acknowledgement
-    String language,             // IETF tag: en | de | fr | es
     String lastReportSettings    // JSONB — last report filter state; opaque to server
 ) {}

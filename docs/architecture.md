@@ -12,9 +12,7 @@ Spring Boot (embedded Tomcat)
 PostgreSQL
 ```
 
-Single deployable unit: one Spring Boot JAR + one PostgreSQL instance + one Caddy process,
-orchestrated by Docker Compose. The Angular SPA is served as static files from Spring Boot
-(embedded in the JAR via the Maven frontend plugin — no separate Node server in production).
+Single deployable unit: one Spring Boot JAR + one PostgreSQL instance + one Caddy process, orchestrated by Docker Compose. The Angular SPA is served as static files from Spring Boot (embedded in the JAR via the Maven frontend plugin — no separate Node server in production).
 
 ---
 
@@ -40,17 +38,17 @@ com.trawhile
     SecurityConfig.java        — Spring Security, OAuth2, CSRF, session, headers
     SchedulingConfig.java      — @EnableScheduling
     RateLimitConfig.java       — bucket4j beans
+    TrawhileConfig.java        — @ConfigurationProperties("trawhile"); validated on startup (SR-088)
   domain/
     Node.java                  — record; maps to nodes table
     TimeEntry.java
     User.java
     UserProfile.java
     NodeAuthorization.java
-    CompanySettings.java
     Request.java
     SecurityEvent.java
     PurgeJob.java
-    PendingMembership.java
+    PendingInvitation.java
     QuickAccess.java
     NodeColor.java
   repository/
@@ -59,11 +57,10 @@ com.trawhile
     UserRepository.java
     UserProfileRepository.java
     NodeAuthorizationRepository.java
-    CompanySettingsRepository.java
     RequestRepository.java
     SecurityEventRepository.java
     PurgeJobRepository.java
-    PendingMembershipRepository.java
+    PendingInvitationRepository.java
     QuickAccessRepository.java
     NodeColorRepository.java
     AuthorizationQueries.java  — NamedParameterJdbcTemplate; all recursive CTEs (Q1–Q4)
@@ -75,10 +72,9 @@ com.trawhile
     ReportService.java
     UserService.java
     RequestService.java
-    PurgeNotificationService.java
     AccountService.java
     SecurityEventService.java
-    DataExportService.java
+    ReportExportService.java
   lifecycle/
     ActivityPurgeJob.java      — @Scheduled; activity purge driver
     NodeDeletionJob.java       — @Scheduled; node deletion driver
@@ -89,12 +85,11 @@ com.trawhile
     SseDispatcher.java         — pushes typed events to relevant sessions
   security/
     OAuth2LoginSuccessHandler.java   — handles login vs. provider-linking flows
-    OAuth2UserService.java           — matches pending_memberships, creates user_profile
+    TrawhileOidcUserService.java     — matches pending_invitations, stores session data for GDPR flow
     AuthorizationCheckFilter.java    — not used; checks are in service layer
   web/
     AuthController.java        — POST /api/v1/auth/logout
     SettingsController.java
-    RootAdminController.java
     UserController.java
     InvitationController.java
     NodeController.java
@@ -106,7 +101,6 @@ com.trawhile
     ReportController.java
     AccountController.java
     SecurityEventController.java
-    LifecycleController.java
     AboutController.java
     SseController.java
     dto/
@@ -120,12 +114,9 @@ com.trawhile
 
 ### 1. Data access — Spring Data JDBC + NamedParameterJdbcTemplate
 
-**Simple CRUD**: Spring Data JDBC `CrudRepository` for all tables. Domain objects are plain Java
-records annotated with `@Table` and `@Id`. No JPA, no lazy loading, no proxies.
+**Simple CRUD**: Spring Data JDBC `CrudRepository` for all tables. Domain objects are plain Java records annotated with `@Table` and `@Id`. No JPA, no lazy loading, no proxies.
 
-**Recursive CTEs**: All authorization queries (Q1–Q4 from schema.sql) and the purge queries are
-written as raw SQL in `AuthorizationQueries.java`, executed via `NamedParameterJdbcTemplate`.
-This is explicit, testable, and gives full control over the SQL.
+**Recursive CTEs**: All authorization queries (Q1–Q4 from schema.sql) and the purge queries are written as raw SQL in `AuthorizationQueries.java`, executed via `NamedParameterJdbcTemplate`. This is explicit, testable, and gives full control over the SQL.
 
 ```java
 // Example: Q3 guard
@@ -150,13 +141,11 @@ public boolean hasAuthorization(UUID userId, UUID nodeId, AuthLevel required) {
 }
 ```
 
-**Transaction boundaries**: `@Transactional` on service methods, not repositories. Controllers
-are never transactional.
+**Transaction boundaries**: `@Transactional` on service methods, not repositories. Controllers are never transactional.
 
 ### 2. SSE — Spring MVC SseEmitter
 
-WebFlux is not used. The app uses Spring MVC (servlet stack). SSE is implemented with
-`SseEmitter` — adequate for a small user base.
+WebFlux is not used. The app uses Spring MVC (servlet stack). SSE is implemented with `SseEmitter` — adequate for a small user base.
 
 ```java
 // SseEmitterRegistry: one registry bean, application-scoped
@@ -173,11 +162,7 @@ public SseEmitter register(UUID userId) {
 }
 ```
 
-`SseDispatcher` is called by services after every state mutation. It determines which userIds
-should receive the event (per SR-062), then iterates the registry and sends. Sends are
-`synchronized (emitter)` to prevent concurrent writes to the same emitter from different
-threads. Dead emitters (`IOException` on send) are removed immediately and never retried —
-the client `EventSource` reconnects automatically.
+`SseDispatcher` is called by services after every state mutation. It determines which userIds should receive the event (per SR-062), then iterates the registry and sends. Sends are `synchronized (emitter)` to prevent concurrent writes to the same emitter from different threads. Dead emitters (`IOException` on send) are removed immediately and never retried — the client `EventSource` reconnects automatically.
 
 **No reactive dependencies added.** `spring-boot-starter-web` only.
 
@@ -185,9 +170,7 @@ the client `EventSource` reconnects automatically.
 
 Two job classes, each driven by a daily `@Scheduled(cron = "0 59 23 * * *")` check.
 
-**Startup resume**: `PurgeJobCoordinator` implements `ApplicationRunner`. On startup it reads
-both `purge_jobs` rows. If either has `status = 'active'`, it delegates to the corresponding
-job to resume. The job reads the stored `cutoff_date` — no recomputation.
+**Startup resume**: `PurgeJobCoordinator` implements `ApplicationRunner`. On startup it reads both `purge_jobs` rows. If either has `status = 'active'`, it delegates to the corresponding job to resume. The job reads the stored `cutoff_date` — no recomputation.
 
 **Activity purge** (chunked):
 ```
@@ -201,8 +184,7 @@ SET status = 'idle', completed_at = NOW()
 COMMIT
 ```
 
-Each iteration is its own `@Transactional(propagation = REQUIRES_NEW)` call so the outer method
-can loop without holding a transaction open across the entire purge.
+Each iteration is its own `@Transactional(propagation = REQUIRES_NEW)` call so the outer method can loop without holding a transaction open across the entire purge.
 
 **Node deletion** (iterative bottom-up):
 ```
@@ -220,10 +202,7 @@ SET status = 'idle', completed_at = NOW()
 COMMIT
 ```
 
-The `NOT EXISTS` checks are on the node itself, not the full subtree. This is correct because
-deletion is bottom-up: a node only becomes a leaf once all its children have been deleted in
-earlier iterations — by that point the subtree is already gone, so a subtree scan would be
-redundant.
+The `NOT EXISTS` checks are on the node itself, not the full subtree. This is correct because deletion is bottom-up: a node only becomes a leaf once all its children have been deleted in earlier iterations — by that point the subtree is already gone, so a subtree scan would be redundant.
 
 Each iteration is also `REQUIRES_NEW`. The outer coordinator loop is not transactional.
 
@@ -231,8 +210,7 @@ Each iteration is also `REQUIRES_NEW`. The outer coordinator loop is not transac
 
 Spring Security handles the OAuth2 callback at `/login/oauth2/code/{provider}`.
 
-`OAuth2UserService` (extends `DefaultOAuth2UserService`) is called for every OAuth2 callback.
-It implements the branching logic:
+`TrawhileOidcUserService` (extends `DefaultOAuth2UserService`) is called for every OAuth2 callback. It implements the branching logic:
 
 ```
 if HttpSession has attribute "LINKING_PROVIDER" = true:
@@ -241,24 +219,19 @@ if HttpSession has attribute "LINKING_PROVIDER" = true:
     → redirect to /account
 else:
     → check user_oauth_providers for provider+subject
-    → if found and user_profile exists: create session, redirect to /
-    → if not found: check pending_memberships by email
-        → if found: run SR-008 registration transaction, redirect to /
-        → if not found: return 403
+    → if found: create session (cascade guarantees user_profile exists), redirect to /
+    → if not found: check pending_invitations by email
+        → if found: store session data, redirect to /gdpr-notice (SR-008)
+        → if not found: redirect /login?error=not_invited
 ```
 
-The session attribute `LINKING_PROVIDER` is set before redirecting to
-`/oauth2/authorization/{provider}` from the account page. Spring's OAuth2 filter picks it up
-on the callback.
+The session attribute `LINKING_PROVIDER` is set before redirecting to `/oauth2/authorization/{provider}` from the account page. Spring's OAuth2 filter picks it up on the callback.
 
-**Bootstrap detection**: `OAuth2UserService` checks for the SR-001 condition after creating the
-user row. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches, inserts
-`node_authorizations` for root within the same transaction.
+**Bootstrap detection**: `OAuth2UserService` checks for the SR-001 condition after creating the user row. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches, inserts `node_authorizations` for root within the same transaction.
 
 ### 5. Authorization checks — service layer
 
-No Spring Security method security (`@PreAuthorize`). Authorization is checked explicitly at
-the top of each service method using `AuthorizationService`:
+No Spring Security method security (`@PreAuthorize`). Authorization is checked explicitly at the top of each service method using `AuthorizationService`:
 
 ```java
 // In NodeService:
@@ -268,11 +241,9 @@ public NodeResponse deactivateNode(UUID nodeId, UUID requestingUserId) {
 }
 ```
 
-`requireAdmin` calls Q3 (recursive ancestor CTE). Throwing a typed exception (e.g.
-`AccessDeniedException`) which a global `@ControllerAdvice` maps to HTTP 403.
+`requireAdmin` calls Q3 (recursive ancestor CTE). Throwing a typed exception (e.g. `AccessDeniedException`) which a global `@ControllerAdvice` maps to HTTP 403.
 
-This approach is explicit, easy to test, and avoids annotation magic hiding authorization
-logic from code review.
+This approach is explicit, easy to test, and avoids annotation magic hiding authorization logic from code review.
 
 ### 6. Error handling
 
@@ -286,8 +257,7 @@ Single `@ControllerAdvice` (`GlobalExceptionHandler`) maps exceptions to `Proble
 | `ValidationException` | 422 |
 | `AuthenticationException` | 401 |
 
-All exceptions carry a `code` string (e.g. `LAST_ADMIN`, `FROZEN_ENTRY`, `NODE_HAS_CHILDREN`)
-matching the `Problem.code` field in the OpenAPI spec.
+All exceptions carry a `code` string (e.g. `LAST_ADMIN`, `FROZEN_ENTRY`, `NODE_HAS_CHILDREN`) matching the `Problem.code` field in the OpenAPI spec.
 
 ### 7. Spring Security configuration
 
@@ -302,8 +272,7 @@ matching the `Problem.code` field in the OpenAPI spec.
 - Rate limiting: bucket4j filter applied before security chain
 ```
 
-CSRF token is delivered via a cookie (`X-XSRF-TOKEN` header pattern) so the Angular SPA can
-read and send it without server-side rendering.
+CSRF token is delivered via a cookie (`X-XSRF-TOKEN` header pattern) so the Angular SPA can read and send it without server-side rendering.
 
 ### 8. Database migrations — Flyway
 
@@ -311,10 +280,9 @@ All migrations in `src/main/resources/db/migration/`, named `V{n}__{description}
 
 | Migration | Content |
 |---|---|
-| V1__create_schema.sql | Full schema from schema.sql |
-| V2__seed_root_node.sql | INSERT root node (parent_id IS NULL) |
-| V3__seed_company_settings.sql | INSERT company_settings singleton row |
-| V4__seed_purge_jobs.sql | INSERT two purge_jobs rows (activity, node) |
+| V1__create_schema.sql | Full schema + seeds: root node, two purge_jobs rows (activity, node) |
+
+No settings table exists in the database; all system configuration is read from `application.yml` via `TrawhileConfig` (`@ConfigurationProperties("trawhile")`).
 
 ---
 
@@ -360,7 +328,7 @@ src/app/
     admin/                     — Epics 1, 7, 8: user management, settings, security log
   shared/
     components/
-      node-picker/             — work item picker widget (reused in tracking, reports, requests)
+      node-picker/             — node picker widget (reused in tracking, reports, requests)
       node-path/               — breadcrumb display
     pipes/
       duration.pipe.ts         — seconds → HH:mm:ss
@@ -378,29 +346,22 @@ readonly tracking$ = new Subject<TrackingStatus>();
 readonly nodeChange$ = new Subject<NodeChangeEvent>();
 readonly authorization$ = new Subject<AuthorizationEvent>();
 readonly request$ = new Subject<RequestEvent>();
-readonly purgeNotification$ = new Subject<PurgeNotification | null>();
+readonly quickAccess$ = new Subject<QuickAccessEntry>();
+readonly mcpTokenRevoked$ = new Subject<{ tokenId: string }>();
 ```
 
 Feature components subscribe to the relevant Subject. No polling anywhere.
 
-**Stateless reconnect:** The browser `EventSource` reconnects automatically on dropped
-connections. On each reconnect (`EventSource.onopen`), the SSE service triggers a full
-re-fetch of current state (tracking status, node tree, purge notification) via REST before
-resuming live event processing. No server-side event buffer or `Last-Event-ID` replay.
-This is consistent with the server-as-source-of-truth principle.
+**Stateless reconnect:** The browser `EventSource` reconnects automatically on dropped connections. On each reconnect (`EventSource.onopen`), the SSE service triggers a full re-fetch of current state (tracking status, node tree) via REST before resuming live event processing. No server-side event buffer or `Last-Event-ID` replay. This is consistent with the server-as-source-of-truth principle.
 
 ### State management
 
-No NgRx or other state library. Angular signals + services with `signal()` / `computed()` for
-reactive state. Each feature service holds its own state; the SSE service pushes updates into
-it. This is sufficient for a small app with a clear server-as-source-of-truth model.
+No NgRx or other state library. Angular signals + services with `signal()` / `computed()` for reactive state. Each feature service holds its own state; the SSE service pushes updates into it. This is sufficient for a small app with a clear server-as-source-of-truth model.
 
 ### Authentication flow
 
 1. `AuthGuard` checks a `/api/v1/account` call on app init. If 401 → navigate to `/login`.
-2. `/login` page shows "Login with GitHub", "Login with Google", and "Sign in with Apple" buttons
-   pointing to `/oauth2/authorization/github`, `/oauth2/authorization/google`, and
-   `/oauth2/authorization/apple`.
+2. `/login` page shows a sign-in button for each configured OIDC provider (Google, Apple, Microsoft Entra ID, Keycloak) pointing to `/oauth2/authorization/{registrationId}`. Only providers with a configured client-id are rendered.
 3. Spring redirects back after OAuth2; session cookie is set; app navigates to `/`.
 4. `csrf.interceptor.ts` reads the `XSRF-TOKEN` cookie on every mutating request.
 
@@ -408,8 +369,7 @@ it. This is sufficient for a small app with a clear server-as-source-of-truth mo
 
 - `ng build` outputs to `src/main/resources/static/` (configured in `angular.json`).
 - Maven frontend plugin runs `ng build` as part of `mvn package`.
-- Spring Boot serves static files from classpath `/static/`. All non-API paths return
-  `index.html` (Angular router handles routing client-side).
+- Spring Boot serves static files from classpath `/static/`. All non-API paths return `index.html` (Angular router handles routing client-side).
 
 ---
 
@@ -432,11 +392,11 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/trawhile
       SPRING_DATASOURCE_USERNAME: tt
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
-      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
+    volumes:
+      - ./config/application.yml:/app/config/application.yml  # system config (SR-088)
     depends_on:
       - db
 

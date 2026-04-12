@@ -1,0 +1,29 @@
+@startuml use-cases-account
+title trawhile — Account (Epic 6)
+
+left to right direction
+
+actor "Visitor" as Visitor
+actor "New registrant\n(OIDC authenticated,\nnot yet in DB)" as Registrant
+actor "User" as User
+
+rectangle "Account" {
+    usecase "Acknowledge GDPR notice\n(completes registration)\n(UR-060)" as UC_GdprNotice
+    usecase "View profile\n(UR-043)" as UC_ViewProfile
+    usecase "Link OIDC provider\n(UR-044)" as UC_LinkProvider
+    usecase "Unlink OIDC provider\n(UR-045)" as UC_UnlinkProvider
+    usecase "View own authorization\nassignments\n(UR-046)" as UC_OwnAuths
+    usecase "Anonymise own account\n(UR-047)" as UC_Anonymise
+    usecase "View About page\n(UR-048)" as UC_About
+}
+
+Visitor --> UC_About
+Registrant --> UC_GdprNotice
+User --> UC_ViewProfile
+User --> UC_LinkProvider
+User --> UC_UnlinkProvider
+User --> UC_OwnAuths
+User --> UC_Anonymise
+User --> UC_About
+
+@enduml

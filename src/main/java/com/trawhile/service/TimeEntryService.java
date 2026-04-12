@@ -1,6 +1,6 @@
 package com.trawhile.service;
 
-import com.trawhile.repository.CompanySettingsRepository;
+import com.trawhile.config.TrawhileConfig;
 import com.trawhile.repository.TimeEntryRepository;
 import com.trawhile.sse.SseDispatcher;
 import org.springframework.stereotype.Service;
@@ -11,19 +11,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class TimeEntryService {
 
     private final TimeEntryRepository timeEntryRepository;
-    private final CompanySettingsRepository settingsRepository;
+    private final TrawhileConfig config;
     private final AuthorizationService authorizationService;
     private final SseDispatcher sseDispatcher;
 
     public TimeEntryService(TimeEntryRepository timeEntryRepository,
-                            CompanySettingsRepository settingsRepository,
+                            TrawhileConfig config,
                             AuthorizationService authorizationService,
                             SseDispatcher sseDispatcher) {
         this.timeEntryRepository = timeEntryRepository;
-        this.settingsRepository = settingsRepository;
+        this.config = config;
         this.authorizationService = authorizationService;
         this.sseDispatcher = sseDispatcher;
     }
 
     // TODO: implement F3.10–F3.13 (create, edit, delete, duplicate)
+    // Freeze check: startedAt < Instant.now().minus(config.getFreezeOffsetYears() * 365, ChronoUnit.DAYS)
 }

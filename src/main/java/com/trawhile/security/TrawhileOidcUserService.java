@@ -23,16 +23,12 @@ import java.util.Optional;
  * - Store the name from the first login; never attempt to update it from Apple OIDC claims.
  * - The 'email' claim may be a relay address (private relay) — never store it.
  *   Subject (sub) is the stable identifier.
- *
- * Shares the same login/linking branching logic as OAuth2UserService (GitHub).
  */
 @Service
 public class TrawhileOidcUserService extends OidcUserService {
 
-    private final UserRepository userRepository;
-    private final UserProfileRepository userProfileRepository;
     private final UserOauthProviderRepository oauthProviderRepository;
-    private final PendingMembershipRepository pendingMembershipRepository;
+    private final PendingInvitationRepository pendingInvitationRepository;
     private final NodeRepository nodeRepository;
     private final NodeAuthorizationRepository nodeAuthorizationRepository;
     private final AuthorizationQueries authorizationQueries;
@@ -40,17 +36,13 @@ public class TrawhileOidcUserService extends OidcUserService {
     @Value("${app.bootstrap-admin-email:}")
     private String bootstrapAdminEmail;
 
-    public TrawhileOidcUserService(UserRepository userRepository,
-                                   UserProfileRepository userProfileRepository,
-                                   UserOauthProviderRepository oauthProviderRepository,
-                                   PendingMembershipRepository pendingMembershipRepository,
+    public TrawhileOidcUserService(UserOauthProviderRepository oauthProviderRepository,
+                                   PendingInvitationRepository pendingInvitationRepository,
                                    NodeRepository nodeRepository,
                                    NodeAuthorizationRepository nodeAuthorizationRepository,
                                    AuthorizationQueries authorizationQueries) {
-        this.userRepository = userRepository;
-        this.userProfileRepository = userProfileRepository;
         this.oauthProviderRepository = oauthProviderRepository;
-        this.pendingMembershipRepository = pendingMembershipRepository;
+        this.pendingInvitationRepository = pendingInvitationRepository;
         this.nodeRepository = nodeRepository;
         this.nodeAuthorizationRepository = nodeAuthorizationRepository;
         this.authorizationQueries = authorizationQueries;
@@ -74,28 +66,30 @@ public class TrawhileOidcUserService extends OidcUserService {
 
         Optional<UserOauthProvider> existing = oauthProviderRepository.findByProviderAndSubject(provider, subject);
         if (existing.isPresent()) {
-            // TODO: validate user_profile exists; throw 403 if anonymised/removed
+            // user_profile existence guaranteed by cascade — returning user, establish session
             return oidcUser;
         }
 
-        // New login — check pending membership by email
-        Optional<PendingMembership> pending = email != null
-            ? pendingMembershipRepository.findByEmail(email)
+        // New login — look up pending_invitations by email to get the pre-created user_id
+        Optional<PendingInvitation> pending = email != null
+            ? pendingInvitationRepository.findByEmail(email)
             : Optional.empty();
 
         if (pending.isEmpty()) {
-            throw new OAuth2AuthenticationException("NO_PENDING_MEMBERSHIP");
+            // Check bootstrap path: no invitation needed for first System Admin
+            // TODO: handle bootstrap case (SR-001) — if bootstrap conditions met, store bootstrap session data
+            throw new OAuth2AuthenticationException("NO_PENDING_INVITATION");
         }
 
-        // TODO: run SR-008 registration transaction (create user, user_profile, user_oauth_providers, delete pending)
-        // For Apple: extract name from oidcUser.getClaim("name") — only present on first login.
-        // TODO: bootstrap check — grant root admin if conditions met
+        // Store {userId, invitationId, provider, subject, name} in session; discard email (C-2)
+        // For Apple: name claim only present on first login
+        // TODO: store session data and redirect to GDPR notice (SR-008)
 
         return oidcUser;
     }
 
     /**
-     * Extract email for pending membership lookup only. Email must NOT be stored after matching.
+     * Extract email for pending invitation lookup only. Email must NOT be stored after matching.
      * For Apple private relay addresses, still usable for matching the pending invitation.
      */
     private String extractEmail(OidcUser user) {

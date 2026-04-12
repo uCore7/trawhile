@@ -10,6 +10,6 @@ import java.util.UUID;
 public record UserOauthProvider(
     @Id UUID id,
     UUID profileId,
-    String provider,   // 'github' | 'google'
+    String provider,   // 'google' | 'apple' | 'microsoft' | 'keycloak'
     String subject     // provider's subject ID
 ) {}

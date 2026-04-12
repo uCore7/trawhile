@@ -12,10 +12,6 @@ spring:
     oauth2:
       client:
         registration:
-          github:
-            client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_ID:}
-            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_SECRET:}
-            scope: read:user,user:email
           google:
             client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID:}
             client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET:}
@@ -31,15 +27,30 @@ spring:
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope: openid,name,email
+          microsoft:
+            # Microsoft Entra ID (Azure AD). Set MICROSOFT_TENANT_ID to your directory tenant ID.
+            # Use 'common' only for multi-tenant apps; for a single company always use the tenant ID.
+            # The 'email' scope ensures the email claim is present in the ID token.
+            client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MICROSOFT_CLIENT_ID:}
+            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MICROSOFT_CLIENT_SECRET:}
+            scope: openid,profile,email
+          keycloak:
+            # Keycloak OIDC. Set KEYCLOAK_ISSUER_URI to your realm URL,
+            # e.g. https://keycloak.example.com/realms/company
+            client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID:}
+            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET:}
+            scope: openid,profile,email
         provider:
-          github:
-            user-info-uri: https://api.github.com/user
-            user-name-attribute: id   # numeric user ID, not login name
           apple:
             authorization-uri: https://appleid.apple.com/auth/authorize
             token-uri: https://appleid.apple.com/auth/token
             jwk-set-uri: https://appleid.apple.com/auth/keys
             user-name-attribute: sub
+          microsoft:
+            issuer-uri: https://login.microsoftonline.com/${MICROSOFT_TENANT_ID:common}/v2.0
+            user-name-attribute: sub
+          keycloak:
+            issuer-uri: ${KEYCLOAK_ISSUER_URI:}
 
 server:
   port: 8080
@@ -51,6 +62,16 @@ app:
   bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
   # Cron expression for pending membership expiry purge (daily at 02:00 UTC). SR-009a.
   pending-membership-purge-cron: "0 0 2 * * *"
+
+# System configuration (SR-088). Override in config/application.yml mounted next to docker-compose.yml.
+# Secrets (DB credentials, OAuth client secrets, bootstrap admin email) stay in environment variables.
+trawhile:
+  name: "trawhile"
+  timezone: "UTC"
+  freeze-offset-years: 2        # entries older than this many years become immutable; must be <= retention-years
+  retention-years: 5            # activity purge cutoff in years; minimum 2
+  node-retention-extra-years: 1 # additional years before deactivated nodes are deleted; minimum 0
+  privacy-notice-url: ""        # optional HTTPS URL; leave blank if none
 
 logging:
   level:

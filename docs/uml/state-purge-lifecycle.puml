@@ -1,0 +1,60 @@
+@startuml state-purge-lifecycle
+title trawhile — Data Purge Lifecycle
+
+' =====================================================================
+' User lifecycle
+' =====================================================================
+state "User" as User_S {
+  state "Invited" as Invited : pending_invitations row exists\nusers row exists\nno user_profile
+  state "Active" as Active : user_profile exists\ncan log in and use the app
+  state "Anonymised Stub" as Stub : user_profile deleted\nusers row retained for history\nmcp_tokens soft-revoked
+
+  [*] --> Invited         : System Admin creates invitation
+  Invited --> Active      : first OIDC login\n+ GDPR acknowledgement
+  Invited --> [*]         : withdrawn by System Admin\nor expired (90 days)
+  Active --> Stub         : anonymised (self-service)\nor removed by System Admin\n[time entries exist]
+  Active --> [*]          : removed by System Admin\n[no time entries]
+  Stub --> [*]            : all own time entries purged\n→ orphan cleanup (activity purge job)
+}
+
+' =====================================================================
+' TimeEntry lifecycle
+' =====================================================================
+state "TimeEntry" as TE_S {
+  state "Active" as TE_Active : editable and deletable by owner
+  state "Frozen" as TE_Frozen : immutable — no edit or delete\nstarted_at < NOW() − freeze-offset-years
+
+  [*] --> TE_Active        : created (start tracking,\nretroactive entry, or duplicate)
+  TE_Active --> [*]        : deleted by owner
+  TE_Active --> TE_Frozen  : time passes;\nstarted_at crosses freeze cutoff
+  TE_Frozen --> [*]        : activity purge job\nstarted_at < NOW() − retention-years
+}
+
+' =====================================================================
+' Node lifecycle
+' =====================================================================
+state "Node" as Node_S {
+  state "Active" as N_Active : visible; trackable if leaf node
+  state "Deactivated" as N_Deactivated : hidden from tracking;\ntime entries may still reference it
+
+  [*] --> N_Active             : created as child of another node
+  N_Active --> N_Deactivated   : deactivated by Node Admin\n[no active children]
+  N_Deactivated --> N_Active   : reactivated by Node Admin
+  N_Deactivated --> [*]        : node deletion job\ndeactivated_at < NOW() − (retention + extra)\nAND subtree has no remaining\ntime entries or requests\n(bottom-up; leaf nodes first)
+}
+
+' =====================================================================
+' Cross-entity dependencies
+' =====================================================================
+note as CrossRef
+  Cross-entity dependencies (not enforced by FK — enforced by purge job queries):
+
+  User stub → deleted
+    requires: all own time_entries have been purged
+
+  Node → deleted
+    requires: all time_entries and requests in subtree have been purged;
+    node deletion job always runs after the activity purge job for the same period
+end note
+
+@enduml

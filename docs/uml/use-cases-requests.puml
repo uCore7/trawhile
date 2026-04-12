@@ -1,0 +1,21 @@
+@startuml use-cases-requests
+title trawhile — Requests (Epic 5)
+
+left to right direction
+
+actor "User" as User
+actor "Node Admin" as NodeAdmin
+
+User <|-- NodeAdmin
+
+rectangle "Requests" {
+    usecase "Submit request on a node\n(UR-039)" as UC_Submit
+    usecase "View all requests on\nvisible nodes\n(UR-041)" as UC_ViewRequests
+    usecase "Close a request\n(UR-042)" as UC_Close
+}
+
+User --> UC_Submit
+User --> UC_ViewRequests
+NodeAdmin --> UC_Close
+
+@enduml

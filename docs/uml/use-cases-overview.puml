@@ -1,0 +1,60 @@
+@startuml use-cases-overview
+title trawhile — Use Case Overview
+
+left to right direction
+
+actor "Visitor" as Visitor
+actor "User" as User
+actor "Node Admin" as NodeAdmin
+actor "System Admin" as SysAdmin
+actor "MCP Client" as McpClient
+
+User <|-- NodeAdmin
+NodeAdmin <|-- SysAdmin
+
+rectangle trawhile {
+    package "System Administration" as P1
+    package "Node Administration" as P2
+    package "Time Tracking" as P3
+    package "Reporting & Export" as P4
+    package "Requests" as P5
+    package "Account" as P6
+    package "Security & Audit" as P7
+    package "Data Lifecycle" as P8
+    package "MCP Integration" as P9
+}
+
+Visitor --> P6 : About page
+User --> P3
+User --> P4
+User --> P5
+User --> P6
+User --> P9 : token management
+NodeAdmin --> P2
+NodeAdmin --> P5
+SysAdmin --> P1
+SysAdmin --> P7
+SysAdmin --> P9 : admin token mgmt
+McpClient --> P9 : MCP server tools
+
+note bottom of P3
+  see use-cases-tracking.puml
+  use-cases-reporting.puml
+  use-cases-requests.puml
+end note
+note bottom of P1
+  see use-cases-sysadmin.puml
+  use-cases-node-admin.puml
+end note
+note bottom of P6
+  see use-cases-account.puml
+  use-cases-security.puml
+  use-cases-mcp.puml
+end note
+note bottom of P8
+  Fully automated background jobs.
+  No UI interaction — configured via
+  system config file (SR-088).
+end note
+
+@enduml

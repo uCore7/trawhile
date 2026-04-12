@@ -1,0 +1,40 @@
+@startuml use-cases-mcp
+title trawhile — MCP Integration (Epic 9)
+
+left to right direction
+
+actor "User" as User
+actor "System Admin" as SysAdmin
+actor "MCP Client\n(e.g. Claude.ai)" as McpClient
+
+rectangle "MCP Integration" {
+    package "Token Management (User)" {
+        usecase "Generate MCP access token\n(UR-053)" as UC_GenToken
+        usecase "View own MCP tokens\n(UR-054)" as UC_ViewTokens
+        usecase "Revoke own MCP token\n(UR-055)" as UC_RevokeToken
+        usecase "Claude.ai setup wizard\n(UR-058)" as UC_McpWizard
+    }
+    package "Token Management (System Admin)" {
+        usecase "View all MCP tokens\nacross all users\n(UR-056)" as UC_AdminTokens
+        usecase "Revoke any MCP token\n(UR-057)" as UC_AdminRevoke
+    }
+    package "MCP Server Tools" {
+        usecase "Query time entries\n(F9.6)" as UC_McpEntries
+        usecase "Query node tree\n(F9.6)" as UC_McpTree
+        usecase "Query tracking status\n(F9.6)" as UC_McpTracking
+        usecase "Query member summaries\n(F9.6)" as UC_McpSummaries
+    }
+}
+
+User --> UC_GenToken
+User --> UC_ViewTokens
+User --> UC_RevokeToken
+User --> UC_McpWizard
+SysAdmin --> UC_AdminTokens
+SysAdmin --> UC_AdminRevoke
+McpClient --> UC_McpEntries
+McpClient --> UC_McpTree
+McpClient --> UC_McpTracking
+McpClient --> UC_McpSummaries
+
+@enduml
