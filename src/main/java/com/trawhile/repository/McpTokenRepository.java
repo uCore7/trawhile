@@ -31,7 +31,7 @@ public interface McpTokenRepository extends ListCrudRepository<McpToken, UUID> {
     @Query("UPDATE mcp_tokens SET revoked_at = NOW() WHERE id = :id AND revoked_at IS NULL")
     void revokeById(UUID id);
 
-    /** Revoke all tokens for a user (used during anonymization). SR-F047.F02. */
+    /** Revoke all tokens for a user (used during anonymization and scrubbing). SR-F070.F01. */
     @Modifying
     @Query("UPDATE mcp_tokens SET revoked_at = NOW() WHERE user_id = :userId AND revoked_at IS NULL")
     void revokeAllByUserId(UUID userId);

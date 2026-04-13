@@ -36,7 +36,7 @@ Trawhile is organized around a flexible hierarchy of work items of your choice -
 
 | Layer | Technology |
 |---|---|
-| Backend | Spring Boot 4, Spring Data JDBC, Spring Security (OAuth2) |
+| Backend | Spring Boot 4, Spring Data JDBC, Spring Security (OIDC login) |
 | Database | PostgreSQL 18 |
 | Frontend | Angular 21, PrimeNG 21, Tailwind CSS 4 |
 | Auth | Google, Apple, Microsoft Entra ID, Keycloak (OIDC) |
@@ -71,7 +71,7 @@ Only configure the providers you want to enable; leave the rest empty.
 docker compose up -d
 ```
 
-The first OAuth2 login matching `BOOTSTRAP_ADMIN_EMAIL` is granted admin on the root node.
+The first OIDC login matching `BOOTSTRAP_ADMIN_EMAIL` is routed through the bootstrap registration flow and is granted admin on the root node after GDPR acknowledgement completes.
 
 ## Development
 

@@ -19,7 +19,7 @@ These are the authoritative source of truth. Code, tests, and migrations must be
 - Database: PostgreSQL
 - Frontend: Angular SPA + PrimeNG + Tailwind CSS
 - Deployment: Docker Compose + Caddy (reverse proxy + TLS)
-- Identity: Google OAuth2 + Apple Sign In + Microsoft Entra ID + Keycloak (all OIDC)
+- Identity: Google + Apple Sign In + Microsoft Entra ID + Keycloak (OIDC)
 - CI/CD: GitHub Actions
 
 ## Key design decisions
@@ -29,7 +29,7 @@ These are the authoritative source of truth. Code, tests, and migrations must be
 - No email stored for registered users (UR-C006). Email only in `pending_invitations`, deleted on first login match.
 - Authorization is recursive: a grant on node N is effective on N and all descendants. Use recursive CTEs (Q1–Q4 in schema.sql) — do not flatten the tree.
 - Freeze cutoff: entries with `started_at < NOW() - freeze_offset_years * INTERVAL '1 year'` are immutable. The offset is read from `TrawhileConfig.freezeOffsetYears`. No admin override.
-- Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub and all `time_entries`. Irreversible.
+- Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub plus any `time_records`/`requests` until purge removes them. Irreversible.
 - Purge jobs are idempotent. On startup, any `purge_jobs` row with `status = 'active'` is resumed using stored `cutoff_date`.
 - SSE is a general UX principle — all visible state is live across all sessions of a user.
 

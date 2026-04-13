@@ -46,7 +46,7 @@ Annotate with `@Tag("TE-Fxxx.Fxx-nn")`. Write real assertions. No empty bodies.
 | TE-F066.F01-01 | `PUT /api/v1/account/report-settings` with a filter object: subsequent `GET /api/v1/account` returns same filter in `lastReportSettings` |
 | TE-F044.F01-01 | `POST /api/v1/account/providers` linking a new provider: `SELECT COUNT(*) FROM user_oauth_providers WHERE user_id = {id}` increases; 409 when same provider/subject already linked to another user |
 | TE-F045.F01-01 | `DELETE /api/v1/account/providers/{provider}` when 2 providers linked: `user_oauth_providers` count decreases by 1; 409 when only 1 provider remains |
-| TE-F047.F01-01 | `POST /api/v1/account/anonymize` for user with `time_entries`: `user_profile` deleted; `users` row retained; `SELECT revoked_at FROM mcp_tokens WHERE user_id = {id}` all non-null |
-| TE-F047.F01-02 | Same for user with no `time_entries` and no `requests`: `users` row deleted |
+| TE-F047.F01-01 | `POST /api/v1/account/anonymize` for user with `time_records`: `user_profile` deleted; `users` row retained; `SELECT revoked_at FROM mcp_tokens WHERE user_id = {id}` all non-null |
+| TE-F047.F01-02 | Same for user with no `time_records` and no `requests`: `users` row deleted |
 | TE-F048.F01-01 | `GET /api/v1/about` unauthenticated: 200; response has `version`, link to SBOM, link to OpenAPI spec |
 | TE-F048.F01-02 | `GET /api/v1/about` as user with node auth and `privacyNoticeUrl` configured: response includes privacy notice URL; same request by user without any node auth: privacy notice URL absent |

@@ -2,23 +2,30 @@
 title trawhile — Data Lifecycle (Epic 8)
 
 note as N
-  Epic 8 is fully automated — no UI interaction required.
+  Epic 8 combines a user-facing privacy step with
+  automated scrubbing and purge behavior.
+
+  The first-login GDPR notice flow (UR-F060) is shown in
+  use-cases-account.puml and seq-first-login.puml.
 
   Retention periods and node retention are configured via
-  the system config file (SR-F050.F05).
+  the system config file, including the purge schedule
+  (SR-F050.F05).
 
-  Activity purge (SR-F050.F01/F02) runs nightly at 23:59
-  (company timezone), deleting whatever crossed the rolling
-  retention cutoff as of that night. Node deletion
-  (SR-F050.F03/F04) runs immediately after each nightly
-  activity purge. Both jobs are idempotent and resume on
-  application restart using stored cutoff_date.
+  Activity purge (SR-F050.F01/F02) runs at the configured
+  purge schedule in the company timezone, deleting whatever
+  crossed the rolling retention cutoff as of that run.
+  Node deletion (SR-F050.F03/F04) runs immediately after
+  each scheduled activity purge. Both jobs are idempotent
+  and resume on application restart using stored cutoff_date.
 
   Invitation auto-expiry (SR-C010.C01) runs daily,
   transitioning users with expired pending_invitations
-  to the Ready for Scrubbing state (SR-F047.F02).
+  to the Ready for Scrubbing state; cleanup is then
+  executed by SR-F070.F01.
 
-  See state-purge-lifecycle.puml for entity lifecycle states
+  See state-purge-lifecycle.puml and
+  state-user-lifecycle.puml for entity lifecycle states
   and cross-entity deletion dependencies.
 end note
 

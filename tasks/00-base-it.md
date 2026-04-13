@@ -54,7 +54,7 @@ public abstract class BaseIT {
     @BeforeEach
     void resetDatabase() {
         // Truncate all tables in dependency order; reset sequences
-        jdbc.execute("TRUNCATE mcp_tokens, quick_access, time_entries, requests, " +
+        jdbc.execute("TRUNCATE mcp_tokens, quick_access, time_records, requests, " +
             "security_events, node_authorizations, user_oauth_providers, user_profile, " +
             "pending_invitations, users, nodes RESTART IDENTITY CASCADE");
         // Re-insert the root node (seeded by V1 migration, removed by truncate)
@@ -68,7 +68,7 @@ public abstract class BaseIT {
 
 ## TestSecurityHelper requirements
 
-The app uses Spring Security OAuth2 / OIDC. Tests must authenticate as a specific `users` row. Provide:
+The app uses Spring Security OIDC login. Tests must authenticate as a specific `users` row. Provide:
 
 ```java
 public class TestSecurityHelper {
@@ -94,7 +94,7 @@ public class TestFixtures {
     public static UUID insertNode(JdbcTemplate jdbc, UUID parentId, String name) { ... }
     public static void grantAuth(JdbcTemplate jdbc, UUID userId, UUID nodeId, String level) { ... }
     public static UUID insertPendingInvitation(JdbcTemplate jdbc, String email, UUID userId) { ... }
-    public static UUID insertTimeEntry(JdbcTemplate jdbc, UUID userId, UUID nodeId,
+    public static UUID insertTimeRecord(JdbcTemplate jdbc, UUID userId, UUID nodeId,
                                        OffsetDateTime startedAt, OffsetDateTime endedAt) { ... }
 }
 ```

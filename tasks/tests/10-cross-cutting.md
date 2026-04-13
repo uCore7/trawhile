@@ -17,7 +17,7 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `security_events` table; `event_type` enum (for RATE_LIMIT_BREACH)
 2. `docs/requirements-sr.md` — SR-F067.F01, SR-F067.F02, SR-F060.F02, SR-C002.F01, SR-C011.C01, SR-C012.C01, SR-C013.C01, SR-F068.F01, SR-F059.F01, SR-F059.F02, SR-F059.F03, SR-F050.F05, SR-F065.F01
-3. `docs/openapi.yaml` — `/auth/callback`, `/auth/acknowledge-gdpr`, `/auth/providers`, `/metrics`, `/sse` paths
+3. `docs/openapi.yaml` — `/auth/gdpr-notice`, `/auth/providers`, and `/events` paths
 4. `docs/test-plan.md` — TE-F067.F01-*, TE-F060.F02-*, TE-C002.F01-*, TE-C011.C01-*, TE-C012.C01-*, TE-C013.C01-*, TE-F068.F01-*, TE-F059.F01-*, TE-F059.F02-*, TE-F059.F03-*, TE-F067.F02-*, TE-F050.F05-*, TE-F065.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
@@ -49,8 +49,8 @@ Annotate with `@Tag("TE-Fxxx.Fxx-nn")`. Write real assertions. No empty bodies.
 | TE | What to assert |
 |---|---|
 | TE-F067.F01-01 | Simulate OIDC callback for a user who already has a `user_oauth_providers` row; `HttpSession` is created; response redirects to `/`; no new DB rows inserted |
-| TE-F060.F02-01 | Call `POST /api/v1/auth/acknowledge-gdpr` with a session that carries a pending invitation context (set via `TestSecurityHelper`): one `user_profile` row inserted, one `user_oauth_providers` row inserted, `pending_invitations` row deleted — all in a single transaction (verify by inserting rows then calling the endpoint); 400 when no pending session |
-| TE-F060.F02-02 | Withdraw the invitation between the OIDC callback and the acknowledge call (delete the `pending_invitations` row); call `POST /api/v1/auth/acknowledge-gdpr`; response redirects to the "not invited" error page |
+| TE-F060.F02-01 | Call `POST /api/v1/auth/gdpr-notice` with a session that carries a pending invitation context (set via `TestSecurityHelper`): one `user_profile` row inserted, one `user_oauth_providers` row inserted, `pending_invitations` row deleted — all in a single transaction (verify by inserting rows then calling the endpoint); 400 when no pending session |
+| TE-F060.F02-02 | Withdraw the invitation between the OIDC callback and the acknowledge call (delete the `pending_invitations` row); call `POST /api/v1/auth/gdpr-notice`; response redirects to the "not invited" error page |
 | TE-C002.F01-01 | Simulate OIDC callback for a subject with no matching `pending_invitations` row; response redirects to login error page; response body does not distinguish "not found" from "expired" |
 | TE-C011.C01-01 | Send requests at a rate within the configured limit; all return 2xx; then send requests exceeding the limit; expect 429 |
 | TE-C011.C01-02 | Trigger a rate-limit breach (exceed limit); `SELECT COUNT(*) FROM security_events WHERE event_type = 'RATE_LIMIT_BREACH'` increases by 1 |
@@ -69,7 +69,7 @@ Annotate with `@Tag("TE-Fxxx.Fxx-nn")`. Write real assertions. No empty bodies.
 | TE-F059.F03-01 | Plain JUnit 5: load `monitoring/prometheus.yml` from the classpath (or project root); assert file exists; parse as YAML; assert no parse error |
 | TE-F059.F03-02 | Plain JUnit 5: load `monitoring/alerting-rules.yml`; assert it contains alert names: `PurgeJobStale`, `DatabaseErrors`, `HighErrorRate`, `InstanceDown` |
 | TE-F059.F03-03 | Plain JUnit 5: load `monitoring/grafana-dashboard.json`; parse as JSON; assert all 10 metric names from SR-F059.F02 appear in the JSON string |
-| TE-F067.F02-01 | `GET /api/v1/auth/providers` with no authentication: HTTP 200; response body lists the configured OAuth2 provider IDs (e.g., `["github","google"]`); no sensitive data (client secrets) in response |
+| TE-F067.F02-01 | `GET /api/v1/auth/providers` with no authentication: HTTP 200; response body contains a `providers` array listing the configured OIDC provider IDs (e.g., `["google","microsoft"]`); no sensitive data (client secrets) in response |
 | TE-F050.F05-01 | Construct a `TrawhileConfig` with all valid values; run Bean Validation (`Validator.validate()`); constraint violations set is empty |
 | TE-F050.F05-02 | `TrawhileConfig` with `retentionYears = 1` (below minimum of 2): validation produces at least one violation on `retentionYears` |
 | TE-F050.F05-03 | `TrawhileConfig` with `freezeOffsetYears > retentionYears`: validation produces at least one cross-field violation |

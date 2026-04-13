@@ -19,18 +19,20 @@ package "Active" as PhActive {
   card "**user_profile**\n──────────────────────\nname" as UPR #90EE90
   card "**user_oauth_providers** ×1..n\n──────────────────────\nprovider / subject" as UOP #90EE90
   card "**node_authorizations** ×0..n\n──────────────────────\nnode_id / authorization" as NA #90EE90
-  card "**time_entries** ×0..n\n──────────────────────\nnode_id / started_at / ended_at" as TE #90EE90
+  card "**time_records** ×0..n\n──────────────────────\nnode_id / started_at / ended_at" as TE #90EE90
+  card "**requests** ×0..n\n──────────────────────\nnode_id / status / created_at" as RQ #90EE90
   card "**quick_access** ×0..n\n──────────────────────\nnode_id / sort_order" as QA #90EE90
   card "**mcp_tokens** ×0..n\n──────────────────────\ntoken_hash / label\nrevoked_at = NULL" as MT #90EE90
 }
 
-package "Anonymised\n(has time entries)" as PhAnonStub {
+package "Anonymised\n(has retained records\nand/or requests)" as PhAnonStub {
   card "**users**\n──────────────────────\n(id, created_at)\nstub — retained for FK integrity" as UA #FFD580
-  card "**time_entries** ×0..n\n──────────────────────\nretained; user_id → stub" as TEA #FFD580
+  card "**time_records** ×0..n\n──────────────────────\nretained; user_id → stub" as TEA #FFD580
+  card "**requests** ×0..n\n──────────────────────\nretained; requester_id → stub" as RQA #FFD580
   card "~~user_profile~~ → DELETED\n~~user_oauth_providers~~ → DELETED (cascade)\n~~quick_access~~ → DELETED (cascade)\n~~node_authorizations~~ → DELETED\n~~mcp_tokens~~ → revoked_at = NOW()" as DEL #FFB3B3
 }
 
-package "Fully Deleted\n(no time entries)" as PhGone2 {
+package "Fully Deleted\n(no retained records\nor requests)" as PhGone2 {
   card "(no rows in any table)\nAll records removed." as NONE2 #DDDDDD
 }
 
@@ -44,7 +46,8 @@ end note
 
 note bottom of PhAnonStub
   Stub deleted automatically after
-  activity purge removes last time_entries
+  activity purge removes last time_records
+  and requests
   (SR-F050.F02 orphan cleanup).
 end note
 

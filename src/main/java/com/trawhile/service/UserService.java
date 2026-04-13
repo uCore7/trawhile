@@ -12,7 +12,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final NodeAuthorizationRepository authorizationRepository;
-    private final TimeEntryRepository timeEntryRepository;
+    private final TimeRecordRepository timeRecordRepository;
     private final McpTokenRepository mcpTokenRepository;
     private final PendingInvitationRepository pendingInvitationRepository;
     private final SseDispatcher sseDispatcher;
@@ -20,14 +20,14 @@ public class UserService {
     public UserService(UserRepository userRepository,
                        UserProfileRepository userProfileRepository,
                        NodeAuthorizationRepository authorizationRepository,
-                       TimeEntryRepository timeEntryRepository,
+                       TimeRecordRepository timeRecordRepository,
                        McpTokenRepository mcpTokenRepository,
                        PendingInvitationRepository pendingInvitationRepository,
                        SseDispatcher sseDispatcher) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.authorizationRepository = authorizationRepository;
-        this.timeEntryRepository = timeEntryRepository;
+        this.timeRecordRepository = timeRecordRepository;
         this.mcpTokenRepository = mcpTokenRepository;
         this.pendingInvitationRepository = pendingInvitationRepository;
         this.sseDispatcher = sseDispatcher;

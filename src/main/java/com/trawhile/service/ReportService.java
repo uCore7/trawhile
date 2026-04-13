@@ -1,7 +1,7 @@
 package com.trawhile.service;
 
 import com.trawhile.repository.AuthorizationQueries;
-import com.trawhile.repository.TimeEntryRepository;
+import com.trawhile.repository.TimeRecordRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,12 +9,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ReportService {
 
-    private final TimeEntryRepository timeEntryRepository;
+    private final TimeRecordRepository timeRecordRepository;
     private final AuthorizationQueries authorizationQueries;
 
-    public ReportService(TimeEntryRepository timeEntryRepository,
+    public ReportService(TimeRecordRepository timeRecordRepository,
                          AuthorizationQueries authorizationQueries) {
-        this.timeEntryRepository = timeEntryRepository;
+        this.timeRecordRepository = timeRecordRepository;
         this.authorizationQueries = authorizationQueries;
     }
 

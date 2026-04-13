@@ -15,7 +15,7 @@
 
 ## Scope
 
-Make the failing cross-cutting tests pass. Complete OAuth2 auth flows, HTTP security headers, CSRF, SSE dispatch, bucket4j rate limiting, Prometheus metrics, and startup config validation.
+Make the failing cross-cutting tests pass. Complete OIDC auth flows, HTTP security headers, CSRF, SSE dispatch, bucket4j rate limiting, Prometheus metrics, and startup config validation.
 
 ## Read first (in order)
 

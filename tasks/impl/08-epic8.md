@@ -14,11 +14,11 @@
 
 ## Scope
 
-Make the failing Epic 8 tests pass. Implement the nightly activity purge job and the node deletion job.
+Make the failing Epic 8 tests pass. Implement the activity purge job on the configured purge schedule and the node deletion job.
 
 ## Read first (in order)
 
-1. `docs/schema.sql` — `purge_jobs`, `time_entries`, `requests`, `nodes`
+1. `docs/schema.sql` — `purge_jobs`, `time_records`, `requests`, `nodes`
 2. `docs/requirements-sr.md` — SR-F050.F01, SR-F050.F02, SR-F050.F03, SR-F050.F04
 3. `docs/architecture.md` — §3 Purge jobs (chunked transactions, startup resume)
 4. `src/main/java/com/trawhile/lifecycle/ActivityPurgeJob.java`
@@ -45,6 +45,6 @@ Make the failing Epic 8 tests pass. Implement the nightly activity purge job and
 - **Chunked transaction**: outer loop is NOT `@Transactional`; each batch calls a `REQUIRES_NEW` method
 - **Cutoff stored, not recomputed**: read `cutoff_date` from `purge_jobs` row on resume — never recompute
 - **SR-F050.F04 bottom-up**: only delete current leaf nodes; loop until none qualify; do NOT try to process the whole tree in one query
-- **SR-F050.F04 `NOT EXISTS` checks**: on the node itself only — subtree is already empty by the time it becomes a leaf
+- **SR-F050.F04 subtree checks**: enforce that no `time_records` or `requests` remain anywhere in the candidate subtree before deletion
 - **Prometheus metrics**: update `trawhile_purge_job_last_completed_seconds`, increment `trawhile_purge_job_deleted_total` and (on exception) `trawhile_purge_job_failures_total`
 - **Security event**: log one `security_events` row per completed job run via `SecurityEventService.log()`

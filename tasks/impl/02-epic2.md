@@ -41,7 +41,7 @@ Make the failing Epic 2 tests pass. Implement node CRUD, logo management, deacti
 ## Watch out for
 
 - **Authorization is recursive**: use Q3 via `AuthorizationService` — not a direct `node_authorizations` lookup
-- **SR-F018.F01**: active time entry on the node itself does NOT block deactivation
+- **SR-F018.F01**: active time record on the node itself does NOT block deactivation
 - **SR-F020.F01 move**: three guards — admin on node, admin on destination, destination not in own subtree; check (c) via recursive CTE
 - **SR-F021.F01 upsert**: `INSERT ... ON CONFLICT (user_id, node_id) DO UPDATE SET authorization = EXCLUDED.authorization`
 - **SR-F022.F01 last-admin**: 409 with code `LAST_ADMIN` when deleting the last `admin` row on a node

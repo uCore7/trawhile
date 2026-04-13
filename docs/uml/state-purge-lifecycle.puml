@@ -12,19 +12,19 @@ state "User" as User_S {
   [*] --> Invited         : System Admin creates invitation
   Invited --> Active      : first OIDC login\n+ GDPR acknowledgement
   Invited --> [*]         : withdrawn by System Admin\nor expired (90 days)
-  Active --> Stub         : anonymised (self-service)\nor removed by System Admin\n[time entries exist]
-  Active --> [*]          : removed by System Admin\n[no time entries]
-  Stub --> [*]            : all own time entries purged\n→ orphan cleanup (activity purge job)
+  Active --> Stub         : anonymised (self-service)\nor removed by System Admin\n[time records or requests exist]
+  Active --> [*]          : removed by System Admin\n[no time records and no requests]
+  Stub --> [*]            : all own time records and requests purged\n→ orphan cleanup (activity purge job)
 }
 
 ' =====================================================================
-' TimeEntry lifecycle
+' TimeRecord lifecycle
 ' =====================================================================
-state "TimeEntry" as TE_S {
+state "TimeRecord" as TE_S {
   state "Active" as TE_Active : editable and deletable by owner
   state "Frozen" as TE_Frozen : immutable — no edit or delete\nstarted_at < NOW() − freeze-offset-years
 
-  [*] --> TE_Active        : created (start tracking,\nretroactive entry, or duplicate)
+  [*] --> TE_Active        : created (start tracking,\nretroactive record, or duplicate)
   TE_Active --> [*]        : deleted by owner
   TE_Active --> TE_Frozen  : time passes;\nstarted_at crosses freeze cutoff
   TE_Frozen --> [*]        : activity purge job\nstarted_at < NOW() − retention-years
@@ -35,12 +35,12 @@ state "TimeEntry" as TE_S {
 ' =====================================================================
 state "Node" as Node_S {
   state "Active" as N_Active : visible; trackable if leaf node
-  state "Deactivated" as N_Deactivated : hidden from tracking;\ntime entries may still reference it
+  state "Deactivated" as N_Deactivated : hidden from tracking;\ntime records may still reference it
 
   [*] --> N_Active             : created as child of another node
   N_Active --> N_Deactivated   : deactivated by Node Admin\n[no active children]
   N_Deactivated --> N_Active   : reactivated by Node Admin
-  N_Deactivated --> [*]        : node deletion job\ndeactivated_at < NOW() − (retention + extra)\nAND subtree has no remaining\ntime entries or requests\n(bottom-up; leaf nodes first)
+  N_Deactivated --> [*]        : node deletion job\ndeactivated_at < NOW() − (retention + extra)\nAND subtree has no remaining\ntime records or requests\n(bottom-up; leaf nodes first)
 }
 
 ' =====================================================================
@@ -50,10 +50,10 @@ note as CrossRef
   Cross-entity dependencies (not enforced by FK — enforced by purge job queries):
 
   User stub → deleted
-    requires: all own time_entries have been purged
+    requires: all own time_records and requests have been purged
 
   Node → deleted
-    requires: all time_entries and requests in subtree have been purged;
+    requires: all time_records and requests in subtree have been purged;
     node deletion job always runs after the activity purge job for the same period
 end note
 

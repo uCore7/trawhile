@@ -1,0 +1,27 @@
+@startuml use-cases-cross-cutting
+title trawhile — Cross-cutting (Epic 10)
+
+left to right direction
+
+actor "Visitor" as Visitor
+actor "User" as User
+
+rectangle "Cross-cutting" {
+    usecase "Use the UI in one of four\nsupported languages\n(UR-F061)" as UC_I18n
+    usecase "See updates reflected live\nwithout manual refresh\n(UR-F068)" as UC_LiveRefresh
+}
+
+Visitor --> UC_I18n
+User --> UC_I18n
+User --> UC_LiveRefresh
+
+note bottom of UC_I18n
+  Browser language selects en, de, fr, or es;
+  fallback is English.
+end note
+
+note bottom of UC_LiveRefresh
+  Driven by SSE after state mutations.
+end note
+
+@enduml

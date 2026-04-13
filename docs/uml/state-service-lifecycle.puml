@@ -44,14 +44,16 @@ ShuttingDown --> [*]
 Running --> Starting : crash / OOM / SIGKILL\n(purge_jobs row stays 'active';\nresumed on next startup)
 
 note right of Failed
-  Causes: invalid IANA timezone,
-  malformed privacy-notice-url,
-  freeze-offset-years > retention-years,
-  no OIDC provider configured
+  Causes include: invalid trawhile property
+  constraint (for example invalid IANA timezone,
+  malformed privacy-notice-url, invalid purge-cron,
+  or freeze-offset-years > retention-years),
+  or no OIDC provider configured
 end note
 
 note right of Running
-  Nightly at 23:59 (company timezone):
+  At the configured purge schedule
+  (company timezone):
   activity purge (SR-F050.F01) →
   node deletion (SR-F050.F03)
   Security event purge: daily (SR-C007.F01)

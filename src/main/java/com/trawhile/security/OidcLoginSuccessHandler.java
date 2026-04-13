@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 
 /**
- * Redirects after successful OAuth2 login.
+ * Redirects after successful OIDC login.
  *
  * Three outcomes, determined by session attributes set in TrawhileOidcUserService.loadUser:
  *
@@ -19,7 +19,7 @@ import java.io.IOException;
  *   (neither)              → returning user; redirect to /
  */
 @Component
-public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
+public class OidcLoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request,

@@ -1,25 +1,25 @@
 package com.trawhile.service;
 
 import com.trawhile.config.TrawhileConfig;
-import com.trawhile.repository.TimeEntryRepository;
+import com.trawhile.repository.TimeRecordRepository;
 import com.trawhile.sse.SseDispatcher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
-public class TimeEntryService {
+public class TimeRecordService {
 
-    private final TimeEntryRepository timeEntryRepository;
+    private final TimeRecordRepository timeRecordRepository;
     private final TrawhileConfig config;
     private final AuthorizationService authorizationService;
     private final SseDispatcher sseDispatcher;
 
-    public TimeEntryService(TimeEntryRepository timeEntryRepository,
-                            TrawhileConfig config,
-                            AuthorizationService authorizationService,
-                            SseDispatcher sseDispatcher) {
-        this.timeEntryRepository = timeEntryRepository;
+    public TimeRecordService(TimeRecordRepository timeRecordRepository,
+                             TrawhileConfig config,
+                             AuthorizationService authorizationService,
+                             SseDispatcher sseDispatcher) {
+        this.timeRecordRepository = timeRecordRepository;
         this.config = config;
         this.authorizationService = authorizationService;
         this.sseDispatcher = sseDispatcher;

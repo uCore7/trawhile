@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * /api/v1/account — profile, OAuth2 provider links, own authorizations, anonymization,
+ * /api/v1/account — profile, OIDC provider links, own authorizations, anonymization,
  * report settings, own MCP token management.
  *
  * Endpoints:

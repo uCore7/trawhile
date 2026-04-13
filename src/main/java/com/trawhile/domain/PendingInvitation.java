@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * Pending invitation. A users row is created at invite time and referenced here.
  * Deleted when the invited user completes GDPR acknowledgement (first login).
- * Auto-purged after 90 days; purge also deletes the linked users row (no time entries exist yet).
+ * Auto-purged after 90 days; purge also deletes the linked users row (no time records or requests exist yet).
  */
 @Table("pending_invitations")
 public record PendingInvitation(

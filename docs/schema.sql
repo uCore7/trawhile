@@ -32,8 +32,8 @@ CREATE TABLE nodes (
 -- ---------------------------------------------------------------------------
 -- Users
 -- users: anchor record; FK target for all historical data.
---   Deleted only when no time_entries reference it (invitation expiry, withdrawal, or
---   anonymization with no history). Otherwise retained as an anonymous stub indefinitely.
+--   Deleted only when no time_records or requests reference it (invitation expiry, withdrawal, or
+--   anonymization with no retained history). Otherwise retained as an anonymous stub indefinitely.
 -- user_profile: personal data; deleted on anonymization (cascades to user_oauth_providers,
 --   quick_access). mcp_tokens reference users directly, are soft-revoked (revoked_at) on
 --   anonymization/removal, and are hard-deleted via ON DELETE CASCADE when the users row
@@ -66,7 +66,7 @@ CREATE TABLE user_oauth_providers (
 -- Pending invitations. A users row is created immediately on invite.
 -- Deleted (along with the users row) when: the user completes first login (GDPR acknowledgement
 -- — user_profile is then created); the invitation is withdrawn by a System Admin; or the
--- invitation expires after 90 days. In all cases no time_entries exist yet at that point.
+-- invitation expires after 90 days. In all cases no time_records or requests exist yet at that point.
 CREATE TABLE pending_invitations (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    UUID        NOT NULL UNIQUE REFERENCES users(id),
@@ -94,24 +94,24 @@ CREATE TABLE node_authorizations (
 );
 
 -- ---------------------------------------------------------------------------
--- Time entries
--- Active entry: ended_at IS NULL. Partial unique index enforces at most one per user.
--- timezone: IANA string captured from browser at tracking start; stored on the entry.
+-- Time records
+-- Active record: ended_at IS NULL. Partial unique index enforces at most one per user.
+-- timezone: IANA string captured from browser at tracking start; stored on the record.
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE time_entries (
+CREATE TABLE time_records (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID        NOT NULL REFERENCES users(id),
   node_id     UUID        NOT NULL REFERENCES nodes(id),
   started_at  TIMESTAMPTZ NOT NULL,
   ended_at    TIMESTAMPTZ,
-  timezone    TEXT        NOT NULL,             -- IANA string from browser; private (discloses coarse location) — protected by per-owner access control on time_entries
+  timezone    TEXT        NOT NULL,             -- IANA string from browser; private (discloses coarse location) — protected by per-owner access control on time_records
   description TEXT,                             -- optional short note by the member
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX time_entries_one_active_per_user
-  ON time_entries (user_id)
+CREATE UNIQUE INDEX time_records_one_active_per_user
+  ON time_records (user_id)
   WHERE ended_at IS NULL;
 
 -- ---------------------------------------------------------------------------

@@ -22,14 +22,17 @@ rectangle trawhile {
     package "Security & Audit" as P7
     package "Data Lifecycle" as P8
     package "MCP Integration" as P9
+    package "Cross-cutting" as P10
 }
 
 Visitor --> P6 : About page
+Visitor --> P10 : login page language
 User --> P3
 User --> P4
 User --> P5
 User --> P6
 User --> P9 : token management
+User --> P10
 NodeAdmin --> P2
 NodeAdmin --> P5
 SysAdmin --> P1
@@ -39,22 +42,35 @@ McpClient --> P9 : MCP server tools
 
 note bottom of P3
   see use-cases-tracking.puml
-  use-cases-reporting.puml
-  use-cases-requests.puml
 end note
 note bottom of P1
   see use-cases-sysadmin.puml
-  use-cases-node-admin.puml
+end note
+note bottom of P2
+  see use-cases-node-admin.puml
+end note
+note bottom of P4
+  see use-cases-reporting.puml
+end note
+note bottom of P5
+  see use-cases-requests.puml
 end note
 note bottom of P6
   see use-cases-account.puml
-  use-cases-security.puml
-  use-cases-mcp.puml
+end note
+note bottom of P7
+  see use-cases-security.puml
+end note
+note bottom of P9
+  see use-cases-mcp.puml
 end note
 note bottom of P8
-  Fully automated background jobs.
-  No UI interaction — configured via
-  system config file (SR-F050.F05).
+  Privacy notice plus automated
+  scrubbing and purge lifecycle.
+  See use-cases-data-lifecycle.puml.
+end note
+note bottom of P10
+  see use-cases-cross-cutting.puml
 end note
 
 @enduml

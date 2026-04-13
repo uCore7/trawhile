@@ -5,7 +5,7 @@ import org.springframework.data.relational.core.mapping.Table;
 
 import java.util.UUID;
 
-/** OAuth2 provider link. subject is the provider's stable user ID, never an email address. */
+/** OIDC provider link. subject is the provider's stable user ID, never an email address. */
 @Table("user_oauth_providers")
 public record UserOauthProvider(
     @Id UUID id,

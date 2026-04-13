@@ -19,7 +19,7 @@ rectangle "MCP Integration" {
         usecase "Revoke any MCP token\n(UR-F057)" as UC_AdminRevoke
     }
     package "MCP Server Tools" {
-        usecase "Query time entries\n(UR-F069)" as UC_McpEntries
+        usecase "Query time records\n(UR-F069)" as UC_McpEntries
         usecase "Query node tree\n(UR-F069)" as UC_McpTree
         usecase "Query tracking status\n(UR-F069)" as UC_McpTracking
         usecase "Query member summaries\n(UR-F069)" as UC_McpSummaries

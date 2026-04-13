@@ -18,7 +18,7 @@ Make the failing Epic 4 tests pass. Implement time reports (summary and detailed
 
 ## Read first (in order)
 
-1. `docs/schema.sql` — `time_entries`, `node_authorizations`; Q1 visible-subtree CTE
+1. `docs/schema.sql` — `time_records`, `node_authorizations`; Q1 visible-subtree CTE
 2. `docs/requirements-sr.md` — SR-F036.F01, SR-F036.F02, SR-F038.F01, SR-F052.F01
 3. `docs/openapi.yaml` — `/reports`, `/reports/export`, `/reports/members` paths
 4. `src/main/java/com/trawhile/config/TrawhileConfig.java` — `timezone()`
@@ -42,7 +42,7 @@ Make the failing Epic 4 tests pass. Implement time reports (summary and detailed
 
 - **Visibility is recursive**: use Q1 from `docs/schema.sql` for the visible-subtree filter
 - **SR-F036.F01 node filter**: when supplied, include all visible nodes in that subtree
-- **SR-F052.F01 granularity**: individual `started_at`/`ended_at` per entry must never appear in member summary responses
+- **SR-F052.F01 granularity**: individual `started_at`/`ended_at` per record must never appear in member summary responses
 - **SR-F052.F01 bucketing**: use company timezone from `TrawhileConfig.timezone()` for interval boundaries
 - **CSV**: prefer `StreamingResponseBody`; set headers before writing
 - **Timezone conversion**: all timestamps stored UTC; convert to company timezone for display

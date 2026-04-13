@@ -21,13 +21,13 @@ state "Ready for Scrubbing" as ReadyForScrubbing {
     ReadyForScrubbing : entry / delete pending_invitations (if exists)
     ReadyForScrubbing : entry / delete user_profile (if exists;\n  cascade: user_oauth_providers, quick_access)
     ReadyForScrubbing : entry / revoke active mcp_tokens
-    ReadyForScrubbing : [users row + time_entries (0..n) remain]
+    ReadyForScrubbing : [users row + time_records (0..n)\n  and requests (0..n) may remain]
 }
 
 note right of ReadyForScrubbing
-  Cleanup is atomic — single transaction (SR-F047.F02).
-  Exits as soon as time_entries = 0.
-  Immediate for pending users (no entries possible).
+  Cleanup is atomic — single transaction (SR-F070.F01).
+  Exits as soon as no time_records or requests remain.
+  Immediate for pending users (no records or requests possible).
   May wait for SR-F050.F02 purge for anonymised users.
 end note
 

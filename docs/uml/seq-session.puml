@@ -11,7 +11,7 @@ database    "PostgreSQL"                    as DB
 == Login ==
 
 User   ->  Browser : click "Login with [Provider]"
-Browser -> Provider : redirect (OAuth2 authorise)
+Browser -> Provider : redirect (OIDC authorise)
 User   ->  Provider : authenticate
 Provider -> Browser : redirect with authorisation code
 Browser -> Spring   : GET /login/oauth2/code/{provider}
@@ -21,28 +21,28 @@ note right : row found → session established\n(cascade guarantees user_profile
 Spring  -> Browser  : 302 + session cookie
 Browser -> Browser  : load main application
 
-Browser -> SSE : GET /sse/events (open stream)
+Browser -> SSE : GET /events (open stream)
 SSE     -> Browser : connection established;\ninitial state pushed
 
 == Work ==
 
 User    -> Browser : start tracking node "Project X"
 Browser -> Spring  : POST /tracking/start  { nodeId }
-Spring  -> DB      : INSERT INTO time_entries\n(user_id, node_id, started_at, ended_at = NULL)
+Spring  -> DB      : INSERT INTO time_records\n(user_id, node_id, started_at, ended_at = NULL)
 Spring  -> SSE     : broadcast tracking-status event
 SSE     -> Browser : tracking-status { node, startedAt }
 Spring  -> Browser : 200 OK
 
 User    -> Browser : stop tracking
 Browser -> Spring  : POST /tracking/stop
-Spring  -> DB      : UPDATE time_entries\nSET ended_at = NOW()\nWHERE user_id = ? AND ended_at IS NULL
+Spring  -> DB      : UPDATE time_records\nSET ended_at = NOW()\nWHERE user_id = ? AND ended_at IS NULL
 Spring  -> SSE     : broadcast tracking-status event
 SSE     -> Browser : tracking-status { null }
 Spring  -> Browser : 200 OK
 
 User    -> Browser : view time report
 Browser -> Spring  : GET /reports?dateFrom=…&dateTo=…
-Spring  -> DB      : SELECT time_entries (filtered,\nauthorization-checked)
+Spring  -> DB      : SELECT time_records (filtered,\nauthorization-checked)
 Spring  -> Browser : 200 OK  [ReportRow]
 
 == Logout ==

@@ -22,7 +22,7 @@ Make the failing Epic 6 tests pass. Implement profile, provider link/unlink, own
 1. `docs/schema.sql` — `user_profile`, `user_oauth_providers`, `node_authorizations`
 2. `docs/requirements-sr.md` — SR-F043.F01, SR-F066.F01, SR-F044.F01, SR-F045.F01, SR-F047.F01, SR-F047.F03, SR-F048.F01
 3. `docs/openapi.yaml` — `/account`, `/account/providers`, `/account/authorizations`, `/account/anonymize`, `/about`
-4. `docs/architecture.md` — §4 OAuth2 flows (provider linking path)
+4. `docs/architecture.md` — §4 OIDC flows (provider linking path)
 5. The failing tests:
    - `src/test/java/com/trawhile/AccountIT.java`
    - `src/test/java/com/trawhile/AboutIT.java`

@@ -6,6 +6,32 @@ Template for how trawhile is built and maintained. Each phase has a status, a ch
 
 ---
 
+## Derived artifacts policy
+
+The process distinguishes between **canonical sources** and **derived artifacts**.
+
+**Canonical sources** are edited directly in chat mode and reviewed as the source of truth:
+- `docs/requirements-ur.md`
+- `docs/requirements-sr.md`
+- `docs/glossary.md`
+- `docs/schema.sql`
+- narrative design documents such as `docs/decisions.md` and `docs/architecture.md`
+
+**Derived artifacts** are regenerated from canonical sources whenever identifiers, terminology, contracts, or epic structure change:
+- `docs/openapi.yaml`
+- Flyway V1 migration
+- scaffold classes/interfaces and placeholder controllers/services
+- `docs/test-plan.md` baseline rows and ID structure
+- `tasks/tests/*.md` and `tasks/impl/*.md` scaffolds
+
+**Rule of preference:** regeneration is preferred over manual patching for derived artifacts. Manual patching is allowed only for small exceptions, generator defects, or deliberate human refinements that are then folded back into the generator logic later.
+
+**Acceptance rule:** generated output is never accepted blindly. Every regeneration step requires human review before it becomes the new baseline.
+
+**UML note:** UML files in `docs/uml/` are not canonical sources and are not treated as fully generated artifacts. They are maintained in chat mode as consistency and communication artifacts derived from the canonical documents, with human judgment deciding what to visualise and how much detail to include.
+
+---
+
 ## Phase 1 — Requirements engineering ✓
 
 **Steps:**
@@ -14,7 +40,7 @@ Template for how trawhile is built and maintained. Each phase has a status, a ch
 3. Write user requirements (URs) in IREB format with goal rationale; include key invariants as a closing section
 4. Derive system requirements (SRs) from URs with full traceability
 5. Design the PostgreSQL schema (`docs/schema.sql`) — evaluate every data field against the GDPR necessity principle before adding it
-6. Author the REST API contract (`docs/openapi.yaml`)
+6. Generate the REST API contract (`docs/openapi.yaml`) from the canonical requirements and schema, then review and refine it as needed
 
 **Conventions:**
 Follow the IREB standard throughout. Produce the typical IREB results: stakeholder analysis, system context, glossary, and a requirements document containing URs and SRs with full traceability. Project-specific notes:
@@ -72,14 +98,15 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 
 **Steps:**
 - Finalise the stack and record the rationale in `docs/decisions.md`
-- Create the Spring Boot project skeleton with all packages and scaffolded controllers/services
-- Write the Flyway V1 migration containing the complete schema (not incremental)
+- Generate the Spring Boot project skeleton from canonical specs, then refine manually where needed
+- Generate the Flyway V1 migration from `docs/schema.sql` as a complete-schema migration (not incremental)
 - Configure Spring Security (OAuth2/OIDC), bucket4j rate limiting, CORS, CSRF, HTTP security headers
 - Set up the CI/CD pipeline (GitHub Actions): build, test, SpotBugs + Find Security Bugs, OWASP Dependency Check, CycloneDX SBOM, Docker image, SSH deploy
 - Write `docs/architecture.md` and `CLAUDE.md`
 
 **Conventions:**
 - `docs/schema.sql` is authoritative; the Flyway V1 migration is generated from it
+- Scaffolds and the Flyway V1 migration are derived artifacts; when schema or contract terminology changes, regenerate first and patch manually only if needed
 - Schema changes go through chat mode and update both `docs/schema.sql` and a new numbered migration file in the same commit — never via agents
 - `@Transactional` on service methods only; never on controllers or repositories
 - Authorization checked via `AuthorizationService` at the top of every service method; no `@PreAuthorize`
@@ -95,11 +122,12 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 **Steps:**
 - For every SR-F and SR-Q, specify at least one happy-path test and one error-path test
 - Assign each test a type: IT (Testcontainers + real DB), UT (plain JUnit 5), SIT (MockMvc, no DB), CT (Angular TestBed), E2E (Playwright)
-- Produce the traceability matrix UR → SR → TE in `docs/test-plan.md`
+- Generate the initial traceability matrix UR → SR → TE in `docs/test-plan.md` from `docs/requirements-sr.md`, then review and enrich it manually
 - Defer frontend tests (CT, E2E) with IDs reserved
 
 **Conventions:**
 - Every SR-F and SR-Q has at least one TE. SR-C entries have no TEs.
+- TE IDs and baseline matrix rows should be generator-produced from SR IDs where possible; test intent, path selection, and edge-case coverage remain a human review responsibility
 - TE IDs are `TE-{SR-id}-{nn}` matching the parent SR exactly (e.g., `TE-F012.F01-01`, `TE-F012.Q01-02`). When an SR is renumbered, its TEs are renumbered to match in the same commit. Retired TEs are replaced by a one-line tombstone row in the test plan table.
 - `@Tag("TE-F012.F01-01")` on every test method for CI filtering and traceability
 
@@ -114,14 +142,15 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 **Steps:**
 - Create `AGENTS.md` as a tool-agnostic entry point
 - Create `tasks/00-base-it.md` specifying the shared test infrastructure
-- For each epic, create `tasks/tests/NN-epicN.md` (test-writer agent brief)
-- For each epic, create `tasks/impl/NN-epicN.md` (implementation agent brief)
+- Generate baseline `tasks/tests/NN-epicN.md` files from the requirements, test plan, and contracts; then review and refine them in chat mode
+- Generate baseline `tasks/impl/NN-epicN.md` files from the requirements, test plan, and contracts; then review and refine them in chat mode
 - Add guardrails to every task file (no git writes, file-path boundaries, no migrations)
 - Add CI boundary check (`.github/workflows/agent-guardrails.yml`)
 
 **Conventions:**
 - Test-writer agents: read spec only; no access to `src/main/`; produce failing tests
 - Implementation agents: read failing tests; no access to `src/test/`; no Flyway migrations; no frontend files
+- Task briefs are derived artifacts; regenerate them when SRs, TEs, contracts, or epic groupings change, then review the result before use
 - Rationale for the two-phase design: `docs/decisions.md`
 
 **Tool:** Chat mode. No agents.

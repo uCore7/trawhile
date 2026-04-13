@@ -62,7 +62,12 @@ else valid invitation
   Spring  -> DB      : COMMIT
 
   Spring  -> Spring  : establish authenticated session
-  Spring  -> Browser : 200 OK { privacyNoticeUrl } + session cookie\n(SR-F060.F02)
+  Spring  -> Browser : 200 OK { privacyNoticeUrl | null } + session cookie\n(SR-F060.F02)
+  note right of Spring
+    privacyNoticeUrl is returned only if configured
+    and the user has at least one effective
+    node authorization after registration.
+  end note
   Browser -> Browser : redirect → main application
 
 end

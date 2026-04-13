@@ -64,7 +64,7 @@ The context boundary separates the relevant environment (neighboring systems and
 | G-3 | Support accurate reporting and CSV export of tracked time |
 | G-4 | Comply strictly with GDPR; collect only data necessary for operation |
 | G-5 | Comply with EU Cyber Resilience Act (CRA) security and transparency requirements |
-| G-6 | Operate securely with no persistent secrets beyond OAuth2 provider credentials |
+| G-6 | Operate securely with minimal credential-management burden |
 
 ---
 
@@ -81,6 +81,9 @@ The context boundary separates the relevant environment (neighboring systems and
 - UR-F008: The System Admin shall be able to remove a user from the company via a guided confirmation wizard. [Goal: G-1, G-4]
 - UR-F009: The System Admin shall be able to manage node authorization assignments of a user across the tree: view all assignments, and grant or revoke authorizations on any node within their scope (same operation as UR-F021/UR-F022, accessed via node picker rather than user picker). [Goal: G-2]
 - UR-F011: The System Admin shall be able to resend a pending invitation, resetting its expiry and generating a fresh mailto: link, without affecting the user record or assigned authorizations. [Goal: G-1]
+
+**Onboarding**
+- UR-F062: The System Admin shall be presented with a prompt to invite members upon login whenever no other members exist; this includes immediately after their first bootstrap login (after GDPR notice acknowledgement). [Goal: G-1]
 
 **System settings**
 - UR-F010: Any User shall be able to view the current system configuration. [Goal: G-1, G-4]
@@ -110,16 +113,16 @@ The context boundary separates the relevant environment (neighboring systems and
 ## Epic 3 — Time tracking
 
 - UR-F024: The User shall be able to view their current tracking status, including the node being tracked, elapsed time, and start time. [Goal: G-1]
-- UR-F025: The User shall be able to view their recent time entry history, with overlapping entries and gaps between consecutive entries visually flagged. [Goal: G-1]
+- UR-F025: The User shall be able to view their recent time record history, with overlapping records and gaps between consecutive records visually flagged. [Goal: G-1]
 - UR-F026: The User shall be able to start tracking a task by navigating the node tree using the node picker widget. [Goal: G-1]
 - UR-F027: The User shall be able to start tracking a task from a personal quick-access list of up to 9 nodes. [Goal: G-1]
 - UR-F028: The User shall be able to switch to a different node atomically, without an explicit stop step. [Goal: G-1]
 - UR-F029: The User shall be able to stop tracking. [Goal: G-1]
 - UR-F030: The User shall be able to add, remove, and reorder nodes in their quick-access list. [Goal: G-1]
-- UR-F031: The User shall be able to create a time entry retroactively for any node they can track, with an optional short description. [Goal: G-1]
-- UR-F032: The User shall be able to edit the node, start time, end time, and description of any of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
-- UR-F033: The User shall be able to delete any of their own time entries, provided the entry is not in a frozen period. [Goal: G-1]
-- UR-F034: The User shall be able to duplicate a time entry, specifying a new start and end time; the description is copied from the original. [Goal: G-1]
+- UR-F031: The User shall be able to create a time record retroactively for any node they can track, with an optional short description. [Goal: G-1]
+- UR-F032: The User shall be able to edit the node, start time, end time, and description of any of their own time records, provided the record is not in a frozen period. [Goal: G-1]
+- UR-F033: The User shall be able to delete any of their own time records, provided the record is not in a frozen period. [Goal: G-1]
+- UR-F034: The User shall be able to duplicate a time record, specifying a new start and end time; the description is copied from the original. [Goal: G-1]
 - UR-F035: *(retired — per-user node colors replaced by company-wide node color/icon/logo set by Node Admins)*
 
 ## Epic 4 — Reporting & export
@@ -127,6 +130,7 @@ The context boundary separates the relevant environment (neighboring systems and
 - UR-F036: The User shall be able to view a time report filtered by date range, user, and node, limited to nodes visible to them. [Goal: G-3]
 - UR-F037: The User shall be able to toggle a time report between summary view, detailed view, and chart view. [Goal: G-3]
 - UR-F038: The User shall be able to export the current report view to CSV. [Goal: G-3]
+- UR-F052: The User shall be able to view the total time tracked by other members on nodes visible to them, aggregated over any full-day interval (daily, weekly, monthly, yearly, year-to-date, month-to-date), with a data quality flag per bucket indicating the presence of overlapping records or gaps, and the ability to filter by that flag; individual time record details shall not be visible. [Goal: G-1, G-4]
 - UR-F063: The User shall be able to view the following chart types in chart view, all respecting the active report filters: (1) time per node (bar or pie); (2) time over period (bar or line, bucketed by time interval); (3) per-member breakdown (stacked bar per time bucket, limited to members visible to the requesting user). [Goal: G-3]
 - UR-F064: The User shall be able to export the current report view — whether a table or a chart — to PDF. [Goal: G-3]
 - UR-F066: The User shall be able to have their report filter settings automatically persisted and restored across sessions and devices. [Goal: G-1]
@@ -141,9 +145,9 @@ The context boundary separates the relevant environment (neighboring systems and
 
 - UR-F043: The User shall be able to view their stored profile information (name). [Goal: G-4]
 - UR-F044: The User shall be able to link an additional configured OIDC provider (Google, Apple, Microsoft Entra ID, or Keycloak) to their account. [Goal: G-1]
-- UR-F045: The User shall be able to unlink an OAuth2 provider from their account, provided at least one other provider remains linked. [Goal: G-1]
+- UR-F045: The User shall be able to unlink an OIDC provider from their account, provided at least one other provider remains linked. [Goal: G-1]
 - UR-F046: The User shall be able to view all their node authorization assignments across the tree. [Goal: G-2]
-- UR-F047: The User shall be able to anonymise their own account via a guided confirmation wizard, replacing all personal data with a placeholder while preserving time entry history. [Goal: G-4]
+- UR-F047: The User shall be able to anonymise their own account via a guided confirmation wizard, replacing all personal data with a placeholder while preserving time record history. [Goal: G-4]
 - UR-F048: Any visitor shall be able to view the About page, including application version, third-party licenses, a downloadable SBOM, a downloadable OpenAPI specification, and a permanent summary of what personal data is stored and how long it is retained. Users with at least one effective node authorization shall additionally see a link to the company Privacy Notice if one has been configured. [Goal: G-4, G-5]
 
 ## Epic 7 — Security & audit
@@ -153,11 +157,7 @@ The context boundary separates the relevant environment (neighboring systems and
 ## Epic 8 — Data lifecycle
 
 - UR-F050: The operator shall be able to configure the data retention period, node retention extra period, and purge schedule. [Goal: G-4, G-5]
-- UR-F052: The User shall be able to view the total time tracked by other members on nodes visible to them, aggregated over any full-day interval (daily, weekly, monthly, yearly, year-to-date, month-to-date), with a data quality flag per bucket indicating the presence of overlapping entries or gaps, and the ability to filter by that flag; individual time entry details shall not be visible. [Goal: G-1, G-4]
 - UR-F060: On first login, the User shall be presented with a summary of what personal data is stored, how long it is retained, and their right to anonymise their account, before accessing any other part of the application. If the sysadmin has configured a Privacy Notice URL and the user has at least one node authorization, a link to it shall also be displayed. [Goal: G-4]
-- UR-F061: All UI text, including GDPR-sensitive screens, shall be rendered in the language derived from the user's browser locale (best match against English, German, French, Spanish; default English). [Goal: G-4]
-- UR-F062: The System Admin shall be presented with a first-run prompt to invite initial members immediately after their first bootstrap login (after GDPR notice acknowledgement). [Goal: G-1]
-- UR-F068: The User shall see live updates across all their open sessions whenever their tracking state, visible node structure, their authorizations, or relevant request status changes. [Goal: G-1]
 - UR-F070: When a user's access is terminated by any means, the system shall atomically clean up all associated active state and personal data records. [Goal: G-4]
 
 ## Epic 9 — MCP integration
@@ -168,7 +168,12 @@ The context boundary separates the relevant environment (neighboring systems and
 - UR-F056: The System Admin shall be able to view all active MCP tokens across all users, including the owning user, label, creation date, and last-used date. [Goal: G-5]
 - UR-F057: The System Admin shall be able to revoke any MCP token regardless of owner. [Goal: G-5]
 - UR-F058: The User shall be guided through the full Claude.ai MCP connection setup within the application, without requiring external documentation. [Goal: G-1]
-- UR-F069: The MCP Client shall be able to query time entries, node tree, tracking status, and member summaries via MCP server tools. [Goal: G-1]
+- UR-F069: The MCP Client shall be able to query time records, node tree, tracking status, and member summaries via MCP server tools. [Goal: G-1]
+
+## Epic 10 — Cross-cutting
+
+- UR-F061: All UI text, including GDPR-sensitive screens, shall be rendered in the language derived from the user's browser locale (best match against English, German, French, Spanish; default English). [Goal: G-4]
+- UR-F068: The User shall see live updates across all their open sessions whenever their tracking state, visible node structure, their authorizations, or relevant request status changes. [Goal: G-1]
 
 ---
 
@@ -203,13 +208,13 @@ Business rules that hold unconditionally across all epics. An agent reviewing or
 
 - At most one active tracking session per user at all times.
 - Tracking only permitted on active leaf nodes (no active children) with at least `track` authorization.
-- A deactivated node may have a running time entry from before deactivation; the entry may complete normally; no new entries may start on it.
-- Time entries before the effective freeze cutoff are immutable; no admin override.
-- Overlapping time entries are flagged but allowed.
+- A deactivated node may have a running time record from before deactivation; the record may complete normally; no new records may start on it.
+- Time records before the effective freeze cutoff are immutable; no admin override.
+- Overlapping time records are flagged but allowed.
 - Cannot deactivate a node with active children.
 - Cannot revoke the last `admin` authorization on any node.
 - Cannot move a node into its own subtree.
-- All timestamps stored in UTC; time entries carry the IANA timezone captured from the browser at tracking start.
+- All timestamps stored in UTC; time records carry the IANA timezone captured from the browser at tracking start.
 - A user must exist before receiving any node authorization.
 - Authorization is derived recursively upward: a grant on an ancestor is effective on all descendants.
 - Only users with `admin` on a node may grant or revoke authorizations on that node or any descendant.
@@ -217,7 +222,7 @@ Business rules that hold unconditionally across all epics. An agent reviewing or
 - Node retention extra period is non-negative.
 - Freeze offset does not exceed the retention period.
 - Node deletion only fires after the corresponding activity purge has completed.
-- Node deletion never fires if the subtree has remaining time entries or requests.
+- Node deletion never fires if the subtree has remaining time records or requests.
 - Both purge jobs are idempotent on restart: an interrupted job resumes from its stored checkpoint.
 - Anonymisation is irreversible; re-registration requires a new invitation and creates a new identity with no link to the anonymised account.
 - Non-trackable nodes remain in a user's quick-access list, annotated with a non-trackable flag.

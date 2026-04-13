@@ -13,14 +13,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Activity purge job — chunked DELETEs in batches of 1000.
- * Triggered daily at 23:59. Also resumes on startup if status = 'active'.
+ * Triggered on the configured purge schedule. Also resumes on startup if status = 'active'.
  *
  * Loop:
- *   DELETE FROM time_entries WHERE started_at < :cutoff LIMIT 1000  → deletedEntries
+ *   DELETE FROM time_records WHERE started_at < :cutoff LIMIT 1000  → deletedRecords
  *   DELETE FROM requests    WHERE created_at  < :cutoff LIMIT 1000  → deletedRequests
  *   UPDATE purge_jobs SET deleted_counts = ..., last_updated_at = NOW()
  *   COMMIT (REQUIRES_NEW)
- *   if deletedEntries + deletedRequests == 0: break
+ *   if deletedRecords + deletedRequests == 0: break
  * SET status = 'idle', completed_at = NOW()
  * COMMIT
  */
@@ -42,7 +42,7 @@ public class ActivityPurgeJob implements PurgeJobCoordinator.Resumable {
         this.securityEventService = securityEventService;
     }
 
-    @Scheduled(cron = "0 59 23 * * *")
+    @Scheduled(cron = "${trawhile.purge-cron:0 59 23 * * *}", zone = "${trawhile.timezone:UTC}")
     public void trigger() {
         // TODO: check if today is a scheduled purge date per company settings
         // If so, set cutoff_date and status = 'active', then run()
@@ -56,7 +56,7 @@ public class ActivityPurgeJob implements PurgeJobCoordinator.Resumable {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int[] deleteBatch(java.time.LocalDate cutoff) {
-        // TODO: DELETE FROM time_entries / requests with LIMIT, return [deletedEntries, deletedRequests]
+        // TODO: DELETE FROM time_records / requests with LIMIT, return [deletedRecords, deletedRequests]
         return new int[]{0, 0};
     }
 }

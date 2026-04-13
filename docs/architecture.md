@@ -35,16 +35,16 @@ Single deployable unit: one Spring Boot JAR + one PostgreSQL instance + one Cadd
 ```
 com.trawhile
   config/
-    SecurityConfig.java        — Spring Security, OAuth2, CSRF, session, headers
+    SecurityConfig.java        — Spring Security, OIDC login, CSRF, session, headers
     SchedulingConfig.java      — @EnableScheduling
     RateLimitConfig.java       — bucket4j beans
     RateLimitFilter.java       — per-IP rate limiting filter; runs before security chain
     JdbcConfig.java            — Spring Data JDBC custom converters (AuthLevel, JSONB)
     TrawhileConfig.java        — @ConfigurationProperties("trawhile"); validated on startup (SR-F050.F05)
-    StartupValidator.java      — ApplicationRunner; validates OAuth provider presence (SR-F065.F01)
+    StartupValidator.java      — ApplicationRunner; validates OIDC provider presence (SR-F065.F01)
   domain/
     Node.java                  — record; maps to nodes table
-    TimeEntry.java
+    TimeRecord.java
     User.java
     UserProfile.java
     NodeAuthorization.java
@@ -55,7 +55,7 @@ com.trawhile
     QuickAccess.java
   repository/
     NodeRepository.java        — Spring Data JDBC CrudRepository
-    TimeEntryRepository.java
+    TimeRecordRepository.java
     UserRepository.java
     UserProfileRepository.java
     NodeAuthorizationRepository.java
@@ -69,7 +69,7 @@ com.trawhile
   service/
     AuthorizationService.java  — thin wrapper over AuthorizationQueries; used by all services
     NodeService.java
-    TimeEntryService.java
+    TimeRecordService.java
     TrackingService.java
     ReportService.java
     UserService.java
@@ -88,7 +88,7 @@ com.trawhile
     SseEvent.java              — event type enum + payload wrapper
     SseDispatcher.java         — pushes typed events to relevant sessions
   security/
-    OAuth2LoginSuccessHandler.java   — handles login vs. provider-linking flows
+    OidcLoginSuccessHandler.java     — handles login vs. provider-linking flows
     TrawhileOidcUserService.java     — matches pending_invitations, stores session data for GDPR flow
     AuthorizationCheckFilter.java    — not used; checks are in service layer
   web/
@@ -100,7 +100,7 @@ com.trawhile
     AuthorizationController.java
     RequestController.java
     TrackingController.java
-    TimeEntryController.java
+    TimeRecordController.java
     QuickAccessController.java
     ReportController.java
     AccountController.java
@@ -172,18 +172,18 @@ public SseEmitter register(UUID userId) {
 
 ### 3. Purge jobs — @Scheduled + chunked transactions
 
-Two job classes, each driven by a daily `@Scheduled(cron = "0 59 23 * * *")` check.
+Two job classes, each driven by the configured purge schedule (`trawhile.purge-cron`) in the company timezone.
 
 **Startup resume**: `PurgeJobCoordinator` implements `ApplicationRunner`. On startup it reads both `purge_jobs` rows. If either has `status = 'active'`, it delegates to the corresponding job to resume. The job reads the stored `cutoff_date` — no recomputation.
 
 **Activity purge** (chunked):
 ```
 loop:
-  DELETE FROM time_entries WHERE started_at < :cutoff LIMIT 1000  → deletedEntries
+  DELETE FROM time_records WHERE started_at < :cutoff LIMIT 1000  → deletedRecords
   DELETE FROM requests WHERE created_at < :cutoff LIMIT 1000      → deletedRequests
   UPDATE purge_jobs SET deleted_counts = ..., last_updated_at = NOW() WHERE job_type = 'activity'
   COMMIT
-  if deletedEntries + deletedRequests == 0: break
+  if deletedRecords + deletedRequests == 0: break
 SET status = 'idle', completed_at = NOW()
 COMMIT
 ```
@@ -195,8 +195,8 @@ Each iteration is its own `@Transactional(propagation = REQUIRES_NEW)` call so t
 loop:
   find deactivated nodes WHERE deactivated_at < :cutoff
     AND id NOT IN (SELECT parent_id FROM nodes WHERE parent_id IS NOT NULL)  -- leaf only
-    AND NOT EXISTS (SELECT 1 FROM time_entries WHERE node_id = id)
-    AND NOT EXISTS (SELECT 1 FROM requests WHERE node_id = id)
+    AND subtree has no remaining time_records
+    AND subtree has no remaining requests
   LIMIT 100
   if none found: break
   DELETE FROM nodes WHERE id IN (...)  -- cascades to node_authorizations
@@ -206,15 +206,15 @@ SET status = 'idle', completed_at = NOW()
 COMMIT
 ```
 
-The `NOT EXISTS` checks are on the node itself, not the full subtree. This is correct because deletion is bottom-up: a node only becomes a leaf once all its children have been deleted in earlier iterations — by that point the subtree is already gone, so a subtree scan would be redundant.
+Because deletion is bottom-up, only leaf nodes are considered in each iteration. The implementation still enforces the SR-F050.F04 requirement that no `time_records` or `requests` remain anywhere in the candidate node's subtree before deletion proceeds.
 
 Each iteration is also `REQUIRES_NEW`. The outer coordinator loop is not transactional.
 
-### 4. OAuth2 flows — login vs. provider linking
+### 4. OIDC flows — login vs. provider linking
 
-Spring Security handles the OAuth2 callback at `/login/oauth2/code/{provider}`.
+Spring Security handles the OIDC login callback at `/login/oauth2/code/{provider}`.
 
-`TrawhileOidcUserService` (extends `DefaultOAuth2UserService`) is called for every OAuth2 callback. It implements the branching logic:
+`TrawhileOidcUserService` (extends `DefaultOAuth2UserService`) is called for every OIDC callback. It implements the branching logic:
 
 ```
 if HttpSession has attribute "LINKING_PROVIDER" = true:
@@ -222,6 +222,8 @@ if HttpSession has attribute "LINKING_PROVIDER" = true:
     → clear session attribute
     → redirect to /account
 else:
+    → check bootstrap condition (SR-F001.F01)
+        → if matched: store bootstrap session data, redirect to /gdpr-notice
     → check user_oauth_providers for provider+subject
     → if found: create session (cascade guarantees user_profile exists), redirect to /
     → if not found: check pending_invitations by email
@@ -229,9 +231,9 @@ else:
         → if not found: redirect /login?error=not_invited
 ```
 
-The session attribute `LINKING_PROVIDER` is set before redirecting to `/oauth2/authorization/{provider}` from the account page. Spring's OAuth2 filter picks it up on the callback.
+The session attribute `LINKING_PROVIDER` is set before redirecting to `/oauth2/authorization/{provider}` from the account page. Spring's OIDC/OAuth2 login filter picks it up on the callback.
 
-**Bootstrap detection**: `OAuth2UserService` checks for the SR-F001.F01 condition after creating the user row. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches, inserts `node_authorizations` for root within the same transaction.
+**Bootstrap detection**: `TrawhileOidcUserService` checks for the SR-F001.F01 condition before invitation matching completes. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches the provider-returned email, it stores bootstrap registration data in the HTTP session and redirects to `/gdpr-notice`; the `users` row, `user_profile`, `user_oauth_providers`, and root `node_authorizations` row are inserted later as part of the SR-F060.F02 transaction.
 
 ### 5. Authorization checks — service layer
 
@@ -261,12 +263,12 @@ Single `@ControllerAdvice` (`GlobalExceptionHandler`) maps exceptions to `Proble
 | `ValidationException` | 422 |
 | `AuthenticationException` | 401 |
 
-All exceptions carry a `code` string (e.g. `LAST_ADMIN`, `FROZEN_ENTRY`, `NODE_HAS_CHILDREN`) matching the `Problem.code` field in the OpenAPI spec.
+All exceptions carry a `code` string (e.g. `LAST_ADMIN`, `FROZEN_RECORD`, `NODE_HAS_CHILDREN`) matching the `Problem.code` field in the OpenAPI spec.
 
 ### 7. Spring Security configuration
 
 ```
-- OAuth2 login: enabled, custom OAuth2UserService + success handler
+- OIDC login: enabled, custom OIDC user service + success handler
 - CSRF: enabled, SameSite=Strict cookie
 - Session: always (HttpSessionCreationPolicy.ALWAYS)
 - No session timeout (server.servlet.session.timeout = 0 in application.yml)
@@ -319,17 +321,18 @@ src/app/
       settings.service.ts
       node.service.ts
       tracking.service.ts
-      time-entry.service.ts
+      time-record.service.ts
       report.service.ts
       account.service.ts
       ...
   features/
-    tracking/                  — Epic 3: tracking widget, quick-access, time entry list
+    tracking/                  — Epic 3: tracking widget, quick-access, time record list
     nodes/                     — Epic 2: tree navigation, node admin
     reports/                   — Epic 4
     requests/                  — Epic 5: per-node request button + history
     account/                   — Epic 6
     admin/                     — Epics 1, 7, 8: user management, settings, security log
+    cross-cutting/             — Epic 10: i18n and live-update integration concerns
   shared/
     components/
       node-picker/             — node picker widget (reused in tracking, reports, requests)
@@ -366,7 +369,7 @@ No NgRx or other state library. Angular signals + services with `signal()` / `co
 
 1. `AuthGuard` checks a `/api/v1/account` call on app init. If 401 → navigate to `/login`.
 2. `/login` page shows a sign-in button for each configured OIDC provider (Google, Apple, Microsoft Entra ID, Keycloak) pointing to `/oauth2/authorization/{registrationId}`. Only providers with a configured client-id are rendered.
-3. Spring redirects back after OAuth2; session cookie is set; app navigates to `/`.
+3. Spring redirects back after OIDC login; session cookie is set; app navigates to `/`.
 4. `csrf.interceptor.ts` reads the `XSRF-TOKEN` cookie on every mutating request.
 
 ### Build and serving

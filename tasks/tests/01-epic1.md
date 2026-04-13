@@ -16,7 +16,7 @@ You are a **test writer**. Your job is to write failing tests derived from the s
 ## Read (in order)
 
 1. `docs/schema.sql` — `users`, `pending_invitations`, `user_profile`, `user_oauth_providers`, `node_authorizations`, `mcp_tokens` tables and FK/cascade rules
-2. `docs/requirements-sr.md` — SR-F001.F01, SR-C006.C01, SR-F004.F01, SR-F005.F01, SR-F006.F01, SR-F011.F01, SR-F060.F01, SR-F007.F01, SR-C010.C01, SR-F047.F02, SR-F008.F01, SR-F009.F01, SR-F010.F01
+2. `docs/requirements-sr.md` — SR-F001.F01, SR-C006.C01, SR-F004.F01, SR-F005.F01, SR-F006.F01, SR-F011.F01, SR-F060.F01, SR-F007.F01, SR-C010.C01, SR-F070.F01, SR-F008.F01, SR-F009.F01, SR-F010.F01
 3. `docs/openapi.yaml` — `/users`, `/invitations`, `/auth/gdpr-notice`, `/settings` paths; exact request/response shapes
 4. `docs/test-plan.md` — TE-F001.F01-* through TE-F010.F01-*, TE-F067.F01-*, TE-F060.F02-*, TE-C002.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
@@ -32,7 +32,7 @@ src/test/java/com/trawhile/
   UserManagementIT.java     — TE-F004.F01-01, TE-F008.F01-01, TE-F009.F01-01
   InvitationIT.java         — TE-F005.F01-01, TE-F006.F01-01, TE-F011.F01-01,
                                TE-F060.F01-01, TE-F007.F01-01, TE-C010.C01-01
-  UserScrubbingIT.java      — TE-F047.F02-01, TE-F047.F02-02, TE-F047.F02-03
+  UserScrubbingIT.java      — TE-F070.F01-01, TE-F070.F01-02, TE-F070.F01-03
   AuthFlowIT.java           — TE-F067.F01-01, TE-F060.F02-01, TE-F060.F02-02, TE-C002.F01-01
   SettingsIT.java           — TE-F010.F01-01
 ```
@@ -59,10 +59,10 @@ src/test/java/com/trawhile/
 | TE-F060.F01-01 | Simulate OIDC callback where email matches a `pending_invitations` row: session has `PENDING_GDPR`; no new `user_profile`, `user_oauth_providers`, or `users` row written |
 | TE-F007.F01-01 | `DELETE /api/v1/invitations/{id}` as admin: `pending_invitations` row deleted; `node_authorizations` for that user deleted; 403 for non-admin |
 | TE-C010.C01-01 | Insert `pending_invitations` row with `expires_at = NOW() - INTERVAL '1 day'`; call `UserService.expireInvitations()`; `pending_invitations` row gone, `node_authorizations` for that user deleted |
-| TE-F047.F02-01 | User has an active `time_entries` row; trigger scrubbing; `ended_at` set on active entry; `user_profile` deleted; `users` row retained |
-| TE-F047.F02-02 | User has no `time_entries` and no `requests`; trigger scrubbing; `users` row deleted |
-| TE-F047.F02-03 | User has non-revoked `mcp_tokens`; trigger scrubbing; all tokens have `revoked_at IS NOT NULL` |
-| TE-F008.F01-01 | `POST /api/v1/users/{id}/remove` as admin: SR-F047.F02 state applied; 403 for non-admin |
+| TE-F070.F01-01 | User has an active `time_records` row; trigger scrubbing; `ended_at` set on active record; `user_profile` deleted; `users` row retained |
+| TE-F070.F01-02 | User has no `time_records` and no `requests`; trigger scrubbing; `users` row deleted |
+| TE-F070.F01-03 | User has non-revoked `mcp_tokens`; trigger scrubbing; all tokens have `revoked_at IS NOT NULL` |
+| TE-F008.F01-01 | `POST /api/v1/users/{id}/remove` as admin: SR-F070.F01 state applied; 403 for non-admin |
 | TE-F009.F01-01 | `GET /api/v1/users/{id}/authorizations` as admin: each entry has `nodePath` array from root to granted node; 403 for non-admin |
 | TE-F010.F01-01 | `GET /api/v1/settings` as authenticated user: response has `name`, `timezone`, `freezeOffsetYears`, `effectiveFreezeCutoff`, `retentionYears`, `nodeRetentionExtraYears`; 401 unauthenticated |
 | TE-F067.F01-01 | OIDC callback for existing `user_oauth_providers` row: authenticated session established; redirect to `/` |

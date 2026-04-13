@@ -1,6 +1,6 @@
 package com.trawhile.config;
 
-import com.trawhile.security.OAuth2LoginSuccessHandler;
+import com.trawhile.security.OidcLoginSuccessHandler;
 import com.trawhile.security.TrawhileOidcUserService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,10 +19,10 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 public class SecurityConfig {
 
     private final TrawhileOidcUserService oidcUserService;
-    private final OAuth2LoginSuccessHandler loginSuccessHandler;
+    private final OidcLoginSuccessHandler loginSuccessHandler;
 
     public SecurityConfig(TrawhileOidcUserService oidcUserService,
-                          OAuth2LoginSuccessHandler loginSuccessHandler) {
+                          OidcLoginSuccessHandler loginSuccessHandler) {
         this.oidcUserService = oidcUserService;
         this.loginSuccessHandler = loginSuccessHandler;
     }

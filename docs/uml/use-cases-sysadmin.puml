@@ -18,8 +18,10 @@ rectangle "System Administration" {
         usecase "Remove user\n(UR-F008)" as UC_RemoveUser
         usecase "Manage user authorization\nassignments across tree\n(UR-F009)" as UC_ManageUserAuth
     }
+    package "Onboarding" {
+        usecase "Invite-members prompt when\nno other members exist\n(UR-F062)" as UC_FirstRunPrompt
+    }
     package "System Settings" {
-        usecase "First-run member invite prompt\n(UR-F062)" as UC_FirstRunPrompt
         usecase "View system settings\n(read-only, all users)\n(UR-F010)" as UC_ViewSettings
     }
     package "Observability" {
@@ -41,6 +43,11 @@ User --> UC_ViewSettings
 note bottom of UC_ViewSettings
   Config values are set via application.yml
   at deployment; not editable via the UI.
+end note
+
+note bottom of UC_FirstRunPrompt
+  Presented on login whenever no other
+  members exist yet.
 end note
 
 @enduml

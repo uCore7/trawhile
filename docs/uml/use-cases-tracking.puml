@@ -13,12 +13,12 @@ rectangle "Time Tracking" {
         usecase "Switch node (atomic)\n(UR-F028)" as UC_Switch
         usecase "Stop tracking\n(UR-F029)" as UC_Stop
     }
-    package "Time Entry Management" {
-        usecase "View entry history\n(overlaps & gaps flagged)\n(UR-F025)" as UC_History
-        usecase "Create retroactive entry\n(UR-F031)" as UC_CreateEntry
-        usecase "Edit time entry\n(UR-F032)" as UC_EditEntry
-        usecase "Delete time entry\n(UR-F033)" as UC_DeleteEntry
-        usecase "Duplicate time entry\n(UR-F034)" as UC_DuplicateEntry
+    package "Time Record Management" {
+        usecase "View record history\n(overlaps & gaps flagged)\n(UR-F025)" as UC_History
+        usecase "Create retroactive record\n(UR-F031)" as UC_CreateEntry
+        usecase "Edit time record\n(UR-F032)" as UC_EditEntry
+        usecase "Delete time record\n(UR-F033)" as UC_DeleteEntry
+        usecase "Duplicate time record\n(UR-F034)" as UC_DuplicateEntry
     }
     package "Quick-Access" {
         usecase "Add / remove / reorder\nnodes in quick-access\n(UR-F030)" as UC_QuickAccess

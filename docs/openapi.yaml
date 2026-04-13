@@ -35,7 +35,7 @@ tags:
   - name: authorizations
   - name: requests
   - name: tracking
-  - name: time-entries
+  - name: time-records
   - name: quick-access
   - name: reports
   - name: account
@@ -244,7 +244,7 @@ components:
         retentionYears:
           type: integer
           minimum: 2
-          description: Activity entries and requests older than this are permanently deleted on the next purge
+          description: Activity records and requests older than this are permanently deleted on the next purge
         nodeRetentionExtraYears:
           type: integer
           minimum: 0
@@ -253,7 +253,7 @@ components:
           type: [string, 'null']
           description: HTTPS URL to the company Privacy Notice; shown to authenticated users with at least one effective node authorization
 
-    TimeEntry:
+    TimeRecord:
       type: object
       required: [id, userId, nodeId, nodePath, startedAt, timezone, createdAt, overlapping, hasGapBefore]
       properties:
@@ -276,7 +276,7 @@ components:
         endedAt:
           type: [string, 'null']
           format: date-time
-          description: Null if this is the currently active entry
+          description: Null if this is the currently active record
         timezone:
           type: string
           description: IANA timezone captured from browser at tracking start
@@ -290,7 +290,7 @@ components:
           type: boolean
         hasGapBefore:
           type: boolean
-          description: True if there is untracked time between the previous entry's endedAt and this entry's startedAt
+          description: True if there is untracked time between the previous record's endedAt and this record's startedAt
 
     TrackingStatus:
       type: object
@@ -298,7 +298,7 @@ components:
       properties:
         active:
           type: boolean
-        entryId:
+        recordId:
           type: [string, 'null']
           format: uuid
         nodeId:
@@ -392,7 +392,7 @@ components:
           type: boolean
         hasGapBefore:
           type: boolean
-          description: True if there is untracked time between the previous entry's endedAt and this entry's startedAt
+          description: True if there is untracked time between the previous record's endedAt and this record's startedAt
 
     Report:
       type: object
@@ -426,7 +426,7 @@ components:
           type: integer
         hasDataQualityIssues:
           type: boolean
-          description: True if the member's entries for this period contain overlaps or gaps
+          description: True if the member's records for this period contain overlaps or gaps
 
     MemberSummary:
       type: object
@@ -633,7 +633,7 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Conflict:
-      description: Business rule violation (e.g. last admin, frozen entry, full quick-access)
+      description: Business rule violation (e.g. last admin, frozen record, full quick-access)
       content:
         application/json:
           schema:
@@ -702,10 +702,12 @@ paths:
       operationId: acknowledgeGdprNotice
       description: |
         Called after the user reads the GDPR notice on first login. Reads pending registration
-        data from the HTTP session (stored during OAuth2 callback per SR-F060.F01) and executes the
+        data from the HTTP session (stored during OIDC callback per SR-F060.F01) and executes the
         account creation transaction: inserts user_profile, user_oauth_providers, deletes
-        pending_invitations. Establishes an authenticated session. Returns privacy_notice_url if
-        configured. Returns 400 if no pending registration data is in the session. SR-F060.F02.
+        pending_invitations. Establishes an authenticated session. Returns privacyNoticeUrl only
+        if configured and the user has at least one effective node authorization after registration;
+        otherwise returns null. Returns 400 if no pending registration data is in the session.
+        SR-F060.F02.
       responses:
         '200':
           description: Registration complete
@@ -775,9 +777,9 @@ paths:
       operationId: removeUser
       description: |
         Requires System Admin. In one transaction: stops active tracking, revokes active MCP
-        tokens, deletes all node authorizations, deletes user_profile (cascades to oauth
-        providers, quick_access). If the user has time entries, retains the users row as an
-        anonymous stub; otherwise deletes it. SR-F008.F01.
+        tokens, deletes all node authorizations, deletes user_profile (cascades to OIDC
+        providers, quick_access). If the user has time records or requests, retains the users row
+        as an anonymous stub; otherwise deletes it. SR-F008.F01.
       parameters:
         - name: userId
           in: path
@@ -1242,7 +1244,7 @@ paths:
       operationId: deactivateNode
       description: |
         Requires effective admin on node or ancestor. Blocked if active children exist. An active
-        time entry on the node itself does not block deactivation — the running entry may complete
+        time record on the node itself does not block deactivation — the running record may complete
         normally. Sets deactivated_at = NOW(). SR-F018.F01.
       parameters:
         - name: nodeId
@@ -1559,7 +1561,7 @@ paths:
       tags: [tracking]
       summary: Get current tracking status
       operationId: getTrackingStatus
-      description: Returns active time entry with elapsed seconds, or empty state. SR-F024.F01.
+      description: Returns the active time record with elapsed seconds, or an empty state. SR-F024.F01.
       responses:
         '200':
           description: Tracking status
@@ -1573,10 +1575,10 @@ paths:
   /tracking/history:
     get:
       tags: [tracking]
-      summary: Recent time entry history
+      summary: Recent time record history
       operationId: getTrackingHistory
       description: |
-        Returns recent time entries for the authenticated user, descending startedAt, with overlap
+        Returns recent time records for the authenticated user, descending startedAt, with overlap
         and gap flags. SR-F025.F01.
       parameters:
         - name: limit
@@ -1592,7 +1594,7 @@ paths:
             default: 0
       responses:
         '200':
-          description: Paginated time entries
+          description: Paginated time records
           content:
             application/json:
               schema:
@@ -1602,7 +1604,7 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/TimeEntry'
+                      $ref: '#/components/schemas/TimeRecord'
                   total:
                     type: integer
         '401':
@@ -1614,7 +1616,7 @@ paths:
       summary: Start or switch tracking
       operationId: startTracking
       description: |
-        Starts tracking on the target node. If already tracking, atomically stops current entry
+        Starts tracking on the target node. If already tracking, atomically stops the current record
         and starts new one (switch). Node must be active, have no active children, and user must
         have at least track authorization. Client must supply IANA timezone. SR-F026.F01/SR-F028.F01.
       requestBody:
@@ -1667,14 +1669,14 @@ paths:
           $ref: '#/components/responses/Conflict'
 
   # ---------------------------------------------------------------------------
-  # Time entries (manual / retroactive management)
+  # Time records (manual / retroactive management)
   # ---------------------------------------------------------------------------
 
-  /time-entries:
+  /time-records:
     post:
-      tags: [time-entries]
-      summary: Create retroactive time entry
-      operationId: createTimeEntry
+      tags: [time-records]
+      summary: Create retroactive time record
+      operationId: createTimeRecord
       description: |
         Node must be active, have no active children, and user must have at least track
         authorization. startedAt must be before endedAt. SR-F031.F01.
@@ -1702,11 +1704,11 @@ paths:
                   description: Optional short note
       responses:
         '201':
-          description: Created time entry
+          description: Created time record
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TimeEntry'
+                $ref: '#/components/schemas/TimeRecord'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1716,17 +1718,19 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
-  /time-entries/{entryId}:
+  /time-records/{recordId}:
     put:
-      tags: [time-entries]
-      summary: Edit time entry
-      operationId: updateTimeEntry
+      tags: [time-records]
+      summary: Edit time record
+      operationId: updateTimeRecord
       description: |
-        All fields optional; omitted fields unchanged. Blocked if startedAt is before the effective freeze cutoff.
-        If nodeId changes, the new node must satisfy the same constraints as tracking start.
+        All fields optional; omitted fields unchanged. Blocked if the effective updated startedAt is before
+        the effective freeze cutoff, or if the effective updated endedAt is non-null and startedAt is not
+        earlier than endedAt. If nodeId changes, the new node must be active, must not have any active
+        child, and the caller must have track authorization on it.
         SR-F032.F01.
       parameters:
-        - name: entryId
+        - name: recordId
           in: path
           required: true
           schema:
@@ -1753,11 +1757,11 @@ paths:
                   description: Optional short note; null to clear
       responses:
         '200':
-          description: Updated entry
+          description: Updated time record
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TimeEntry'
+                $ref: '#/components/schemas/TimeRecord'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1769,12 +1773,12 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
     delete:
-      tags: [time-entries]
-      summary: Delete time entry
-      operationId: deleteTimeEntry
+      tags: [time-records]
+      summary: Delete time record
+      operationId: deleteTimeRecord
       description: Blocked if startedAt is before the effective freeze cutoff. SR-F033.F01.
       parameters:
-        - name: entryId
+        - name: recordId
           in: path
           required: true
           schema:
@@ -1792,16 +1796,16 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
-  /time-entries/{entryId}/duplicate:
+  /time-records/{recordId}/duplicate:
     post:
-      tags: [time-entries]
-      summary: Duplicate time entry
-      operationId: duplicateTimeEntry
+      tags: [time-records]
+      summary: Duplicate time record
+      operationId: duplicateTimeRecord
       description: |
-        Creates a new entry from an existing one with a new time range. Description is copied
+        Creates a new record from an existing one with a new time range. Description is copied
         from the original. SR-F034.F01.
       parameters:
-        - name: entryId
+        - name: recordId
           in: path
           required: true
           schema:
@@ -1823,11 +1827,11 @@ paths:
                   format: date-time
       responses:
         '201':
-          description: Duplicated entry
+          description: Duplicated time record
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TimeEntry'
+                $ref: '#/components/schemas/TimeRecord'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1946,7 +1950,7 @@ paths:
       operationId: getReport
       description: |
         Filtered to nodes visible to requesting user. When nodeId is supplied, includes all
-        entries for the node and its visible subtree. All timestamps in company timezone. SR-F036.F01/
+        records for the node and its visible subtree. All timestamps in company timezone. SR-F036.F01/
         SR-F036.F02.
       parameters:
         - name: mode
@@ -2038,8 +2042,8 @@ paths:
       operationId: getMemberSummaries
       description: |
         Returns per-member aggregated totals on nodes visible to the requesting user. Individual
-        time entry details are never exposed — only the total per bucket. Each bucket carries a
-        hasDataQualityIssues flag (true if the member's entries for that bucket contain overlaps
+        time record details are never exposed — only the total per bucket. Each bucket carries a
+        hasDataQualityIssues flag (true if the member's records for that bucket contain overlaps
         or gaps). Filterable by that flag. SR-F052.F01.
       parameters:
         - name: interval
@@ -2070,7 +2074,7 @@ paths:
           in: query
           schema:
             type: boolean
-            description: Filter to members that have at least one bucket with quality issues; omit for all
+            description: Filter returned bucket rows by their data-quality flag; omit for all
       responses:
         '200':
           description: Member summaries
@@ -2094,7 +2098,7 @@ paths:
       tags: [account]
       summary: Get own profile
       operationId: getProfile
-      description: Returns stored name and linked OAuth2 providers. SR-F043.F01.
+      description: Returns stored name and linked OIDC providers. SR-F043.F01.
       responses:
         '200':
           description: Profile
@@ -2164,12 +2168,12 @@ paths:
   /account/providers:
     post:
       tags: [account]
-      summary: Link additional OAuth2 provider
+      summary: Link additional OIDC provider
       operationId: linkProvider
       description: |
-        Initiates OAuth2 linking flow for an additional provider. In practice, the client
+        Initiates OIDC linking flow for an additional provider. In practice, the client
         redirects to /oauth2/authorization/{provider} with a linking flag. This endpoint
-        records the completed link after the OAuth2 callback. SR-F044.F01.
+        records the completed link after the OIDC callback. SR-F044.F01.
       requestBody:
         required: true
         content:
@@ -2192,7 +2196,7 @@ paths:
   /account/providers/{provider}:
     delete:
       tags: [account]
-      summary: Unlink OAuth2 provider
+      summary: Unlink OIDC provider
       operationId: unlinkProvider
       description: Blocked if only one provider remains linked. SR-F045.F01.
       parameters:
@@ -2217,8 +2221,9 @@ paths:
       operationId: anonymizeAccount
       description: |
         Irreversible. Stops active tracking, revokes all MCP tokens, removes all node
-        authorizations, and deletes personal data. Time entries are retained anonymously. Session
-        is invalidated. Re-registration requires a new invitation and creates a new identity.
+        authorizations, and deletes personal data. Time records and requests may be retained
+        anonymously until the purge lifecycle removes them. Session is invalidated. Re-registration
+        requires a new invitation and creates a new identity.
         SR-F047.F01.
       responses:
         '204':

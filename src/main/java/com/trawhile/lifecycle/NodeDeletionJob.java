@@ -13,21 +13,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Node deletion job — iterative bottom-up loop, batches of 100.
- * Fires one month after each activity purge (Jan 31, etc.).
+ * Runs after each scheduled activity purge completes.
  *
  * Loop:
  *   Find deactivated nodes WHERE deactivated_at < :cutoff
  *     AND id NOT IN (SELECT parent_id FROM nodes WHERE parent_id IS NOT NULL)  -- leaf only
- *     AND NOT EXISTS (SELECT 1 FROM time_entries WHERE node_id = id)
- *     AND NOT EXISTS (SELECT 1 FROM requests WHERE node_id = id)
+ *     AND subtree has no remaining time_records
+ *     AND subtree has no remaining requests
  *   LIMIT 100
  *   if none found: break
  *   DELETE FROM nodes WHERE id IN (...)  -- cascades to node_authorizations
  *   UPDATE purge_jobs SET deleted_counts = ...
  *   COMMIT (REQUIRES_NEW)
  *
- * The NOT EXISTS checks are on the node itself (not subtree) because deletion is bottom-up:
- * by the time a node becomes a leaf, its entire subtree has already been deleted.
+ * Deletion is bottom-up and only considers current leaf nodes, but the implementation must still
+ * enforce that no time_records or requests remain anywhere in the candidate subtree.
  */
 @Component
 public class NodeDeletionJob implements PurgeJobCoordinator.Resumable {
@@ -47,10 +47,10 @@ public class NodeDeletionJob implements PurgeJobCoordinator.Resumable {
         this.securityEventService = securityEventService;
     }
 
-    @Scheduled(cron = "0 59 23 * * *")
+    @Scheduled(cron = "${trawhile.purge-cron:0 59 23 * * *}", zone = "${trawhile.timezone:UTC}")
     public void trigger() {
-        // TODO: check if today is a scheduled node deletion date (Jan 31, etc.)
-        // If so, set cutoff_date and status = 'active', then run()
+        // TODO: check whether the activity purge for the configured schedule completed
+        // and then set cutoff_date and status = 'active' before running
     }
 
     @Override

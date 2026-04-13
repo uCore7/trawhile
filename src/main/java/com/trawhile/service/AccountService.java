@@ -36,7 +36,7 @@ public class AccountService {
     // TODO: implement SR-F043.F01 — getProfile (user profile + linked providers + own authorizations + last report settings)
     // TODO: implement SR-F044.F01 — linkProvider
     // TODO: implement SR-F045.F01 — unlinkProvider (blocked if only one provider)
-    // TODO: implement SR-F047.F01 — anonymizeAccount (delegates to UserService.scrubUser() for SR-F047.F02)
+    // TODO: implement SR-F047.F01 — anonymizeAccount (delegates to UserService.scrubUser() for SR-F070.F01)
     // TODO: implement SR-F066.F01 — saveReportSettings (persist last_report_settings JSONB)
     // TODO: implement SR-F060.F02 — completeRegistration (inserts user_profile + user_oauth_providers, deletes pending_invitations by id)
 }

@@ -32,11 +32,12 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE-F060.F01-01 | SR-F060.F01 | UR-F060 | IT | `AuthFlowIT` | `oidcCallback_matchingPendingInvitation_storesSessionNoDatabaseWrite` — session contains `pending_invitations.id`, `user_id`, `provider`, `subject`, `name`; no new DB rows | `oidcCallback_expiredInvitation_redirectsToNotInvited` |
 | TE-F007.F01-01 | SR-F007.F01 | UR-F007 | IT | `InvitationIT` | `withdrawInvitation_triggersScrubbingState` — `pending_invitations` row deleted, `node_authorizations` deleted, stub retained when time entries exist | `withdrawInvitation_nonAdmin_returns403` |
 | TE-C010.C01-01 | SR-C010.C01 | UR-C010 | IT | `InvitationIT` | `expireInvitations_expiredRows_triggersScrubbingForEach` — rows with `expires_at` in the past transition to scrubbing state after `UserService.expireInvitations()` | — |
-| TE-F047.F02-01 | SR-F047.F02 | UR-F070 | IT | `UserScrubbingIT` | `scrubUser_withTimeEntries_endsActiveEntry_deletesProfile_retainsStub` — active entry gets `ended_at`; `node_authorizations` deleted; `user_profile` deleted; `users` row retained | — |
-| TE-F047.F02-02 | SR-F047.F02 | UR-F070 | IT | `UserScrubbingIT` | `scrubUser_noTimeEntries_noRequests_deletesUsersRow` | — |
-| TE-F047.F02-03 | SR-F047.F02 | UR-F070 | IT | `UserScrubbingIT` | `scrubUser_revokesMcpTokens_setsRevokedAt` | — |
+| TE-F070.F01-01 | SR-F070.F01 | UR-F070 | IT | `UserScrubbingIT` | `scrubUser_withTimeRecords_endsActiveRecord_deletesProfile_retainsStub` — active record gets `ended_at`; `node_authorizations` deleted; `user_profile` deleted; `users` row retained | — |
+| TE-F070.F01-02 | SR-F070.F01 | UR-F070 | IT | `UserScrubbingIT` | `scrubUser_noTimeRecords_noRequests_deletesUsersRow` | — |
+| TE-F070.F01-03 | SR-F070.F01 | UR-F070 | IT | `UserScrubbingIT` | `scrubUser_revokesMcpTokens_setsRevokedAt` | — |
 | TE-F008.F01-01 | SR-F008.F01 | UR-F008 | IT | `UserManagementIT` | `removeUser_admin_triggersScrubbing` | `removeUser_nonAdmin_returns403` |
 | TE-F009.F01-01 | SR-F009.F01 | UR-F009 | IT | `UserManagementIT` | `getUserAuthorizations_admin_returnsPathAnnotatedAssignments` — each row includes full ancestor path from root to granted node | `getUserAuthorizations_nonAdmin_returns403` |
+| TE-F009.F02-01 | SR-F009.F02 | UR-F009 | IT | `UserManagementIT` | `manageUserAuthorizations_fromUserView_grantsAndRevokesWithinAdminScope` | `manageUserAuthorizations_fromUserView_outOfScopeNode_returns403` |
 | TE-F010.F01-01 | SR-F010.F01 | UR-F010 | IT | `SettingsIT` | `getSettings_authenticatedUser_returnsResolvedConfig` — response includes `name`, `timezone`, `freezeOffsetYears`, `effectiveFreezeCutoff`, `retentionYears`, `nodeRetentionExtraYears`, `privacyNoticeUrl` | `getSettings_unauthenticated_returns401` |
 
 ---
@@ -51,7 +52,7 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE-F016.F01-02 | SR-F016.F01 | UR-F016 | IT | `NodeIT` | `uploadLogo_validPng_stored` — verify stored bytes and correct `Content-Type` on retrieval | `uploadLogo_imageGifMimeType_returns400` |
 | TE-F017.F01-01 | SR-F017.F01 | UR-F017 | IT | `NodeIT` | `reorderChildren_updatesAllSortOrderValues` — all sibling `sort_order` values match submitted order | `reorderChildren_nonAdmin_returns403` |
 | TE-F018.F01-01 | SR-F018.F01 | UR-F018 | IT | `NodeIT` | `deactivateNode_leafNode_setsIsActiveFalseAndDeactivatedAt` | `deactivateNode_withActiveChildren_returns409` |
-| TE-F018.F01-02 | SR-F018.F01 | UR-F018 | IT | `NodeIT` | `deactivateNode_withActiveTimeEntry_notBlocked` — running entry on the node itself does not block deactivation | — |
+| TE-F018.F01-02 | SR-F018.F01 | UR-F018 | IT | `NodeIT` | `deactivateNode_withActiveTimeRecord_notBlocked` — running record on the node itself does not block deactivation | — |
 | TE-F019.F01-01 | SR-F019.F01 | UR-F019 | IT | `NodeIT` | `reactivateNode_setsIsActiveTrueAndClearsDeactivatedAt` | `reactivateNode_nonAdmin_returns403` |
 | TE-F020.F01-01 | SR-F020.F01 | UR-F020 | IT | `NodeIT` | `moveNode_adminOnBothEnds_updatesParentIdAndAppendsSortOrder` | `moveNode_destinationIsOwnDescendant_returns409` |
 | TE-F020.F01-02 | SR-F020.F01 | UR-F020 | IT | `NodeIT` | — | `moveNode_noAdminOnDestination_returns403` |
@@ -79,13 +80,16 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE-F030.F01-01 | SR-F030.F01 | UR-F030 | IT | `QuickAccessIT` | `addEntry_insertsRowWithCorrectSortOrder` | `addEntry_tenthEntry_returns409` |
 | TE-F030.F01-02 | SR-F030.F01 | UR-F030 | IT | `QuickAccessIT` | `removeEntry_deletesRow` | — |
 | TE-F030.F01-03 | SR-F030.F01 | UR-F030 | IT | `QuickAccessIT` | `reorderEntries_updatesSortOrderForAllRows` | — |
-| TE-F031.F01-01 | SR-F031.F01 | UR-F031 | IT | `TimeEntryIT` | `createRetroactive_validInput_insertsEntryWithTimezone` | `createRetroactive_startedAtAfterEndedAt_returns400` |
-| TE-F031.F01-02 | SR-F031.F01 | UR-F031 | IT | `TimeEntryIT` | — | `createRetroactive_noTrackAuth_returns403` |
-| TE-F031.F01-03 | SR-F031.F01 | UR-F031 | IT | `TimeEntryIT` | — | `createRetroactive_inactiveNode_returns409` |
-| TE-F032.F01-01 | SR-F032.F01 | UR-F032 | IT | `TimeEntryIT` | `editEntry_withinFreezeCutoff_updatesFields` | `editEntry_startedAtBeforeFreezeCutoff_returns409` |
-| TE-F032.F01-02 | SR-F032.F01 | UR-F032 | IT | `TimeEntryIT` | — | `editEntry_startedAtAfterEndedAt_returns400` |
-| TE-F033.F01-01 | SR-F033.F01 | UR-F033 | IT | `TimeEntryIT` | `deleteEntry_notFrozen_deletesRow` | `deleteEntry_frozen_returns409` |
-| TE-F034.F01-01 | SR-F034.F01 | UR-F034 | IT | `TimeEntryIT` | `duplicateEntry_insertsNewRowWithNewTimesAndCopiedDescription` | `duplicateEntry_invalidTimeRange_returns400` |
+| TE-F031.F01-01 | SR-F031.F01 | UR-F031 | IT | `TimeRecordIT` | `createRetroactive_validInput_insertsRecordWithTimezone` | `createRetroactive_startedAtAfterEndedAt_returns400` |
+| TE-F031.F01-02 | SR-F031.F01 | UR-F031 | IT | `TimeRecordIT` | — | `createRetroactive_noTrackAuth_returns403` |
+| TE-F031.F01-03 | SR-F031.F01 | UR-F031 | IT | `TimeRecordIT` | — | `createRetroactive_inactiveNode_returns409` |
+| TE-F032.F01-01 | SR-F032.F01 | UR-F032 | IT | `TimeRecordIT` | `editRecord_withinFreezeCutoff_updatesFields` | `editRecord_startedAtBeforeFreezeCutoff_returns409` |
+| TE-F032.F01-02 | SR-F032.F01 | UR-F032 | IT | `TimeRecordIT` | — | `editRecord_startedAtAfterEndedAt_returns400` |
+| TE-F032.F01-03 | SR-F032.F01 | UR-F032 | IT | `TimeRecordIT` | — | `editRecord_reassignToInactiveNode_returns409` |
+| TE-F032.F01-04 | SR-F032.F01 | UR-F032 | IT | `TimeRecordIT` | — | `editRecord_reassignToNodeWithActiveChildren_returns409` |
+| TE-F032.F01-05 | SR-F032.F01 | UR-F032 | IT | `TimeRecordIT` | — | `editRecord_reassignWithoutTrackAuth_returns403` |
+| TE-F033.F01-01 | SR-F033.F01 | UR-F033 | IT | `TimeRecordIT` | `deleteRecord_notFrozen_deletesRow` | `deleteRecord_frozen_returns409` |
+| TE-F034.F01-01 | SR-F034.F01 | UR-F034 | IT | `TimeRecordIT` | `duplicateRecord_insertsNewRowWithNewTimesAndCopiedDescription` | `duplicateRecord_invalidTimeRange_returns400` |
 
 ---
 
@@ -93,16 +97,18 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 
 | TE | SR | UR | Type | Class | Happy test | Error test |
 |---|---|---|---|---|---|---|
-| TE-F036.F01-01 | SR-F036.F01 | UR-F036/UR-F037 | IT | `ReportIT` | `getReport_summaryMode_returnsAggregatedTotalsPerNode` | — |
-| TE-F036.F01-02 | SR-F036.F01 | UR-F036/UR-F037 | IT | `ReportIT` | `getReport_detailedMode_returnsIndividualRows` | — |
-| TE-F036.F01-03 | SR-F036.F01 | UR-F036/UR-F037 | IT | `ReportIT` | `getReport_restrictedToNodesVisibleToRequestingUser` — nodes without view auth absent from results | — |
-| TE-F036.F01-04 | SR-F036.F01 | UR-F036/UR-F037 | UT | `ReportServiceTest` | `getReport_timestampsConvertedToCompanyTimezone` — UTC entry rendered in configured timezone | — |
+| TE-F036.F01-01 | SR-F036.F01 | UR-F036 | IT | `ReportIT` | `getReport_summaryMode_returnsAggregatedTotalsPerNode` | — |
+| TE-F036.F01-02 | SR-F036.F01 | UR-F036 | IT | `ReportIT` | `getReport_detailedMode_returnsIndividualRows` | — |
+| TE-F036.F01-03 | SR-F036.F01 | UR-F036 | IT | `ReportIT` | `getReport_restrictedToNodesVisibleToRequestingUser` — nodes without view auth absent from results | — |
+| TE-F036.F01-04 | SR-F036.F01 | UR-F036 | UT | `ReportServiceTest` | `getReport_timestampsConvertedToCompanyTimezone` — UTC entry rendered in configured timezone | — |
 | TE-F036.F02-01 | SR-F036.F02 | UR-F036 | IT | `ReportIT` | `getReport_detailedMode_overlappingEntries_overlapFlagSet` | — |
 | TE-F036.F02-02 | SR-F036.F02 | UR-F036 | IT | `ReportIT` | `getReport_detailedMode_gapBetweenConsecutiveEntries_gapFlagSet` | — |
+| TE-F037.F01-01 | SR-F037.F01 | UR-F037 | CT | `report-view.component.spec.ts` | `reportView_toggleSwitchesBetweenSummaryDetailedAndChart_withoutChangingFilters` | — |
 | TE-F038.F01-01 | SR-F038.F01 | UR-F038 | IT | `ReportIT` | `exportCsv_returnsFileDownloadWithCsvContentType` — `Content-Type: text/csv`, `Content-Disposition: attachment` | — |
 | TE-F052.F01-01 | SR-F052.F01 | UR-F052 | IT | `ReportIT` | `getMemberSummaries_returnsAggregatedPerMemberPerBucket` — totals per member per day bucket, no individual rows | — |
 | TE-F052.F01-02 | SR-F052.F01 | UR-F052 | IT | `ReportIT` | `getMemberSummaries_hasDataQualityIssues_trueWhenOverlapExists` | — |
 | TE-F052.F01-03 | SR-F052.F01 | UR-F052 | IT | `ReportIT` | `getMemberSummaries_doesNotExposeIndividualEntryDetails` — response body contains no per-entry `started_at`/`ended_at` fields | — |
+| TE-F052.F01-04 | SR-F052.F01 | UR-F052 | IT | `ReportIT` | `getMemberSummaries_filterByDataQualityFlag_returnsOnlyMatchingBuckets` | — |
 
 ---
 
@@ -122,7 +128,7 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE | SR | UR | Type | Class | Happy test | Error test |
 |---|---|---|---|---|---|---|
 | TE-F043.F01-01 | SR-F043.F01 | UR-F043 | IT | `AccountIT` | `getProfile_returnsNameLinkedProvidersAndLastReportSettings` | `getProfile_unauthenticated_returns401` |
-| TE-F043.F01-02 | SR-F043.F01 | UR-F046 | IT | `AccountIT` | `getOwnAuthorizations_returnsPathAnnotatedList` | — |
+| TE-F046.F01-01 | SR-F046.F01 | UR-F046 | IT | `AccountIT` | `getOwnAuthorizations_returnsPathAnnotatedList` | — |
 | TE-F066.F01-01 | SR-F066.F01 | UR-F066 | IT | `AccountIT` | `saveReportSettings_persistedAsJsonbInUserProfile` — subsequent `getProfile` returns saved settings | — |
 | TE-F044.F01-01 | SR-F044.F01 | UR-F044 | IT | `AccountIT` | `linkProvider_insertsOauthRow` | `linkProvider_providerSubjectAlreadyLinkedToAnotherUser_returns409` |
 | TE-F045.F01-01 | SR-F045.F01 | UR-F045 | IT | `AccountIT` | `unlinkProvider_multipleProviders_deletesOneRow` | `unlinkProvider_lastProvider_returns409` |
@@ -151,6 +157,7 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE | SR | UR | Type | Class | Happy test | Error test |
 |---|---|---|---|---|---|---|
 | TE-F050.F01-01 | SR-F050.F01 | UR-F050 | IT | `ActivityPurgeJobIT` | `activityPurgeJob_setsStatusActiveAndCutoffDate` — `purge_jobs` row transitions to `active` with correct `cutoff_date` | — |
+| TE-F050.F01-02 | SR-F050.F01 | UR-F050 | UT | `SchedulingConfigTest` | `activityPurgeJob_usesConfiguredPurgeCronInCompanyTimezone` | — |
 | TE-F050.F02-01 | SR-F050.F02 | UR-F050 | IT | `ActivityPurgeJobIT` | `activityPurgeJob_deletesEntriesAndRequestsOlderThanCutoff` — rows before cutoff deleted; rows after retained | — |
 | TE-F050.F02-02 | SR-F050.F02 | UR-F050 | IT | `ActivityPurgeJobIT` | `activityPurgeJob_idempotent_resumesFromStoredCutoffDateOnRestart` — set job to `active` with stored `cutoff_date`, simulate restart, verify same cutoff used | — |
 | TE-F050.F03-01 | SR-F050.F03 | UR-F050 | IT | `NodePurgeJobIT` | `nodePurgeJob_triggeredAfterActivityPurge_setsStatusActiveWithCombinedCutoff` | — |
@@ -172,8 +179,8 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE-F056.F01-01 | SR-F056.F01 | UR-F056 | IT | `McpTokenIT` | `adminListTokens_admin_returnsAllActiveWithOwnerName` | `adminListTokens_nonAdmin_returns403` |
 | TE-F057.F01-01 | SR-F057.F01 | UR-F057 | IT | `McpTokenIT` | `adminRevokeToken_anyUsersToken_setsRevokedAt_logsSecurityEvent` | `adminRevokeToken_nonAdmin_returns403` |
 | TE-F069.F01-01 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getNodeTree_returnsSubtreeVisibleToTokenOwner` | `mcpTool_expiredToken_returns401` |
-| TE-F069.F01-02 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getTimeEntries_ownEntries_returned` | — |
-| TE-F069.F01-03 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getTimeEntries_otherUserWithViewAuth_returnsAggregatedDailyTotalsOnly` — no per-entry detail in response | — |
+| TE-F069.F01-02 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getTimeRecords_ownRecords_returned` | — |
+| TE-F069.F01-03 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getTimeRecords_otherUserWithViewAuth_returnsAggregatedDailyTotalsOnly` — no per-record detail in response | — |
 | TE-F069.F01-04 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getTrackingStatus_returnsCurrentState` | — |
 | TE-F069.F01-05 | SR-F069.F01 | UR-F069 | IT | `McpToolIT` | `getMemberSummaries_returnsBucketedTotalsPerMember` | — |
 | TE-F058.F01-01 | SR-F058.F01 | UR-F058 | E2E | `mcp-onboarding.e2e.ts` | `afterTokenGeneration_onboardingWizardShown_rawTokenVisibleOnce` | — |
@@ -187,6 +194,7 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE-F067.F01-01 | SR-F067.F01 | — | IT | `AuthFlowIT` | `oidcCallback_existingUser_createsSessionAndRedirectsToRoot` | — |
 | TE-F060.F02-01 | SR-F060.F02 | UR-F060 | IT | `AuthFlowIT` | `acknowledgeGdpr_withPendingSession_insertsUserProfileOauthAndDeletesInvitation` — all three DB ops in one transaction | `acknowledgeGdpr_noPendingSession_returns400` |
 | TE-F060.F02-02 | SR-F060.F02 | UR-F060 | IT | `AuthFlowIT` | `acknowledgeGdpr_invitationWithdrawnBetweenCallbackAndAck_redirectsToNotInvited` | — |
+| TE-F060.F02-03 | SR-F060.F02 | UR-F060 | IT | `AuthFlowIT` | `acknowledgeGdpr_privacyNoticeUrlReturnedOnlyWhenUserHasEffectiveAuthorization` | — |
 | TE-C002.F01-01 | SR-C002.F01 | UR-C002 | IT | `AuthFlowIT` | `oidcCallback_noMatchingInvitation_redirectsToLoginError` — response does not distinguish "not found" from "expired" | — |
 | TE-C011.C01-01 | SR-C011.C01 | UR-C011 | IT | `RateLimitIT` | `requestsWithinLimit_return200` | `requestsExceedingLimit_return429` |
 | TE-C011.C01-02 | SR-C011.C01 | UR-C011 | IT | `RateLimitIT` | `rateLimitBreach_insertsSecurityEventRow` | — |
@@ -224,9 +232,11 @@ All IT tests extend a shared `BaseIT` that starts the Postgres container once pe
 | TE-F050.F05-02 | SR-F050.F05 | UR-F050 | UT | `TrawhileConfigTest` | — | `freezeOffsetExceedsRetentionYears_failsValidation` |
 | TE-F050.F05-03 | SR-F050.F05 | UR-F050 | UT | `TrawhileConfigTest` | — | `nodeRetentionExtraYearsNegative_failsValidation` |
 | TE-F050.F05-04 | SR-F050.F05 | UR-F050 | UT | `TrawhileConfigTest` | — | `privacyNoticeUrlHttpNotHttps_failsValidation` |
+| TE-F050.F05-05 | SR-F050.F05 | UR-F050 | UT | `TrawhileConfigTest` | — | `purgeCronInvalid_failsValidation` |
 | TE-F065.F01-01 | SR-F065.F01 | UR-F065 | UT | `StartupValidatorTest` | `atLeastOneProvider_validatesSuccessfully` | `noProvidersConfigured_throwsIllegalStateException` |
 | TE-F065.F01-02 | SR-F065.F01 | UR-F065 | UT | `TrawhileConfigTest` | — | `invalidIanaTimezone_failsValidation` |
 | TE-F065.F01-03 | SR-F065.F01 | UR-F065 | UT | `TrawhileConfigTest` | — | `privacyNoticeUrlMalformed_failsValidation` |
+| TE-F065.F01-04 | SR-F065.F01 | UR-F065 | UT | `StartupValidatorTest` | — | `startupValidation_errorMessageIdentifiesInvalidPropertyOrConstraint` |
 
 ---
 
@@ -241,10 +251,12 @@ Tackled separately. IDs reserved for completeness.
 | TE-F061.F03-01 | SR-F061.F03 | UR-F061 | E2E | `gdpr-notice.e2e.ts` | `gdprNoticeScreen_renderedInUserLanguage` | — |
 | TE-F047.F03-01 | SR-F047.F03 | UR-F047 | E2E | `anonymize.e2e.ts` | `anonymizeWizard_confirmationPhrase_enablesSubmit` | `anonymizeWizard_wrongPhrase_submitDisabled` |
 | TE-F008.F02-01 | SR-F008.F02 | UR-F008 | E2E | `remove-user.e2e.ts` | `removalWizard_showsUserAndConsequences_requiresConfirmation` | — |
-| TE-F062.F01-01 | SR-F062.F01 | UR-F062 | E2E | `first-run.e2e.ts` | `bootstrapAdminFirstLogin_firstRunPromptShown_canBeDismissed` | — |
+| TE-F062.F01-01 | SR-F062.F01 | UR-F062 | E2E | `first-run.e2e.ts` | `bootstrapAdminFirstLogin_noOtherMembers_invitePromptShown` | — |
+| TE-F062.F01-02 | SR-F062.F01 | UR-F062 | E2E | `first-run.e2e.ts` | `systemAdminLogin_noOtherMembers_invitePromptShownAgain` | `systemAdminLogin_otherMembersExist_invitePromptNotShown` |
 | TE-F026.F02-01 | SR-F026.F02 | UR-F026 | CT | `node-picker.component.spec.ts` | `nodePicker_search_filtersTreeByName` | `nodePicker_swipeLeft_returnsToParent` |
 | TE-F010.F02-01 | SR-F010.F02 | UR-F010 | CT | `app.component.spec.ts` | `afterSettingsLoaded_tabTitleIsInstanceNameDashTrawhile` | `beforeSettingsLoaded_tabTitleIsTrawhile` |
 | TE-F021.F02-01 | SR-F021.F02 | UR-F021/UR-F022 | CT | `authorization.component.spec.ts` | `grantDialog_showsExplanatoryTextForEachLevel` | — |
 | TE-F060.F03-01 | SR-F060.F03 | UR-F060 | E2E | `login.e2e.ts` | `loginPage_unauthenticated_showsSignInButtonsForConfiguredProviders` | `loginPage_errorNotInvited_showsHelpMessage` |
 | TE-F063.F01-01 | SR-F063.F01 | UR-F063 | CT | `report-chart.component.spec.ts` | `chartView_rendersThreeChartTypes_fromInMemoryData_noAdditionalBackendCall` | — |
+
 | TE-F064.F01-01 | SR-F064.F01 | UR-F064 | CT | `report-export.component.spec.ts` | `pdfExport_rendersIn1280pxContainer_generatesFile` | — |

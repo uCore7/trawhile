@@ -17,7 +17,8 @@ import java.util.ArrayList;
  *
  * POST /auth/logout is handled directly by Spring Security (configured in SecurityConfig).
  * POST /auth/gdpr-notice — reads pending registration data from HTTP session and executes the
- * account creation transaction (SR-F060.F02). Returns privacyNoticeUrl if configured.
+ * account creation transaction (SR-F060.F02). Returns privacyNoticeUrl only when configured
+ * and the newly registered user has at least one effective node authorization.
  * GET  /auth/providers — returns configured OIDC provider registration IDs (SR-F067.F02). Permit-all.
  */
 @RestController

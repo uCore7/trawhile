@@ -14,33 +14,33 @@
 
 ## Scope
 
-Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent entry list with overlap/gap flags, quick-access management, and manual entry CRUD.
+Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent record list with overlap/gap flags, quick-access management, and manual record CRUD.
 
 ## Read first (in order)
 
-1. `docs/schema.sql` — `time_entries`, `quick_access` tables
+1. `docs/schema.sql` — `time_records`, `quick_access` tables
 2. `docs/requirements-sr.md` — SR-F024.F01–SR-F034.F01; SR-F027.F01, SR-F030.F01
-3. `docs/openapi.yaml` — `/tracking`, `/time-entries`, `/quick-access` paths
+3. `docs/openapi.yaml` — `/tracking`, `/time-records`, `/quick-access` paths
 4. `docs/architecture.md` — §Transaction boundaries, §SSE dispatch
 5. `src/main/java/com/trawhile/config/TrawhileConfig.java` — `freezeOffsetYears()`
 6. The failing tests:
    - `src/test/java/com/trawhile/TrackingIT.java`
    - `src/test/java/com/trawhile/QuickAccessIT.java`
-   - `src/test/java/com/trawhile/TimeEntryIT.java`
+   - `src/test/java/com/trawhile/TimeRecordIT.java`
 
 ## Modify (production code only)
 
 | File | What to implement |
 |---|---|
 | `src/main/java/com/trawhile/service/TrackingService.java` | `getStatus()`, `getRecentEntries()`, `startTracking()`, `switchTracking()`, `stopTracking()` |
-| `src/main/java/com/trawhile/service/TimeEntryService.java` | `createRetroactive()`, `editEntry()`, `deleteEntry()`, `duplicateEntry()` |
+| `src/main/java/com/trawhile/service/TimeRecordService.java` | `createRetroactive()`, `editRecord()`, `deleteRecord()`, `duplicateRecord()` |
 | `src/main/java/com/trawhile/web/TrackingController.java` | SR-F024.F01–SR-F029.F01 endpoints |
 | `src/main/java/com/trawhile/web/QuickAccessController.java` | SR-F027.F01 (list), SR-F030.F01 (add/remove/reorder) endpoints |
-| `src/main/java/com/trawhile/web/TimeEntryController.java` | SR-F031.F01–SR-F034.F01 endpoints |
+| `src/main/java/com/trawhile/web/TimeRecordController.java` | SR-F031.F01–SR-F034.F01 endpoints |
 
 ## Acceptance criteria
 
-`mvn test -Dtest=TrackingIT,QuickAccessIT,TimeEntryIT` passes. Do not modify test files.
+`mvn test -Dtest=TrackingIT,QuickAccessIT,TimeRecordIT` passes. Do not modify test files.
 
 ## Watch out for
 
@@ -49,5 +49,5 @@ Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent
 - **SR-F030.F01 max 9**: 10th add returns 409 with code `QUICK_ACCESS_FULL`
 - **SR-F027.F01 non-trackable flag**: computed at read time — node is non-trackable when `is_active = false` OR has active children
 - **SR-F032.F01/SR-F033.F01 freeze cutoff**: applies to `started_at`, not `ended_at`; sourced from `TrawhileConfig.freezeOffsetYears()`, not hardcoded
-- **SR-F025.F01 overlap**: both entries in an overlapping pair are flagged; overlap = `a.started_at < b.ended_at AND b.started_at < a.ended_at`
+- **SR-F025.F01 overlap**: both records in an overlapping pair are flagged; overlap = `a.started_at < b.ended_at AND b.started_at < a.ended_at`
 - **SSE**: dispatch `TRACKING` to all sessions of the user after every start/switch/stop

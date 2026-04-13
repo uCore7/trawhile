@@ -47,7 +47,7 @@ Annotate with `@Tag("TE-Fxxx.Fxx-nn")`. Write real assertions. No empty bodies.
 | TE-F016.F01-02 | `PUT /api/v1/nodes/{id}/logo` with valid PNG: `GET /api/v1/nodes/{id}/logo` returns 200 with `Content-Type: image/png`; 400 when `Content-Type: image/gif` |
 | TE-F017.F01-01 | `PUT /api/v1/nodes/{id}/children/order` as admin: `SELECT sort_order FROM nodes WHERE parent_id = {id} ORDER BY id` matches submitted order; 403 for non-admin |
 | TE-F018.F01-01 | `POST /api/v1/nodes/{id}/deactivate` when node has no active children: `is_active = false`, `deactivated_at IS NOT NULL`; 409 when active children exist |
-| TE-F018.F01-02 | `POST /api/v1/nodes/{id}/deactivate` when node has an active `time_entries` row: returns 2xx — active entry does not block deactivation |
+| TE-F018.F01-02 | `POST /api/v1/nodes/{id}/deactivate` when node has an active `time_records` row: returns 2xx — active record does not block deactivation |
 | TE-F019.F01-01 | `POST /api/v1/nodes/{id}/reactivate`: `is_active = true`, `deactivated_at IS NULL`; 403 for non-admin |
 | TE-F020.F01-01 | `POST /api/v1/nodes/{id}/move` as admin of both node and destination: `SELECT parent_id FROM nodes WHERE id = {id}` equals destination; `sort_order` appended after existing siblings |
 | TE-F020.F01-02 | Move where destination is own descendant: 409; move without admin on destination: 403 |

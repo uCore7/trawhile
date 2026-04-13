@@ -49,7 +49,7 @@ Annotate with `@Tag("TE-Fxxx.Fxx-nn")`. Write real assertions. No empty bodies.
 | TE-F056.F01-01 | `GET /api/v1/admin/mcp/tokens` as root admin: response includes tokens from multiple users, each entry has owner `name`; 403 for non-admin |
 | TE-F057.F01-01 | `DELETE /api/v1/admin/mcp/tokens/{id}` as root admin for another user's token: `revoked_at` set; `SELECT COUNT(*) FROM security_events WHERE event_type = 'MCP_TOKEN_REVOKED'` increases by 1; 403 for non-admin |
 | TE-F069.F01-01 | MCP tool `getNodeTree` with a valid token: response contains only nodes visible to the token owner; `GET` with an expired token (`expires_at` in the past) returns 401 |
-| TE-F069.F01-02 | MCP tool `getTimeEntries` for own user: response includes the user's own entries with full detail |
-| TE-F069.F01-03 | MCP tool `getTimeEntries` querying another user's entries when the token owner has `view` auth on the node: response contains aggregated daily totals only; no individual `startedAt`/`endedAt` fields in the JSON body |
-| TE-F069.F01-04 | MCP tool `getTrackingStatus`: response matches current tracking state (active entry or empty) |
-| TE-F069.F01-05 | MCP tool `getMemberSummaries`: response has bucketed totals per member; no individual entry detail fields |
+| TE-F069.F01-02 | MCP tool `getTimeRecords` for own user: response includes the user's own records with full detail |
+| TE-F069.F01-03 | MCP tool `getTimeRecords` querying another user's records when the token owner has `view` auth on the node: response contains aggregated daily totals only; no individual `startedAt`/`endedAt` fields in the JSON body |
+| TE-F069.F01-04 | MCP tool `getTrackingStatus`: response matches current tracking state (active record or empty) |
+| TE-F069.F01-05 | MCP tool `getMemberSummaries`: response has bucketed totals per member; no individual record detail fields |
