@@ -15,6 +15,8 @@ The process distinguishes between **canonical sources** and **derived artifacts*
 - `docs/requirements-sr.md`
 - `docs/glossary.md`
 - `docs/schema.sql`
+- `CLAUDE.md`
+- `AGENTS.md`
 - narrative design documents such as `docs/decisions.md` and `docs/architecture.md`
 
 **Derived artifacts** are regenerated from canonical sources whenever identifiers, terminology, contracts, or epic structure change:
@@ -40,7 +42,8 @@ The process distinguishes between **canonical sources** and **derived artifacts*
 3. Write user requirements (URs) in IREB format with goal rationale; include key invariants as a closing section
 4. Derive system requirements (SRs) from URs with full traceability
 5. Design the PostgreSQL schema (`docs/schema.sql`) — evaluate every data field against the GDPR necessity principle before adding it
-6. Generate the REST API contract (`docs/openapi.yaml`) from the canonical requirements and schema, then review and refine it as needed
+6. Write `docs/architecture.md` — the high-level system architecture, package layout, and key technical patterns derived from the requirements and schema
+7. Write `CLAUDE.md` and `AGENTS.md` — the manually controlled collaboration and agent guardrail documents for the repository
 
 **Conventions:**
 Follow the IREB standard throughout. Produce the typical IREB results: stakeholder analysis, system context, glossary, and a requirements document containing URs and SRs with full traceability. Project-specific notes:
@@ -90,19 +93,19 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 
 **Tool:** Chat mode. No agents.
 
-**Outputs:** `docs/requirements-ur.md`, `docs/requirements-sr.md`, `docs/schema.sql`, `docs/openapi.yaml`, `docs/glossary.md`
+**Outputs:** `docs/requirements-ur.md`, `docs/requirements-sr.md`, `docs/schema.sql`, `docs/glossary.md`, `docs/architecture.md`, `CLAUDE.md`, `AGENTS.md`
 
 ---
 
 ## Phase 2 — Architecture & scaffolding ✓
 
 **Steps:**
+- Generate the REST API contract (`docs/openapi.yaml`) from the canonical requirements and schema, then review and refine it as needed
 - Finalise the stack and record the rationale in `docs/decisions.md`
 - Generate the Spring Boot project skeleton from canonical specs, then refine manually where needed
 - Generate the Flyway V1 migration from `docs/schema.sql` as a complete-schema migration (not incremental)
 - Configure Spring Security (OAuth2/OIDC), bucket4j rate limiting, CORS, CSRF, HTTP security headers
 - Set up the CI/CD pipeline (GitHub Actions): build, test, SpotBugs + Find Security Bugs, OWASP Dependency Check, CycloneDX SBOM, Docker image, SSH deploy
-- Write `docs/architecture.md` and `CLAUDE.md`
 
 **Conventions:**
 - `docs/schema.sql` is authoritative; the Flyway V1 migration is generated from it
@@ -113,7 +116,7 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 
 **Tool:** Chat mode. No agents.
 
-**Outputs:** Full project skeleton in `src/main/`, `CLAUDE.md`, `AGENTS.md`, `docs/architecture.md`, `.github/workflows/ci.yml`
+**Outputs:** `docs/openapi.yaml`, full project skeleton in `src/main/`, `.github/workflows/ci.yml`
 
 ---
 
@@ -140,7 +143,6 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 ## Phase 4 — Agentic coding setup ✓
 
 **Steps:**
-- Create `AGENTS.md` as a tool-agnostic entry point
 - Create `tasks/00-base-it.md` specifying the shared test infrastructure
 - Generate baseline `tasks/tests/NN-epicN.md` files from the requirements, test plan, and contracts; then review and refine them in chat mode
 - Generate baseline `tasks/impl/NN-epicN.md` files from the requirements, test plan, and contracts; then review and refine them in chat mode
@@ -155,7 +157,7 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 
 **Tool:** Chat mode. No agents.
 
-**Outputs:** `AGENTS.md`, `tasks/00-base-it.md`, `tasks/tests/01–10.md`, `tasks/impl/01–10.md`, `.github/workflows/agent-guardrails.yml`
+**Outputs:** `tasks/00-base-it.md`, `tasks/tests/01–10.md`, `tasks/impl/01–10.md`, `.github/workflows/agent-guardrails.yml`
 
 ---
 
