@@ -14,8 +14,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import static org.springframework.security.oauth2.core.AuthorizationGrantType.AUTHORIZATION_CODE;
@@ -26,14 +24,21 @@ import org.junit.jupiter.api.BeforeEach;
 
 @SpringBootTest(
     classes = {TrackerApplication.class, BaseIT.TestOAuth2Configuration.class},
-    webEnvironment = WebEnvironment.RANDOM_PORT
+    webEnvironment = WebEnvironment.RANDOM_PORT,
+    properties = "spring.main.allow-bean-definition-overriding=true"
 )
-@Testcontainers
 public abstract class BaseIT {
 
-    @Container
-    static PostgreSQLContainer<?> postgres =
-        new PostgreSQLContainer<>("postgres:16").withReuse(true);
+    // Container is started once via static initializer and kept running for the entire JVM
+    // lifetime.  We intentionally bypass the @Testcontainers/@Container JUnit lifecycle so
+    // that TC 2.x does not stop the container between test classes (which would invalidate
+    // the cached Spring context's datasource URL).
+    static final PostgreSQLContainer<?> postgres;
+
+    static {
+        postgres = new PostgreSQLContainer<>("postgres:16");
+        postgres.start();
+    }
 
     protected MockMvc mvc;
 
@@ -48,7 +53,7 @@ public abstract class BaseIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("BOOTSTRAP_ADMIN_EMAIL", () -> "");
+        registry.add("BOOTSTRAP_ADMIN_EMAIL", () -> "bootstrap@example.com");
     }
 
     @BeforeEach

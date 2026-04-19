@@ -103,6 +103,8 @@ This uses `.mvn/home` for the wrapper distribution cache and `.mvn/repository` f
 
 Run `make help` for all available targets.
 
+The OICD configuration for development is at https://console.cloud.google.com/auth/clients?project=trawhile-dev
+
 ## License
 
 MIT
