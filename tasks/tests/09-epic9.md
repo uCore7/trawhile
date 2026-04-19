@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `mcp_tokens` table (token_hash, revoked_at, expires_at, last_used_at)
 2. `docs/requirements-sr.md` — SR-F053.F01, SR-F054.F01, SR-F053.F02, SR-F055.F01, SR-F056.F01, SR-F057.F01, SR-F069.F01
-3. `docs/openapi.yaml` — `/mcp/tokens`, `/mcp/tools` paths
-4. `docs/test-plan.md` — TE-F053.F01-* through TE-F069.F01-*
+3. `spec/openapi.yaml` — `/mcp/tokens`, `/mcp/tools` paths
+4. `spec/test-plan.md` — TE-F053.F01-* through TE-F069.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `requests` table
 2. `docs/requirements-sr.md` — SR-F039.F01, SR-F041.F01, SR-F042.F01
-3. `docs/openapi.yaml` — `/requests` paths
-4. `docs/test-plan.md` — TE-F039.F01-* through TE-F042.F01-*
+3. `spec/openapi.yaml` — `/requests` paths
+4. `spec/test-plan.md` — TE-F039.F01-* through TE-F042.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

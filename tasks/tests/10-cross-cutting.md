@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `security_events` table; `event_type` enum (for RATE_LIMIT_BREACH)
 2. `docs/requirements-sr.md` — SR-F067.F01, SR-F067.F02, SR-F060.F02, SR-C002.F01, SR-C011.C01, SR-C012.C01, SR-C013.C01, SR-F068.F01, SR-F059.F01, SR-F059.F02, SR-F059.F03, SR-F050.F05, SR-F065.F01
-3. `docs/openapi.yaml` — `/auth/gdpr-notice`, `/auth/providers`, and `/events` paths
-4. `docs/test-plan.md` — TE-F067.F01-*, TE-F060.F02-*, TE-C002.F01-*, TE-C011.C01-*, TE-C012.C01-*, TE-C013.C01-*, TE-F068.F01-*, TE-F059.F01-*, TE-F059.F02-*, TE-F059.F03-*, TE-F067.F02-*, TE-F050.F05-*, TE-F065.F01-*
+3. `spec/openapi.yaml` — `/auth/gdpr-notice`, `/auth/providers`, and `/events` paths
+4. `spec/test-plan.md` — TE-F067.F01-*, TE-F060.F02-*, TE-C002.F01-*, TE-C011.C01-*, TE-C012.C01-*, TE-C013.C01-*, TE-F068.F01-*, TE-F059.F01-*, TE-F059.F02-*, TE-F059.F03-*, TE-F067.F02-*, TE-F050.F05-*, TE-F065.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

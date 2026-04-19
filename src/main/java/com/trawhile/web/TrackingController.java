@@ -1,13 +1,14 @@
 package com.trawhile.web;
 
 import com.trawhile.service.TrackingService;
+import com.trawhile.web.api.TrackingApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** /api/v1/tracking — start, switch, stop tracking; current status. */
 @RestController
-@RequestMapping("/api/v1/tracking")
-public class TrackingController {
+@RequestMapping("/api/v1")
+public class TrackingController implements TrackingApi {
 
     private final TrackingService trackingService;
 

@@ -21,6 +21,8 @@
     <java.version>25</java.version>
     <jackson-bom.version>3.1.1</jackson-bom.version>
     <bucket4j.version>8.17.0</bucket4j.version>
+    <swagger-annotations.version>2.2.25</swagger-annotations.version>
+    <openapi-generator.version>7.21.0</openapi-generator.version>
     <spotbugs-maven-plugin.version>4.9.8.3</spotbugs-maven-plugin.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <dependency-check.version>12.2.0</dependency-check.version>
@@ -82,6 +84,13 @@
       <groupId>com.bucket4j</groupId>
       <artifactId>bucket4j_jdk17-core</artifactId>
       <version>${bucket4j.version}</version>
+    </dependency>
+
+    <!-- Swagger annotations used by openapi-generator-generated interfaces -->
+    <dependency>
+      <groupId>io.swagger.core.v3</groupId>
+      <artifactId>swagger-annotations-jakarta</artifactId>
+      <version>${swagger-annotations.version}</version>
     </dependency>
 
     <!-- Test -->
@@ -165,6 +174,33 @@
           <execution>
             <phase>package</phase>
             <goals><goal>makeAggregateBom</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- OpenAPI generator: generates API interfaces + DTOs from spec/openapi.yaml into target/generated-sources -->
+      <plugin>
+        <groupId>org.openapitools</groupId>
+        <artifactId>openapi-generator-maven-plugin</artifactId>
+        <version>${openapi-generator.version}</version>
+        <executions>
+          <execution>
+            <goals><goal>generate</goal></goals>
+            <configuration>
+              <inputSpec>${project.basedir}/spec/openapi.yaml</inputSpec>
+              <generatorName>spring</generatorName>
+              <apiPackage>com.trawhile.web.api</apiPackage>
+              <modelPackage>com.trawhile.web.dto</modelPackage>
+              <configOptions>
+                <interfaceOnly>true</interfaceOnly>
+                <useSpringBoot4>true</useSpringBoot4>
+                <useJakartaEe>true</useJakartaEe>
+                <useJackson3>true</useJackson3>
+                <useTags>true</useTags>
+                <skipDefaultInterface>false</skipDefaultInterface>
+                <openApiNullable>false</openApiNullable>
+              </configOptions>
+            </configuration>
           </execution>
         </executions>
       </plugin>

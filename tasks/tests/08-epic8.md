@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `purge_jobs` table, `time_records`, `requests`, `nodes`; purge job status enum
 2. `docs/requirements-sr.md` — SR-F050.F01, SR-F050.F02, SR-F050.F03, SR-F050.F04
-3. `docs/openapi.yaml` — `/purge-jobs` path
-4. `docs/test-plan.md` — TE-F050.F01-* through TE-F050.F04-*
+3. `spec/openapi.yaml` — `/purge-jobs` path
+4. `spec/test-plan.md` — TE-F050.F01-* through TE-F050.F04-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

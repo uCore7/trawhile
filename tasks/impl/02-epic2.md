@@ -20,7 +20,7 @@ Make the failing Epic 2 tests pass. Implement node CRUD, logo management, deacti
 
 1. `docs/schema.sql` — `nodes`, `node_authorizations`; Q1–Q4 authorization CTEs
 2. `docs/requirements-sr.md` — SR-F014.F01–SR-F023.F01
-3. `docs/openapi.yaml` — `/nodes` and `/nodes/{nodeId}/authorizations` paths
+3. `spec/openapi.yaml` — `/nodes` and `/nodes/{nodeId}/authorizations` paths
 4. `docs/architecture.md` — §1 Data access (recursive CTEs), §5 Authorization checks
 5. The failing tests:
    - `src/test/java/com/trawhile/NodeIT.java`

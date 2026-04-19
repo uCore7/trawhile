@@ -7,7 +7,7 @@ Before starting any work, read the following files in order:
 3. `docs/requirements-sr.md` — system requirements
 4. `docs/glossary.md` — canonical definitions of all domain terms
 5. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
-6. `docs/openapi.yaml` — REST API contract
+6. `spec/openapi.yaml` — REST API contract
 7. `docs/process.md` — development phases, conventions, and current status
 8. `docs/decisions.md` — rationale behind non-obvious architectural and process choices
 

@@ -22,7 +22,7 @@ Make the failing Epic 7 tests pass. Implement security event logging, the securi
 
 1. `docs/schema.sql` — `security_events` table, `event_type` enum
 2. `docs/requirements-sr.md` — SR-F049.F01, SR-F049.F02, SR-C007.F01
-3. `docs/openapi.yaml` — `/security-events` path
+3. `spec/openapi.yaml` — `/security-events` path
 4. The failing tests:
    - `src/test/java/com/trawhile/SecurityEventIT.java`
 

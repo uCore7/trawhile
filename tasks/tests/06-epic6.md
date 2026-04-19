@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `user_profile`, `user_oauth_providers`, `node_authorizations`
 2. `docs/requirements-sr.md` — SR-F043.F01, SR-F066.F01, SR-F044.F01, SR-F045.F01, SR-F047.F01, SR-F048.F01
-3. `docs/openapi.yaml` — `/account`, `/account/providers`, `/account/authorizations`, `/account/anonymize`, `/about`
-4. `docs/test-plan.md` — TE-F043.F01-* through TE-F048.F01-*, TE-F066.F01-*
+3. `spec/openapi.yaml` — `/account`, `/account/providers`, `/account/authorizations`, `/account/anonymize`, `/about`
+4. `spec/test-plan.md` — TE-F043.F01-* through TE-F048.F01-*, TE-F066.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

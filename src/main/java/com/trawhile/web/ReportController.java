@@ -2,6 +2,7 @@ package com.trawhile.web;
 
 import com.trawhile.service.ReportExportService;
 import com.trawhile.service.ReportService;
+import com.trawhile.web.api.ReportsApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -14,8 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   GET /reports/members  — SR-F052.F01              getMemberSummaries (per-member aggregated totals)
  */
 @RestController
-@RequestMapping("/api/v1/reports")
-public class ReportController {
+@RequestMapping("/api/v1")
+public class ReportController implements ReportsApi {
 
     private final ReportService reportService;
     private final ReportExportService reportExportService;

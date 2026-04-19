@@ -17,7 +17,8 @@
 
 .PHONY: help \
 	development-db development-db-stop development-db-logs \
-	development-up development-down development-build development-logs development-clean
+	development-up development-down development-build development-logs development-clean \
+	process-phase2 process-phase2-check
 
 DB_PASSWORD ?= dev
 
@@ -63,3 +64,11 @@ development-logs: ## Tail full stack logs (all services)
 development-clean: ## Remove all dev volumes and containers
 	docker compose -f docker-compose.dev.yml down -v
 	docker compose down -v
+
+# ── Spec/regeneration workflows ───────────────────────────────────────────────
+
+process-phase2: ## Run the Phase 2 orchestration script
+	./scripts/phase2.sh run
+
+process-phase2-check: ## Validate the current Phase 2 baseline
+	./scripts/phase2.sh check

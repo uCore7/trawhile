@@ -1,13 +1,14 @@
 package com.trawhile.web;
 
 import com.trawhile.service.NodeService;
+import com.trawhile.web.api.AuthorizationsApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** /api/v1/nodes/{nodeId}/authorizations — grant/revoke/view node authorization assignments. */
 @RestController
-@RequestMapping("/api/v1/nodes/{nodeId}/authorizations")
-public class AuthorizationController {
+@RequestMapping("/api/v1")
+public class AuthorizationController implements AuthorizationsApi {
 
     private final NodeService nodeService;
 

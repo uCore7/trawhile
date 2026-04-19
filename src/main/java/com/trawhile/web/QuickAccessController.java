@@ -1,13 +1,14 @@
 package com.trawhile.web;
 
 import com.trawhile.service.TrackingService;
+import com.trawhile.web.api.QuickAccessApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** /api/v1/quick-access — personal quick-access list (add, remove, reorder). */
 @RestController
-@RequestMapping("/api/v1/quick-access")
-public class QuickAccessController {
+@RequestMapping("/api/v1")
+public class QuickAccessController implements QuickAccessApi {
 
     private final TrackingService trackingService;
 

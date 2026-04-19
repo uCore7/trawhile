@@ -10,8 +10,8 @@ This file is the tool-agnostic entry point. If you are Claude Code, read `CLAUDE
 | `docs/requirements-ur.md` | Stakeholder capabilities, role model, key invariants |
 | `docs/requirements-sr.md` | System behaviours, acceptance conditions |
 | `docs/architecture.md` | Package layout, patterns, code examples |
-| `docs/openapi.yaml` | REST API contract — request/response shapes |
-| `docs/test-plan.md` | Traceability matrix UR → SR → TE-xxx-nn |
+| `spec/openapi.yaml` | REST API contract — request/response shapes |
+| `spec/test-plan.md` | Traceability matrix UR → SR → TE-xxx-nn |
 | `docs/process.md` | Development phases, conventions, current status |
 | `docs/decisions.md` | Rationale behind non-obvious architectural and process choices |
 

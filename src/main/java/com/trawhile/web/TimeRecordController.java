@@ -1,13 +1,14 @@
 package com.trawhile.web;
 
 import com.trawhile.service.TimeRecordService;
+import com.trawhile.web.api.TimeRecordsApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** /api/v1/time-records — manual record management (create, edit, delete, duplicate). */
 @RestController
-@RequestMapping("/api/v1/time-records")
-public class TimeRecordController {
+@RequestMapping("/api/v1")
+public class TimeRecordController implements TimeRecordsApi {
 
     private final TimeRecordService timeRecordService;
 

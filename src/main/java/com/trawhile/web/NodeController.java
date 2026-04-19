@@ -1,6 +1,7 @@
 package com.trawhile.web;
 
 import com.trawhile.service.NodeService;
+import com.trawhile.web.api.NodesApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,8 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   POST   /nodes/{nodeId}/move              — SR-F020.F01 moveNode
  */
 @RestController
-@RequestMapping("/api/v1/nodes")
-public class NodeController {
+@RequestMapping("/api/v1")
+public class NodeController implements NodesApi {
 
     private final NodeService nodeService;
 

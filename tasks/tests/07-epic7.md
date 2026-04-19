@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `security_events` table, `event_type` enum values
 2. `docs/requirements-sr.md` — SR-F049.F01, SR-F049.F02, SR-C007.F01
-3. `docs/openapi.yaml` — `/security-events` path
-4. `docs/test-plan.md` — TE-F049.F01-* through TE-F049.F02-*, TE-C007.F01-*
+3. `spec/openapi.yaml` — `/security-events` path
+4. `spec/test-plan.md` — TE-F049.F01-* through TE-F049.F02-*, TE-C007.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

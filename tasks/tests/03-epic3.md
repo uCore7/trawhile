@@ -17,8 +17,8 @@ You are a **test writer**. Derive all test logic from the spec. Do not read `src
 
 1. `docs/schema.sql` — `time_records`, `quick_access`; freeze cutoff definition
 2. `docs/requirements-sr.md` — SR-F024.F01–SR-F034.F01; SR-F027.F01, SR-F030.F01
-3. `docs/openapi.yaml` — `/tracking`, `/time-records`, `/quick-access` paths
-4. `docs/test-plan.md` — TE-F024.F01-* through TE-F034.F01-*, TE-F027.F01-*, TE-F030.F01-*
+3. `spec/openapi.yaml` — `/tracking`, `/time-records`, `/quick-access` paths
+4. `spec/test-plan.md` — TE-F024.F01-* through TE-F034.F01-*, TE-F027.F01-*, TE-F030.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

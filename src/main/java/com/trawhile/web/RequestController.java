@@ -1,13 +1,14 @@
 package com.trawhile.web;
 
 import com.trawhile.service.RequestService;
+import com.trawhile.web.api.RequestsApi;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** /api/v1/requests — submit, view, and close requests. */
+/** /api/v1/nodes/{nodeId}/requests — submit, view, and close requests. */
 @RestController
-@RequestMapping("/api/v1/requests")
-public class RequestController {
+@RequestMapping("/api/v1")
+public class RequestController implements RequestsApi {
 
     private final RequestService requestService;
 

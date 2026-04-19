@@ -20,7 +20,7 @@ Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent
 
 1. `docs/schema.sql` — `time_records`, `quick_access` tables
 2. `docs/requirements-sr.md` — SR-F024.F01–SR-F034.F01; SR-F027.F01, SR-F030.F01
-3. `docs/openapi.yaml` — `/tracking`, `/time-records`, `/quick-access` paths
+3. `spec/openapi.yaml` — `/tracking`, `/time-records`, `/quick-access` paths
 4. `docs/architecture.md` — §Transaction boundaries, §SSE dispatch
 5. `src/main/java/com/trawhile/config/TrawhileConfig.java` — `freezeOffsetYears()`
 6. The failing tests:

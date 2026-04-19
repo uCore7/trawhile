@@ -20,7 +20,7 @@ Make the failing Epic 5 tests pass. Implement request submission, listing, and c
 
 1. `docs/schema.sql` — `requests` table
 2. `docs/requirements-sr.md` — SR-F039.F01, SR-F041.F01, SR-F042.F01
-3. `docs/openapi.yaml` — `/requests` paths
+3. `spec/openapi.yaml` — `/requests` paths
 4. The failing tests:
    - `src/test/java/com/trawhile/RequestIT.java`
 

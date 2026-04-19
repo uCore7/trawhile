@@ -20,7 +20,7 @@ Make the failing Epic 1 tests pass. Implement user management, invitation lifecy
 
 1. `docs/schema.sql` — `users`, `pending_invitations`, `user_profile`, `user_oauth_providers`, `node_authorizations`, `mcp_tokens`
 2. `docs/requirements-sr.md` — SR-F001.F01, SR-C006.C01, SR-F004.F01–SR-F011.F01
-3. `docs/openapi.yaml` — `/users`, `/invitations`, `/auth/gdpr-notice`, `/settings` paths
+3. `spec/openapi.yaml` — `/users`, `/invitations`, `/auth/gdpr-notice`, `/settings` paths
 4. `docs/architecture.md` — §4 OIDC flows, §5 Authorization checks
 5. The failing tests (read to understand what is expected):
    - `src/test/java/com/trawhile/BootstrapIT.java`

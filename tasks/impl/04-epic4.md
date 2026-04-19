@@ -20,7 +20,7 @@ Make the failing Epic 4 tests pass. Implement time reports (summary and detailed
 
 1. `docs/schema.sql` — `time_records`, `node_authorizations`; Q1 visible-subtree CTE
 2. `docs/requirements-sr.md` — SR-F036.F01, SR-F036.F02, SR-F038.F01, SR-F052.F01
-3. `docs/openapi.yaml` — `/reports`, `/reports/export`, `/reports/members` paths
+3. `spec/openapi.yaml` — `/reports`, `/reports/export`, `/reports/members` paths
 4. `src/main/java/com/trawhile/config/TrawhileConfig.java` — `timezone()`
 5. The failing tests:
    - `src/test/java/com/trawhile/ReportIT.java`

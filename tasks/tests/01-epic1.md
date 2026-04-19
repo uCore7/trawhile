@@ -17,8 +17,8 @@ You are a **test writer**. Your job is to write failing tests derived from the s
 
 1. `docs/schema.sql` — `users`, `pending_invitations`, `user_profile`, `user_oauth_providers`, `node_authorizations`, `mcp_tokens` tables and FK/cascade rules
 2. `docs/requirements-sr.md` — SR-F001.F01, SR-C006.C01, SR-F004.F01, SR-F005.F01, SR-F006.F01, SR-F011.F01, SR-F060.F01, SR-F007.F01, SR-C010.C01, SR-F070.F01, SR-F008.F01, SR-F009.F01, SR-F010.F01
-3. `docs/openapi.yaml` — `/users`, `/invitations`, `/auth/gdpr-notice`, `/settings` paths; exact request/response shapes
-4. `docs/test-plan.md` — TE-F001.F01-* through TE-F010.F01-*, TE-F067.F01-*, TE-F060.F02-*, TE-C002.F01-*
+3. `spec/openapi.yaml` — `/users`, `/invitations`, `/auth/gdpr-notice`, `/settings` paths; exact request/response shapes
+4. `spec/test-plan.md` — TE-F001.F01-* through TE-F010.F01-*, TE-F067.F01-*, TE-F060.F02-*, TE-C002.F01-*
 5. `src/test/java/com/trawhile/BaseIT.java`
 6. `src/test/java/com/trawhile/TestFixtures.java`
 7. `src/test/java/com/trawhile/TestSecurityHelper.java`

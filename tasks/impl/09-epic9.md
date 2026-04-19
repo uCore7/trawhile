@@ -21,7 +21,7 @@ Make the failing Epic 9 tests pass. Implement MCP token lifecycle and the MCP to
 
 1. `docs/schema.sql` — `mcp_tokens`
 2. `docs/requirements-sr.md` — SR-F053.F01, SR-F054.F01, SR-F053.F02, SR-F055.F01, SR-F056.F01, SR-F057.F01, SR-F069.F01
-3. `docs/openapi.yaml` — `/account/mcp-tokens`, `/admin/mcp-tokens`, `/mcp` paths
+3. `spec/openapi.yaml` — `/account/mcp-tokens`, `/admin/mcp-tokens`, `/mcp` paths
 4. The failing tests:
    - `src/test/java/com/trawhile/McpTokenIT.java`
    - `src/test/java/com/trawhile/McpToolIT.java`
