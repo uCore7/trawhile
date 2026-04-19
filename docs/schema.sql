@@ -89,7 +89,7 @@ CREATE TABLE node_authorizations (
   id            UUID       PRIMARY KEY DEFAULT gen_random_uuid(),
   node_id       UUID       NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
   user_id       UUID       NOT NULL REFERENCES users(id),
-  authorization auth_level NOT NULL,
+  auth_level    auth_level NOT NULL,
   UNIQUE (node_id, user_id)
 );
 
@@ -215,7 +215,7 @@ CREATE INDEX mcp_tokens_user_id_idx ON mcp_tokens (user_id);
 --   UNION ALL
 --   SELECT n.id, n.parent_id FROM nodes n JOIN ancestors a ON n.id = a.parent_id
 -- )
--- SELECT MAX(na.authorization) AS effective_authorization
+-- SELECT MAX(na.auth_level) AS effective_authorization
 -- FROM ancestors a JOIN node_authorizations na ON na.node_id = a.id
 -- WHERE na.user_id = :user_id;
 
@@ -227,7 +227,7 @@ CREATE INDEX mcp_tokens_user_id_idx ON mcp_tokens (user_id);
 -- )
 -- SELECT EXISTS (
 --   SELECT 1 FROM ancestors a JOIN node_authorizations na ON na.node_id = a.id
---   WHERE na.user_id = :user_id AND na.authorization >= :required_level
+--   WHERE na.user_id = :user_id AND na.auth_level >= :required_level
 -- );
 
 -- Q4: all users with at least level X on node N
@@ -236,7 +236,7 @@ CREATE INDEX mcp_tokens_user_id_idx ON mcp_tokens (user_id);
 --   UNION ALL
 --   SELECT n.id, n.parent_id FROM nodes n JOIN ancestors a ON n.id = a.parent_id
 -- )
--- SELECT na.user_id, MAX(na.authorization) AS effective_authorization
+-- SELECT na.user_id, MAX(na.auth_level) AS effective_authorization
 -- FROM ancestors a JOIN node_authorizations na ON na.node_id = a.id
 -- GROUP BY na.user_id
--- HAVING MAX(na.authorization) >= :required_level;
+-- HAVING MAX(na.auth_level) >= :required_level;

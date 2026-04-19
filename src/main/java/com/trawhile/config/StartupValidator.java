@@ -28,7 +28,8 @@ public class StartupValidator implements ApplicationRunner {
             throw new IllegalStateException(
                 "Startup validation failed (SR-F065.F01): at least one OIDC provider must be configured. " +
                 "Set a non-empty client-id for at least one of: " +
-                "GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, MICROSOFT_CLIENT_ID, KEYCLOAK_CLIENT_ID.");
+                "GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, MICROSOFT_CLIENT_ID, KEYCLOAK_CLIENT_ID " +
+                "(the legacy SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_* variables are also accepted).");
         }
     }
 }

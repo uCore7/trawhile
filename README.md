@@ -78,12 +78,28 @@ The first OIDC login matching `BOOTSTRAP_ADMIN_EMAIL` is routed through the boot
 ```bash
 # Start PostgreSQL only (Spring Boot + Angular run natively with hot reload)
 make development-db
-mvn spring-boot:run
+./scripts/mvn-local.sh spring-boot:run
 cd src/main/frontend && ng serve
 
 # Or start the full stack in Docker (production-like)
 make development-up
 ```
+
+If you already created a PostgreSQL data volume with an older image/layout, recreate it once after pulling these changes:
+
+```bash
+docker compose -f docker-compose.dev.yml down -v
+make development-db
+```
+
+To keep Maven and Maven Wrapper caches inside the project instead of `~/.m2`, use:
+
+```bash
+./scripts/mvn-local.sh test
+./scripts/mvn-local.sh -DskipTests -Dskip.npm=true -Dskip.installnodenpm=true prepare-package
+```
+
+This uses `.mvn/home` for the wrapper distribution cache and `.mvn/repository` for the Maven local repository.
 
 Run `make help` for all available targets.
 

@@ -35,7 +35,7 @@ development-db: ## Start PostgreSQL only (for native Spring Boot + ng serve)
 	@echo "  JDBC URL: jdbc:postgresql://localhost:5432/trawhile"
 	@echo "  Username: tt  Password: $(DB_PASSWORD)"
 	@echo ""
-	@echo "  Run Spring Boot: mvn spring-boot:run"
+	@echo "  Run Spring Boot: ./scripts/mvn-local.sh spring-boot:run"
 	@echo "  Run Angular:     cd src/main/frontend && ng serve"
 
 development-db-stop: ## Stop the dev PostgreSQL container

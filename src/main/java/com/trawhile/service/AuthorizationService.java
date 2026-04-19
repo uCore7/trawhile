@@ -37,6 +37,10 @@ public class AuthorizationService {
         return queries.hasAuthorization(userId, nodeId, AuthLevel.ADMIN);
     }
 
+    public boolean hasAnyAuthorization(UUID userId) {
+        return !queries.visibleNodeIds(userId).isEmpty();
+    }
+
     private void require(UUID userId, UUID nodeId, AuthLevel level) {
         if (!queries.hasAuthorization(userId, nodeId, level)) {
             throw new AccessDeniedException("Insufficient authorization on node " + nodeId);

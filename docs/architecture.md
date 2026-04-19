@@ -136,7 +136,7 @@ public boolean hasAuthorization(UUID userId, UUID nodeId, AuthLevel required) {
           SELECT 1 FROM ancestors a
           JOIN node_authorizations na ON na.node_id = a.id
           WHERE na.user_id = :userId
-          AND   na.authorization >= CAST(:required AS auth_level)
+          AND   na.auth_level >= CAST(:required AS auth_level)
         )
         """;
     return Boolean.TRUE.equals(jdbcTemplate.queryForObject(sql,
@@ -210,7 +210,28 @@ Because deletion is bottom-up, only leaf nodes are considered in each iteration.
 
 Each iteration is also `REQUIRES_NEW`. The outer coordinator loop is not transactional.
 
-### 4. OIDC flows — login vs. provider linking
+### 4. SPA fallback routing boundary
+
+The Angular SPA is served from Spring Boot static resources, with a controller
+forwarding browser navigation requests to `index.html` so client-side routing
+can resolve them after a hard refresh.
+
+This fallback is intentionally narrow. It must forward only SPA-owned routes and
+must explicitly exclude all server-owned prefixes. At minimum, the exclusion
+list includes:
+
+- `/api` — REST API endpoints
+- `/login` — server-owned login page and related entry points
+- `/oauth2` — Spring Security OAuth2 authorization endpoints
+- `/login/oauth2` — Spring Security OAuth2 callback endpoints
+
+If additional server-owned route families are introduced later, they must be
+added to the SPA fallback exclusion list in the same change. The architectural
+invariant is: SPA fallback routes may never claim URLs that belong to backend
+controllers, Spring Security, actuator/management endpoints, or static asset
+paths.
+
+### 5. OIDC flows — login vs. provider linking
 
 Spring Security handles the OIDC login callback at `/login/oauth2/code/{provider}`.
 
@@ -235,7 +256,7 @@ The session attribute `LINKING_PROVIDER` is set before redirecting to `/oauth2/a
 
 **Bootstrap detection**: `TrawhileOidcUserService` checks for the SR-F001.F01 condition before invitation matching completes. If no root `admin` exists and `BOOTSTRAP_ADMIN_EMAIL` matches the provider-returned email, it stores bootstrap registration data in the HTTP session and redirects to `/gdpr-notice`; the `users` row, `user_profile`, `user_oauth_providers`, and root `node_authorizations` row are inserted later as part of the SR-F060.F02 transaction.
 
-### 5. Authorization checks — service layer
+### 6. Authorization checks — service layer
 
 No Spring Security method security (`@PreAuthorize`). Authorization is checked explicitly at the top of each service method using `AuthorizationService`:
 
@@ -251,7 +272,7 @@ public NodeResponse deactivateNode(UUID nodeId, UUID requestingUserId) {
 
 This approach is explicit, easy to test, and avoids annotation magic hiding authorization logic from code review.
 
-### 6. Error handling
+### 7. Error handling
 
 Single `@ControllerAdvice` (`GlobalExceptionHandler`) maps exceptions to `Problem` responses:
 
@@ -265,7 +286,7 @@ Single `@ControllerAdvice` (`GlobalExceptionHandler`) maps exceptions to `Proble
 
 All exceptions carry a `code` string (e.g. `LAST_ADMIN`, `FROZEN_RECORD`, `NODE_HAS_CHILDREN`) matching the `Problem.code` field in the OpenAPI spec.
 
-### 7. Spring Security configuration
+### 8. Spring Security configuration
 
 ```
 - OIDC login: enabled, custom OIDC user service + success handler
@@ -385,13 +406,13 @@ No NgRx or other state library. Angular signals + services with `signal()` / `co
 ```yaml
 services:
   db:
-    image: postgres:16
+    image: postgres:18
     environment:
       POSTGRES_DB: trawhile
       POSTGRES_USER: tt
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
 
   app:
     image: trawhile:latest

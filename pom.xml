@@ -32,6 +32,7 @@
     <frontend-maven-plugin.version>2.0.0</frontend-maven-plugin.version>
     <node.version>v24.14.1</node.version>
     <npm.version>11.12.1</npm.version>
+    <frontend.output.directory>${project.build.outputDirectory}/static</frontend.output.directory>
   </properties>
 
   <dependencies>
@@ -73,8 +74,8 @@
       <artifactId>postgresql</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-core</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
@@ -121,6 +122,24 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>static</exclude>
+          <exclude>static/**</exclude>
+          <exclude>**/static/**</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <directory>spec</directory>
+        <includes>
+          <include>openapi.yaml</include>
+        </includes>
+        <targetPath>.</targetPath>
+      </resource>
+    </resources>
+
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>
@@ -174,8 +193,13 @@
         <version>${cyclonedx-maven-plugin.version}</version>
         <executions>
           <execution>
-            <phase>package</phase>
+            <phase>prepare-package</phase>
             <goals><goal>makeAggregateBom</goal></goals>
+            <configuration>
+              <outputFormat>json</outputFormat>
+              <outputName>sbom</outputName>
+              <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -237,7 +261,7 @@
             <goals><goal>npm</goal></goals>
             <phase>generate-resources</phase>
             <configuration>
-              <arguments>run build</arguments>
+              <arguments>run build -- --output-path=${frontend.output.directory}</arguments>
             </configuration>
           </execution>
         </executions>

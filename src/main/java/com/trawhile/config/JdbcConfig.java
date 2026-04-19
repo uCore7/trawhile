@@ -10,13 +10,17 @@ import org.springframework.data.convert.WritingConverter;
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 
+import java.sql.Timestamp;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 /**
  * Registers custom type converters for Spring Data JDBC:
  * - AuthLevel ↔ PostgreSQL auth_level enum (lowercase string)
  * - String ↔ PostgreSQL JSONB (for last_report_settings)
+ * - OffsetDateTime ↔ JDBC Timestamp for TIMESTAMPTZ columns
  */
 @Configuration
 public class JdbcConfig extends AbstractJdbcConfiguration {
@@ -28,7 +32,9 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
             new AuthLevelWritingConverter(),
             new AuthLevelReadingConverter(),
             new JsonbWritingConverter(),
-            new JsonbReadingConverter()
+            new JsonbReadingConverter(),
+            new OffsetDateTimeWritingConverter(),
+            new OffsetDateTimeReadingConverter()
         ));
     }
 
@@ -75,6 +81,29 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
         @Override
         public String convert(PGobject source) {
             return source.getValue();
+        }
+    }
+
+    /**
+     * Writes an OffsetDateTime into a JDBC Timestamp.
+     * PostgreSQL TIMESTAMPTZ stores an instant, not the original offset.
+     */
+    @WritingConverter
+    static class OffsetDateTimeWritingConverter implements Converter<OffsetDateTime, Timestamp> {
+        @Override
+        public Timestamp convert(OffsetDateTime source) {
+            return Timestamp.from(source.toInstant());
+        }
+    }
+
+    /**
+     * Reads a JDBC Timestamp back as OffsetDateTime in UTC.
+     */
+    @ReadingConverter
+    static class OffsetDateTimeReadingConverter implements Converter<Timestamp, OffsetDateTime> {
+        @Override
+        public OffsetDateTime convert(Timestamp source) {
+            return source.toInstant().atOffset(ZoneOffset.UTC);
         }
     }
 }

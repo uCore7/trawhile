@@ -44,7 +44,18 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/about").permitAll()
                 .requestMatchers("/api/v1/auth/providers").permitAll()
                 .requestMatchers("/api/v1/auth/gdpr-notice").permitAll()
-                .requestMatchers("/index.html", "/", "/assets/**", "/*.js", "/*.css", "/*.ico").permitAll()
+                .requestMatchers(
+                    "/",
+                    "/index.html",
+                    "/assets/**",
+                    "/*.js",
+                    "/*.css",
+                    "/*.ico",
+                    "/prerendered-routes.json",
+                    "/3rdpartylicenses.txt",
+                    "/openapi.yaml",
+                    "/sbom.json"
+                ).permitAll()
                 .anyRequest().authenticated())
 
             .oauth2Login(oauth2 -> oauth2

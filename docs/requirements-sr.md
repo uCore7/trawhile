@@ -8,7 +8,7 @@ SR-F and SR-Q must each have at least one TE. SR-C has none.
 
 ## Epic 1 — System administration
 
-**SR-F001.F01 (type F):** The system shall detect on startup whether any `node_authorizations` row exists with `authorization = 'admin'` on the root node. If none exists and `BOOTSTRAP_ADMIN_EMAIL` is set, the system shall treat the first OIDC login matching that email as a bootstrap registration: store session data and redirect to the GDPR notice screen (SR-F060.F01), then as part of SR-F060.F02 insert a `users` row, `user_profile`, and `user_oauth_providers`, and additionally insert a `node_authorizations` row granting `admin` on the root node. No `pending_invitations` row is required for the bootstrap path. [Rationale: UR-F001]
+**SR-F001.F01 (type F):** The system shall detect on startup whether any `node_authorizations` row exists with `auth_level = 'admin'` on the root node. If none exists and `BOOTSTRAP_ADMIN_EMAIL` is set, the system shall treat the first OIDC login matching that email as a bootstrap registration: store session data and redirect to the GDPR notice screen (SR-F060.F01), then as part of SR-F060.F02 insert a `users` row, `user_profile`, and `user_oauth_providers`, and additionally insert a `node_authorizations` row granting `admin` on the root node. No `pending_invitations` row is required for the bootstrap path. [Rationale: UR-F001]
 
 **SR-F004.F01 (type F):** The system shall return all `users` rows with their status — `pending` if a `pending_invitations` row exists for the user, `active` if `user_profile` exists, `anonymised` otherwise — plus name (from `user_profile` if active; email from `pending_invitations` if pending; fixed placeholder if anonymised) to users with effective `admin` on root. [Rationale: UR-F004]
 
