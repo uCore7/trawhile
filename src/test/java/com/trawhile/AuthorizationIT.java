@@ -86,6 +86,14 @@ class AuthorizationIT extends BaseIT {
                         .with(TestSecurityHelper.authenticatedAs(userId))
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+
+        Integer rowCount = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM node_authorizations WHERE node_id = ? AND user_id = ?",
+            Integer.class,
+            nodeId,
+            targetUserId
+        );
+        assertThat(rowCount).isZero();
     }
 
     @Test
@@ -124,6 +132,14 @@ class AuthorizationIT extends BaseIT {
                         .with(TestSecurityHelper.adminUser(requesterId))
                         .with(csrf()))
                 .andExpect(status().isConflict());
+
+        Integer remainingRows = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM node_authorizations WHERE node_id = ? AND user_id = ?",
+            Integer.class,
+            nodeId,
+            targetAdminId
+        );
+        assertThat(remainingRows).isOne();
     }
 
     @Test
@@ -138,6 +154,14 @@ class AuthorizationIT extends BaseIT {
                         .with(TestSecurityHelper.authenticatedAs(userId))
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+
+        Integer remainingRows = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM node_authorizations WHERE node_id = ? AND user_id = ?",
+            Integer.class,
+            nodeId,
+            targetUserId
+        );
+        assertThat(remainingRows).isOne();
     }
 
     @Test

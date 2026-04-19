@@ -141,6 +141,11 @@ class NodeIT extends BaseIT {
     void createChild_nonAdmin_returns403() throws Exception {
         UUID userId = TestFixtures.insertUserWithProfile(jdbc, "Non Admin");
         UUID parentId = TestFixtures.insertNode(jdbc, TestFixtures.ROOT_NODE_ID, "Parent");
+        int countBefore = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM nodes WHERE parent_id = ?",
+            Integer.class,
+            parentId
+        );
 
         mvc.perform(post("/api/v1/nodes/" + parentId + "/children")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -150,6 +155,13 @@ class NodeIT extends BaseIT {
                         .with(TestSecurityHelper.authenticatedAs(userId))
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+
+        int countAfter = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM nodes WHERE parent_id = ?",
+            Integer.class,
+            parentId
+        );
+        assertThat(countAfter).isEqualTo(countBefore);
     }
 
     @Test
@@ -273,6 +285,13 @@ class NodeIT extends BaseIT {
                         .with(TestSecurityHelper.adminUser(adminId))
                         .with(csrf()))
                 .andExpect(status().isBadRequest());
+
+        Map<String, Object> persistedLogo = jdbc.queryForMap(
+            "SELECT logo, logo_mime_type FROM nodes WHERE id = ?",
+            nodeId
+        );
+        assertThat(persistedLogo.get("logo")).isNull();
+        assertThat(persistedLogo.get("logo_mime_type")).isNull();
     }
 
     @Test
@@ -362,6 +381,13 @@ class NodeIT extends BaseIT {
                         .with(TestSecurityHelper.adminUser(adminId))
                         .with(csrf()))
                 .andExpect(status().isConflict());
+
+        Map<String, Object> row = jdbc.queryForMap(
+            "SELECT is_active, deactivated_at FROM nodes WHERE id = ?",
+            nodeId
+        );
+        assertThat(row.get("is_active")).isEqualTo(true);
+        assertThat(row.get("deactivated_at")).isNull();
     }
 
     @Test
@@ -484,6 +510,13 @@ class NodeIT extends BaseIT {
                         .with(TestSecurityHelper.adminUser(adminId))
                         .with(csrf()))
                 .andExpect(status().isConflict());
+
+        UUID persistedParentId = jdbc.queryForObject(
+            "SELECT parent_id FROM nodes WHERE id = ?",
+            UUID.class,
+            nodeId
+        );
+        assertThat(persistedParentId).isEqualTo(parentId);
     }
 
     @Test
@@ -503,5 +536,12 @@ class NodeIT extends BaseIT {
                         .with(TestSecurityHelper.authenticatedAs(limitedAdminId))
                         .with(csrf()))
                 .andExpect(status().isForbidden());
+
+        UUID persistedParentId = jdbc.queryForObject(
+            "SELECT parent_id FROM nodes WHERE id = ?",
+            UUID.class,
+            nodeId
+        );
+        assertThat(persistedParentId).isEqualTo(sourceParentId);
     }
 }
