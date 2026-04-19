@@ -156,7 +156,6 @@ Every SR of type F or Q must have at least one TE, regardless of the parent UR's
 **Conventions:**
 - `docs/schema.sql` is authoritative; the Flyway V1 migration is generated from it
 - Scaffolds and the Flyway V1 migration are derived artifacts; when schema or contract terminology changes, regenerate first and patch manually only if needed
-- Schema changes go through chat mode and update both `docs/schema.sql` and a new numbered migration file in the same commit — never via agents
 - `@Transactional` on service methods only; never on controllers or repositories
 - Authorization checked via `AuthorizationService` at the top of every service method; no `@PreAuthorize`
 
