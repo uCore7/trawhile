@@ -19,6 +19,6 @@ public class InvitationExpiryJob {
 
     @Scheduled(cron = "0 0 2 * * *")
     public void expireInvitations() {
-        // TODO: userService.expireInvitations()
+        userService.expireInvitations();
     }
 }

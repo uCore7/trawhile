@@ -16,6 +16,9 @@ import java.util.UUID;
 @Repository
 public class AuthorizationQueries {
 
+    public record UserAuthorizationPathRow(UUID nodeId, String authorization, String nodePathJson) {
+    }
+
     private final NamedParameterJdbcTemplate jdbc;
 
     public AuthorizationQueries(NamedParameterJdbcTemplate jdbc) {
@@ -119,5 +122,46 @@ public class AuthorizationQueries {
             )
             """;
         return Boolean.TRUE.equals(jdbc.queryForObject(sql, Map.of(), Boolean.class));
+    }
+
+    /** Full granted-node paths for SR-F009.F01 / SR-F046.F01, computed in SQL via recursive CTE. */
+    public List<UserAuthorizationPathRow> userAuthorizationsWithPaths(UUID userId) {
+        String sql = """
+            WITH RECURSIVE node_paths AS (
+              SELECT n.id,
+                     n.parent_id,
+                     ARRAY[n.id] AS path_ids,
+                     ARRAY[n.name] AS path_names
+              FROM nodes n
+              WHERE n.parent_id IS NULL
+              UNION ALL
+              SELECT c.id,
+                     c.parent_id,
+                     np.path_ids || c.id,
+                     np.path_names || c.name
+              FROM nodes c
+              JOIN node_paths np ON c.parent_id = np.id
+            )
+            SELECT na.node_id,
+                   na.auth_level::text AS authorization,
+                   jsonb_agg(
+                     jsonb_build_object('id', p.node_id, 'name', p.node_name)
+                     ORDER BY p.ordinality
+                   )::text AS node_path
+            FROM node_authorizations na
+            JOIN node_paths np ON np.id = na.node_id
+            CROSS JOIN LATERAL unnest(np.path_ids, np.path_names)
+                WITH ORDINALITY AS p(node_id, node_name, ordinality)
+            WHERE na.user_id = :userId
+            GROUP BY na.node_id, na.auth_level, np.path_names
+            ORDER BY array_to_string(np.path_names, ' / ')
+            """;
+        return jdbc.query(sql, Map.of("userId", userId), (rs, rowNum) ->
+            new UserAuthorizationPathRow(
+                rs.getObject("node_id", UUID.class),
+                rs.getString("authorization"),
+                rs.getString("node_path")
+            )
+        );
     }
 }

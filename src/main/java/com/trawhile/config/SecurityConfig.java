@@ -8,11 +8,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @Configuration
 @EnableWebSecurity
@@ -61,7 +65,13 @@ public class SecurityConfig {
             .oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(u -> u
                     .oidcUserService(oidcUserService))  // Google + Apple (OIDC)
-                .successHandler(loginSuccessHandler))
+                .successHandler(loginSuccessHandler)
+                .failureHandler((request, response, exception) -> {
+                    String errorCode = exception instanceof OAuth2AuthenticationException oauthEx
+                        ? oauthEx.getError().getErrorCode()
+                        : "error";
+                    response.sendRedirect("/login?error=" + URLEncoder.encode(errorCode, StandardCharsets.UTF_8));
+                }))
 
             .logout(logout -> logout
                 .logoutUrl("/api/v1/auth/logout")
