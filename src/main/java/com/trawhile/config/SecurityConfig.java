@@ -41,13 +41,15 @@ public class SecurityConfig {
 
             .csrf(csrf -> csrf
                 .csrfTokenRepository(csrfRepo)
-                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                .ignoringRequestMatchers("/mcp"))
 
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers("/api/v1/about").permitAll()
                 .requestMatchers("/api/v1/auth/providers").permitAll()
                 .requestMatchers("/api/v1/auth/gdpr-notice").permitAll()
+                .requestMatchers("/mcp").permitAll()
                 .requestMatchers(
                     "/",
                     "/index.html",
