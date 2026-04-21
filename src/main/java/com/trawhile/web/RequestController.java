@@ -2,8 +2,16 @@ package com.trawhile.web;
 
 import com.trawhile.service.RequestService;
 import com.trawhile.web.api.RequestsApi;
+import com.trawhile.web.dto.CreateRequestRequest;
+import com.trawhile.web.dto.RequestRecord;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
 
 /** /api/v1/nodes/{nodeId}/requests — submit, view, and close requests. */
 @RestController
@@ -16,5 +24,23 @@ public class RequestController implements RequestsApi {
         this.requestService = requestService;
     }
 
-    // TODO: implement SR-F039.F01 (submit), SR-F041.F01 (view), SR-F042.F01 (close)
+    @Override
+    public ResponseEntity<RequestRecord> closeRequest(UUID nodeId, UUID requestId) {
+        return ResponseEntity.ok(requestService.closeRequest(currentUserId(), nodeId, requestId));
+    }
+
+    @Override
+    public ResponseEntity<RequestRecord> createRequest(UUID nodeId, CreateRequestRequest createRequestRequest) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(requestService.submitRequest(currentUserId(), nodeId, createRequestRequest));
+    }
+
+    @Override
+    public ResponseEntity<List<RequestRecord>> listNodeRequests(UUID nodeId) {
+        return ResponseEntity.ok(requestService.listRequests(currentUserId(), nodeId));
+    }
+
+    private UUID currentUserId() {
+        return UUID.fromString(SecurityContextHolder.getContext().getAuthentication().getName());
+    }
 }
