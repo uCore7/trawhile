@@ -1,5 +1,6 @@
 package com.trawhile;
 
+import com.trawhile.security.OidcLoginSuccessHandler;
 import com.trawhile.security.TrawhileOidcUserService;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -14,6 +16,7 @@ import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.IdTokenClaimNames;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -40,6 +43,9 @@ class AuthFlowIT extends BaseIT {
 
     @Autowired
     private TrawhileOidcUserService oidcUserService;
+
+    @Autowired
+    private OidcLoginSuccessHandler oidcLoginSuccessHandler;
 
     // -----------------------------------------------------------------------
     // Helper: client registration without userInfoUri avoids network calls
@@ -80,20 +86,47 @@ class AuthFlowIT extends BaseIT {
         return new OidcUserRequest(noNetworkRegistration(), accessToken, idToken, Map.of());
     }
 
-    private MockHttpSession callLoadUserAndReturnSession(OidcUserRequest request) {
+    private LoadUserResult callLoadUser(OidcUserRequest request) {
         MockHttpServletRequest httpRequest = new MockHttpServletRequest();
         MockHttpSession session = new MockHttpSession();
+        MockHttpServletResponse response = new MockHttpServletResponse();
         httpRequest.setSession(session);
         RequestContextHolder.setRequestAttributes(
-                new ServletRequestAttributes(httpRequest, new MockHttpServletResponse()));
+                new ServletRequestAttributes(httpRequest, response));
         try {
-            oidcUserService.loadUser(request);
+            OidcUser principal = oidcUserService.loadUser(request);
+            return new LoadUserResult(httpRequest, response, session, principal);
         } catch (OAuth2AuthenticationException ignored) {
             // Swallow; session state inspectable
+            return new LoadUserResult(httpRequest, response, session, null);
         } finally {
             RequestContextHolder.resetRequestAttributes();
         }
-        return session;
+    }
+
+    private void assertNotInvitedError(String email, String subject) {
+        OidcUserRequest request = buildRequest(email, subject);
+        MockHttpServletRequest httpRequest = new MockHttpServletRequest();
+        httpRequest.setSession(new MockHttpSession());
+        RequestContextHolder.setRequestAttributes(
+            new ServletRequestAttributes(httpRequest, new MockHttpServletResponse())
+        );
+        try {
+            assertThatThrownBy(() -> oidcUserService.loadUser(request))
+                .isInstanceOf(OAuth2AuthenticationException.class)
+                .satisfies(ex -> assertThat(((OAuth2AuthenticationException) ex).getError().getErrorCode())
+                    .isEqualTo("not_invited"));
+        } finally {
+            RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
+    private record LoadUserResult(
+        MockHttpServletRequest request,
+        MockHttpServletResponse response,
+        MockHttpSession session,
+        OidcUser principal
+    ) {
     }
 
     // -----------------------------------------------------------------------
@@ -119,12 +152,36 @@ class AuthFlowIT extends BaseIT {
         int oauthBefore = jdbc.queryForObject("SELECT COUNT(*) FROM user_oauth_providers", Integer.class);
 
         OidcUserRequest request = buildRequest("returning@example.com", subject);
-        MockHttpSession session = callLoadUserAndReturnSession(request);
+        LoadUserResult result = callLoadUser(request);
+
+        assertThat(result.principal()).as("existing user login must resolve an authenticated principal").isNotNull();
+        assertThat(result.request().getSession(false))
+            .as("existing user callback must create an HttpSession")
+            .isNotNull();
 
         // Returning user: PENDING_GDPR must NOT be set (not a new registration)
-        assertThat(session.getAttribute("PENDING_GDPR"))
+        assertThat(result.session().getAttribute("PENDING_GDPR"))
                 .as("returning user must not get PENDING_GDPR session attribute")
                 .isNull();
+
+        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(
+            result.principal(),
+            result.principal().getAuthorities(),
+            provider
+        );
+        try {
+            oidcLoginSuccessHandler.onAuthenticationSuccess(
+                result.request(),
+                result.response(),
+                authentication
+            );
+        } catch (Exception e) {
+            throw new AssertionError("OIDC success handler should redirect returning users to /", e);
+        }
+
+        assertThat(result.response().getRedirectedUrl())
+            .as("existing-user callback must redirect to the application root")
+            .isEqualTo("/");
 
         // No new DB rows must be created
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM user_profile", Integer.class))
@@ -196,12 +253,12 @@ class AuthFlowIT extends BaseIT {
     @Test
     @Tag("TE-F060.F02-02")
     void acknowledgeGdpr_invitationWithdrawnBetweenCallbackAndAck_redirectsToNotInvited() throws Exception {
-        // Session references an invitation that has since been deleted by the admin
         UUID userId = TestFixtures.insertUser(jdbc);
-        UUID deletedInvitationId = UUID.randomUUID();  // does not exist in DB
+        UUID invitationId = TestFixtures.insertPendingInvitation(jdbc, "withdrawn@example.com", userId);
+        jdbc.update("DELETE FROM pending_invitations WHERE id = ?", invitationId);
 
         Map<String, Object> pendingData = Map.of(
-                "invitationId", deletedInvitationId.toString(),
+                "invitationId", invitationId.toString(),
                 "userId", userId.toString(),
                 "provider", "google",
                 "subject", "google-sub-withdrawn-001",
@@ -216,6 +273,17 @@ class AuthFlowIT extends BaseIT {
                         .with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(header().string("Location", containsString("/login?error=not_invited")));
+
+        assertThat(jdbc.queryForObject(
+            "SELECT COUNT(*) FROM user_profile WHERE user_id = ?",
+            Integer.class,
+            userId
+        )).as("withdrawn invitation must not leave behind a partial user_profile row").isZero();
+        assertThat(jdbc.queryForObject(
+            "SELECT COUNT(*) FROM user_oauth_providers WHERE subject = ?",
+            Integer.class,
+            "google-sub-withdrawn-001"
+        )).as("withdrawn invitation must not leave behind a partial user_oauth_providers row").isZero();
     }
 
     // -----------------------------------------------------------------------
@@ -225,25 +293,7 @@ class AuthFlowIT extends BaseIT {
     @Test
     @Tag("TE-C002.F01-01")
     void oidcCallback_noMatchingInvitation_redirectsToLoginError() {
-        // Case 1: no pending invitation at all for this email
-        OidcUserRequest requestNoInvitation = buildRequest("unknown@example.com", "sub-unknown-001");
-        MockHttpServletRequest req1 = new MockHttpServletRequest();
-        req1.setSession(new MockHttpSession());
-        RequestContextHolder.setRequestAttributes(
-                new ServletRequestAttributes(req1, new MockHttpServletResponse()));
-        try {
-            assertThatThrownBy(() -> oidcUserService.loadUser(requestNoInvitation))
-                    .as("no matching invitation: OAuth2AuthenticationException with not_invited code")
-                    .isInstanceOf(OAuth2AuthenticationException.class)
-                    .satisfies(ex -> {
-                        String errorCode = ((OAuth2AuthenticationException) ex).getError().getErrorCode();
-                        assertThat(errorCode)
-                                .as("error code must signal not_invited regardless of cause")
-                                .isEqualTo("not_invited");
-                    });
-        } finally {
-            RequestContextHolder.resetRequestAttributes();
-        }
+        assertNotInvitedError("unknown@example.com", "sub-unknown-001");
 
         // Case 2: invitation exists but is expired — must produce the SAME error code
         UUID expiredUserId = TestFixtures.insertUser(jdbc);
@@ -253,23 +303,6 @@ class AuthFlowIT extends BaseIT {
                 "UPDATE pending_invitations SET expires_at = NOW() - INTERVAL '1 day' WHERE id = ?",
                 expiredInvitationId);
 
-        OidcUserRequest requestExpired = buildRequest("expired@example.com", "sub-expired-001");
-        MockHttpServletRequest req2 = new MockHttpServletRequest();
-        req2.setSession(new MockHttpSession());
-        RequestContextHolder.setRequestAttributes(
-                new ServletRequestAttributes(req2, new MockHttpServletResponse()));
-        try {
-            assertThatThrownBy(() -> oidcUserService.loadUser(requestExpired))
-                    .as("expired invitation: must produce the same error code as no invitation")
-                    .isInstanceOf(OAuth2AuthenticationException.class)
-                    .satisfies(ex -> {
-                        String errorCode = ((OAuth2AuthenticationException) ex).getError().getErrorCode();
-                        assertThat(errorCode)
-                                .as("response must not distinguish 'not found' from 'expired' (SR-C002.F01)")
-                                .isEqualTo("not_invited");
-                    });
-        } finally {
-            RequestContextHolder.resetRequestAttributes();
-        }
+        assertNotInvitedError("expired@example.com", "sub-expired-001");
     }
 }
