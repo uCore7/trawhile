@@ -1,29 +1,177 @@
 package com.trawhile.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trawhile.domain.SecurityEvent;
 import com.trawhile.repository.SecurityEventRepository;
+import com.trawhile.web.dto.ListSecurityEvents200Response;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
-@Transactional
 public class SecurityEventService {
 
-    private final SecurityEventRepository securityEventRepository;
+    private static final UUID ROOT_NODE_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final String ANONYMISED_PLACEHOLDER = "Anonymised user";
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() { };
 
-    public SecurityEventService(SecurityEventRepository securityEventRepository) {
-        this.securityEventRepository = securityEventRepository;
+    public record EventFilters(
+        String eventType,
+        UUID userId,
+        OffsetDateTime from,
+        OffsetDateTime to,
+        int limit,
+        int offset
+    ) {
     }
 
+    private final SecurityEventRepository securityEventRepository;
+    private final AuthorizationService authorizationService;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
+
+    public SecurityEventService(SecurityEventRepository securityEventRepository,
+                                AuthorizationService authorizationService,
+                                NamedParameterJdbcTemplate namedParameterJdbcTemplate,
+                                JdbcTemplate jdbcTemplate,
+                                ObjectMapper objectMapper) {
+        this.securityEventRepository = securityEventRepository;
+        this.authorizationService = authorizationService;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void log(String eventType, UUID userId, Map<String, Object> metadata) {
+        saveEvent(userId, eventType, writeJson(metadata), null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void log(String eventType, UUID userId, Map<String, Object> metadata, String ipAddress) {
+        saveEvent(userId, eventType, writeJson(metadata), ipAddress);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(UUID userId, String eventType, String details, String ipAddress) {
+        saveEvent(userId, eventType, details, ipAddress);
+    }
+
+    @Transactional(readOnly = true)
+    public ListSecurityEvents200Response listEvents(UUID actingUserId, EventFilters filters) {
+        authorizationService.requireAdmin(actingUserId, ROOT_NODE_ID);
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+            .addValue("eventType", filters.eventType())
+            .addValue("userId", filters.userId())
+            .addValue("from", filters.from())
+            .addValue("to", filters.to())
+            .addValue("limit", filters.limit())
+            .addValue("offset", filters.offset());
+
+        String whereClause = """
+            FROM security_events se
+            LEFT JOIN user_profile up ON up.user_id = se.user_id
+            LEFT JOIN pending_invitations pi ON pi.user_id = se.user_id
+            WHERE (:eventType IS NULL OR se.event_type = :eventType)
+              AND (:userId IS NULL OR se.user_id = :userId)
+              AND (:from IS NULL OR se.occurred_at >= :from)
+              AND (:to IS NULL OR se.occurred_at <= :to)
+            """;
+
+        Integer total = namedParameterJdbcTemplate.queryForObject(
+            "SELECT COUNT(*) " + whereClause,
+            parameters,
+            Integer.class
+        );
+
+        String query = """
+            SELECT se.id,
+                   se.user_id,
+                   COALESCE(
+                     up.name,
+                     pi.email,
+                     CASE WHEN se.user_id IS NULL THEN NULL ELSE '%s' END
+                   ) AS user_name,
+                   se.event_type,
+                   se.details::text AS details,
+                   se.ip_address,
+                   se.occurred_at
+            """.formatted(ANONYMISED_PLACEHOLDER)
+            + whereClause
+            + " ORDER BY se.occurred_at DESC, se.id DESC LIMIT :limit OFFSET :offset";
+
+        List<com.trawhile.web.dto.SecurityEvent> items = namedParameterJdbcTemplate.query(
+            query,
+            parameters,
+            (rs, rowNum) -> {
+                com.trawhile.web.dto.SecurityEvent item =
+                    new com.trawhile.web.dto.SecurityEvent(
+                        rs.getObject("id", UUID.class),
+                        com.trawhile.web.dto.SecurityEvent.EventTypeEnum.fromValue(rs.getString("event_type")),
+                        rs.getObject("occurred_at", OffsetDateTime.class)
+                    );
+                item.setUserId(rs.getObject("user_id", UUID.class));
+                item.setUserName(rs.getString("user_name"));
+                item.setDetails(parseJsonMap(rs.getString("details")));
+                item.setIpAddress(rs.getString("ip_address"));
+                return item;
+            }
+        );
+
+        return new ListSecurityEvents200Response(items, total == null ? 0 : total);
+    }
+
+    @Scheduled(cron = "0 0 0 * * *", zone = "${trawhile.timezone:UTC}")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void deleteOldEvents() {
+        jdbcTemplate.update(
+            "DELETE FROM security_events WHERE occurred_at < NOW() - INTERVAL '90 days'"
+        );
+    }
+
+    private void saveEvent(UUID userId, String eventType, String details, String ipAddress) {
         securityEventRepository.save(new SecurityEvent(
-            null, userId, eventType, details, ipAddress, OffsetDateTime.now()
+            null,
+            userId,
+            eventType,
+            details,
+            ipAddress,
+            OffsetDateTime.now()
         ));
     }
 
-    // TODO: implement SR-F049.F02 (list and filter security event log)
-    // TODO: implement SR-C007.F01 (90-day retention purge, scheduled daily)
+    private String writeJson(Map<String, Object> metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Failed to serialize security event metadata", e);
+        }
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, MAP_TYPE);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse security event details", e);
+        }
+    }
 }
