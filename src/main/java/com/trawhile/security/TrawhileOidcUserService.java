@@ -7,11 +7,14 @@ import com.trawhile.repository.AuthorizationQueries;
 import com.trawhile.repository.PendingInvitationRepository;
 import com.trawhile.repository.UserOauthProviderRepository;
 import com.trawhile.repository.UserProfileRepository;
+import com.trawhile.service.AccountService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
@@ -48,6 +51,7 @@ public class TrawhileOidcUserService extends OidcUserService {
     private final UserProfileRepository userProfileRepository;
     private final PendingInvitationRepository pendingInvitationRepository;
     private final AuthorizationQueries authorizationQueries;
+    private final AccountService accountService;
 
     @Value("${BOOTSTRAP_ADMIN_EMAIL:}")
     private String bootstrapAdminEmail;
@@ -55,11 +59,13 @@ public class TrawhileOidcUserService extends OidcUserService {
     public TrawhileOidcUserService(UserOauthProviderRepository oauthProviderRepository,
                                    UserProfileRepository userProfileRepository,
                                    PendingInvitationRepository pendingInvitationRepository,
-                                   AuthorizationQueries authorizationQueries) {
+                                   AuthorizationQueries authorizationQueries,
+                                   AccountService accountService) {
         this.oauthProviderRepository = oauthProviderRepository;
         this.userProfileRepository = userProfileRepository;
         this.pendingInvitationRepository = pendingInvitationRepository;
         this.authorizationQueries = authorizationQueries;
+        this.accountService = accountService;
     }
 
     @Override
@@ -71,11 +77,12 @@ public class TrawhileOidcUserService extends OidcUserService {
 
         HttpSession session = currentSession();
 
-        if (Boolean.TRUE.equals(session.getAttribute(LINKING_PROVIDER_SESSION_KEY))) {
-            // TODO: link provider to authenticated user
+        if (isLinkingProvider(session.getAttribute(LINKING_PROVIDER_SESSION_KEY), provider)) {
+            UUID userId = currentAuthenticatedUserId();
+            accountService.linkProvider(userId, provider, subject);
             session.removeAttribute(LINKING_PROVIDER_SESSION_KEY);
             session.setAttribute(LINK_COMPLETE_SESSION_KEY, Boolean.TRUE);
-            return oidcUser;
+            return principalForInternalUser(oidcUser, userId);
         }
 
         Optional<UserOauthProvider> existing = oauthProviderRepository.findByProviderAndSubject(provider, subject);
@@ -160,5 +167,24 @@ public class TrawhileOidcUserService extends OidcUserService {
         ServletRequestAttributes attrs =
             (ServletRequestAttributes) RequestContextHolder.currentRequestAttributes();
         return attrs.getRequest().getSession(true);
+    }
+
+    private boolean isLinkingProvider(Object sessionValue, String provider) {
+        if (sessionValue instanceof String configuredProvider) {
+            return configuredProvider.equals(provider);
+        }
+        return Boolean.TRUE.equals(sessionValue);
+    }
+
+    private UUID currentAuthenticatedUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            throw new OAuth2AuthenticationException(new OAuth2Error("linking_requires_session"));
+        }
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (IllegalArgumentException ex) {
+            throw new OAuth2AuthenticationException(new OAuth2Error("linking_requires_session"), ex);
+        }
     }
 }

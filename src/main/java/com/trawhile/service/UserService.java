@@ -192,7 +192,7 @@ public class UserService {
             .toList();
     }
 
-    private void scrubUser(UUID userId) {
+    public void scrubUser(UUID userId) {
         OffsetDateTime now = OffsetDateTime.now();
 
         timeRecordRepository.findByUserIdAndEndedAtIsNull(userId)

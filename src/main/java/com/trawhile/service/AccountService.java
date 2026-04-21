@@ -1,26 +1,38 @@
 package com.trawhile.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trawhile.config.TrawhileConfig;
 import com.trawhile.domain.NodeAuthorization;
 import com.trawhile.domain.User;
 import com.trawhile.domain.UserOauthProvider;
 import com.trawhile.domain.UserProfile;
+import com.trawhile.exception.BusinessRuleViolationException;
 import com.trawhile.exception.EntityNotFoundException;
-import com.trawhile.sse.SseEvent;
 import com.trawhile.repository.*;
 import com.trawhile.sse.SseDispatcher;
+import com.trawhile.sse.SseEvent;
+import com.trawhile.web.dto.AuthLevel;
+import com.trawhile.web.dto.GetProfile200Response;
+import com.trawhile.web.dto.NodePathEntry;
+import com.trawhile.web.dto.UserAuthorization;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.net.URI;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
-@Transactional
 public class AccountService {
+
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() { };
 
     public record SessionData(
         UUID invitationId,
@@ -60,8 +72,11 @@ public class AccountService {
     private final NodeAuthorizationRepository authorizationRepository;
     private final McpTokenRepository mcpTokenRepository;
     private final PendingInvitationRepository pendingInvitationRepository;
+    private final AuthorizationQueries authorizationQueries;
     private final AuthorizationService authorizationService;
     private final NodeRepository nodeRepository;
+    private final UserService userService;
+    private final ObjectMapper objectMapper;
     private final TrawhileConfig trawhileConfig;
     private final SseDispatcher sseDispatcher;
 
@@ -71,8 +86,11 @@ public class AccountService {
                           NodeAuthorizationRepository authorizationRepository,
                           McpTokenRepository mcpTokenRepository,
                           PendingInvitationRepository pendingInvitationRepository,
+                          AuthorizationQueries authorizationQueries,
                           AuthorizationService authorizationService,
                           NodeRepository nodeRepository,
+                          UserService userService,
+                          ObjectMapper objectMapper,
                           TrawhileConfig trawhileConfig,
                           SseDispatcher sseDispatcher) {
         this.userRepository = userRepository;
@@ -81,17 +99,122 @@ public class AccountService {
         this.authorizationRepository = authorizationRepository;
         this.mcpTokenRepository = mcpTokenRepository;
         this.pendingInvitationRepository = pendingInvitationRepository;
+        this.authorizationQueries = authorizationQueries;
         this.authorizationService = authorizationService;
         this.nodeRepository = nodeRepository;
+        this.userService = userService;
+        this.objectMapper = objectMapper;
         this.trawhileConfig = trawhileConfig;
         this.sseDispatcher = sseDispatcher;
     }
 
-    // TODO: implement SR-F043.F01 — getProfile (user profile + linked providers + own authorizations + last report settings)
-    // TODO: implement SR-F044.F01 — linkProvider
-    // TODO: implement SR-F045.F01 — unlinkProvider (blocked if only one provider)
-    // TODO: implement SR-F047.F01 — anonymizeAccount (delegates to UserService.scrubUser() for SR-F070.F01)
-    // TODO: implement SR-F066.F01 — saveReportSettings (persist last_report_settings JSONB)
+    @Transactional(readOnly = true)
+    public GetProfile200Response getProfile(UUID userId) {
+        UserProfile profile = userProfile(userId);
+
+        GetProfile200Response response = new GetProfile200Response(
+            userId,
+            profile.name(),
+            oauthProviderRepository.findByProfileId(profile.id()).stream()
+                .map(UserOauthProvider::provider)
+                .sorted()
+                .map(GetProfile200Response.ProvidersEnum::fromValue)
+                .toList()
+        );
+        response.setLastReportSettings(parseJsonMap(profile.lastReportSettings()));
+        return response;
+    }
+
+    @Transactional
+    public void saveReportSettings(UUID userId, Map<String, Object> reportSettings) {
+        UserProfile profile = userProfile(userId);
+        userProfileRepository.save(new UserProfile(
+            profile.id(),
+            profile.userId(),
+            profile.name(),
+            writeJson(reportSettings)
+        ));
+    }
+
+    @Transactional
+    public void linkProvider(UUID userId, String provider, String subject) {
+        UserProfile profile = userProfile(userId);
+
+        oauthProviderRepository.findByProviderAndSubject(provider, subject)
+            .ifPresent(existing -> {
+                if (!existing.profileId().equals(profile.id())) {
+                    throw new BusinessRuleViolationException(
+                        "PROVIDER_ALREADY_LINKED",
+                        "This provider account is already linked to another user"
+                    );
+                }
+            });
+
+        UserOauthProvider existingProvider = oauthProviderRepository.findByProfileId(profile.id()).stream()
+            .filter(link -> link.provider().equals(provider))
+            .findFirst()
+            .orElse(null);
+
+        if (existingProvider == null) {
+            oauthProviderRepository.save(new UserOauthProvider(
+                UUID.randomUUID(),
+                profile.id(),
+                provider,
+                subject
+            ));
+        } else if (!existingProvider.subject().equals(subject)) {
+            oauthProviderRepository.save(new UserOauthProvider(
+                existingProvider.id(),
+                existingProvider.profileId(),
+                existingProvider.provider(),
+                subject
+            ));
+        }
+    }
+
+    @Transactional
+    public void unlinkProvider(UUID userId, String provider) {
+        UserProfile profile = userProfile(userId);
+        List<UserOauthProvider> providers = oauthProviderRepository.findByProfileId(profile.id());
+        List<UserOauthProvider> matches = providers.stream()
+            .filter(link -> link.provider().equals(provider))
+            .toList();
+
+        if (matches.isEmpty()) {
+            return;
+        }
+        if (providers.size() <= 1) {
+            throw new BusinessRuleViolationException(
+                "LAST_PROVIDER",
+                "Cannot unlink the last remaining provider"
+            );
+        }
+
+        oauthProviderRepository.deleteAll(matches);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserAuthorization> getOwnAuthorizations(UUID userId) {
+        userProfile(userId);
+        return authorizationQueries.userAuthorizationsWithPaths(userId).stream()
+            .sorted(Comparator.comparing(AuthorizationQueries.UserAuthorizationPathRow::nodePathJson))
+            .map(row -> {
+                UserAuthorization authorization = new UserAuthorization();
+                authorization.setNodeId(row.nodeId());
+                authorization.setAuthorization(AuthLevel.fromValue(row.authorization()));
+                authorization.setNodePath(parseNodePath(row.nodePathJson()));
+                return authorization;
+            })
+            .toList();
+    }
+
+    @Transactional
+    public void anonymizeAccount(UUID userId) {
+        userProfile(userId);
+        userService.scrubUser(userId);
+    }
+
+    @Transactional
     public Optional<RegistrationResult> completeRegistration(SessionData sessionData) {
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -154,6 +277,41 @@ public class AccountService {
             return Optional.empty();
         }
         return Optional.of(configured);
+    }
+
+    private UserProfile userProfile(UUID userId) {
+        if (!userRepository.existsById(userId)) {
+            throw new EntityNotFoundException("User", userId);
+        }
+        return userProfileRepository.findByUserId(userId)
+            .orElseThrow(() -> new EntityNotFoundException("UserProfile", userId));
+    }
+
+    private String writeJson(Map<String, Object> payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize report settings", ex);
+        }
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, MAP_TYPE);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to parse report settings payload", ex);
+        }
+    }
+
+    private List<NodePathEntry> parseNodePath(String nodePathJson) {
+        try {
+            return objectMapper.readerForListOf(NodePathEntry.class).readValue(nodePathJson);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to parse node path payload", ex);
+        }
     }
 
     private UUID rootNodeId() {

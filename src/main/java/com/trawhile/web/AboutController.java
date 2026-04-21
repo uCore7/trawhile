@@ -6,6 +6,7 @@ import com.trawhile.web.api.AboutApi;
 import com.trawhile.web.dto.AboutInfo;
 import com.trawhile.web.dto.AboutInfoGdprSummary;
 import com.trawhile.web.dto.AboutInfoLicensesInner;
+import com.trawhile.web.dto.PublicAboutInfo;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -47,7 +48,7 @@ public class AboutController implements AboutApi {
 
     @Override
     public ResponseEntity<AboutInfo> getAbout() {
-        AboutInfo info = new AboutInfo(
+        AboutInfo info = new PublicAboutInfo(
             version,
             readLicenses(),
             SBOM_URL,
