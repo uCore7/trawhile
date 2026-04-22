@@ -1,8 +1,8 @@
 package com.trawhile.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.trawhile.config.TrawhileConfig;
 import com.trawhile.domain.NodeAuthorization;
 import com.trawhile.domain.User;
@@ -20,7 +20,6 @@ import com.trawhile.web.dto.UserAuthorization;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
@@ -290,7 +289,7 @@ public class AccountService {
     private String writeJson(Map<String, Object> payload) {
         try {
             return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Failed to serialize report settings", ex);
         }
     }
@@ -301,7 +300,7 @@ public class AccountService {
         }
         try {
             return objectMapper.readValue(json, MAP_TYPE);
-        } catch (IOException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Failed to parse report settings payload", ex);
         }
     }
@@ -309,7 +308,7 @@ public class AccountService {
     private List<NodePathEntry> parseNodePath(String nodePathJson) {
         try {
             return objectMapper.readerForListOf(NodePathEntry.class).readValue(nodePathJson);
-        } catch (IOException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalStateException("Failed to parse node path payload", ex);
         }
     }

@@ -1,8 +1,8 @@
 package com.trawhile.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.trawhile.domain.SecurityEvent;
 import com.trawhile.monitoring.MonitoringMetrics;
 import com.trawhile.repository.SecurityEventRepository;
@@ -164,7 +164,7 @@ public class SecurityEventService {
         }
         try {
             return objectMapper.writeValueAsString(metadata);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Failed to serialize security event metadata", e);
         }
     }
@@ -175,7 +175,7 @@ public class SecurityEventService {
         }
         try {
             return objectMapper.readValue(json, MAP_TYPE);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to parse security event details", e);
         }
     }

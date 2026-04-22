@@ -1,7 +1,7 @@
 package com.trawhile.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.trawhile.domain.PendingInvitation;
 import com.trawhile.domain.TimeRecord;
 import com.trawhile.domain.User;
@@ -28,7 +28,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
@@ -289,7 +288,7 @@ public class UserService {
         try {
             JsonNode root = objectMapper.readTree(nodePathJson);
             return objectMapper.readerForListOf(NodePathEntry.class).readValue(root);
-        } catch (IOException ex) {
+        } catch (tools.jackson.core.JacksonException ex) {
             throw new IllegalStateException("Failed to parse node path payload", ex);
         }
     }
