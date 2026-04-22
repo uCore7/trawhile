@@ -1,7 +1,9 @@
 package com.trawhile.config;
 
+import com.trawhile.monitoring.MonitoringMetrics;
 import com.trawhile.security.OidcLoginSuccessHandler;
 import com.trawhile.security.TrawhileOidcUserService;
+import com.trawhile.service.SecurityEventService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -24,16 +26,23 @@ public class SecurityConfig {
 
     private final TrawhileOidcUserService oidcUserService;
     private final OidcLoginSuccessHandler loginSuccessHandler;
+    private final SecurityEventService securityEventService;
+    private final MonitoringMetrics monitoringMetrics;
 
     public SecurityConfig(TrawhileOidcUserService oidcUserService,
-                          OidcLoginSuccessHandler loginSuccessHandler) {
+                          OidcLoginSuccessHandler loginSuccessHandler,
+                          SecurityEventService securityEventService,
+                          MonitoringMetrics monitoringMetrics) {
         this.oidcUserService = oidcUserService;
         this.loginSuccessHandler = loginSuccessHandler;
+        this.securityEventService = securityEventService;
+        this.monitoringMetrics = monitoringMetrics;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfRepo.setCookieCustomizer(cookie -> cookie.sameSite("Strict"));
 
         http
             .sessionManagement(s -> s
@@ -72,6 +81,17 @@ public class SecurityConfig {
                     String errorCode = exception instanceof OAuth2AuthenticationException oauthEx
                         ? oauthEx.getError().getErrorCode()
                         : "error";
+                    String provider = oauth2ProviderFromCallback(request.getRequestURI());
+                    monitoringMetrics.recordOauth2LoginFailure(provider);
+                    securityEventService.log(
+                        "OAUTH_LOGIN_FAILURE",
+                        null,
+                        java.util.Map.of(
+                            "provider", provider,
+                            "errorCode", errorCode
+                        ),
+                        request.getRemoteAddr()
+                    );
                     response.sendRedirect("/login?error=" + URLEncoder.encode(errorCode, StandardCharsets.UTF_8));
                 }))
 
@@ -84,6 +104,7 @@ public class SecurityConfig {
 
             .headers(headers -> headers
                 .frameOptions(f -> f.deny())
+                .contentTypeOptions(c -> {})
                 .httpStrictTransportSecurity(hsts -> hsts
                     .includeSubDomains(true)
                     .maxAgeInSeconds(31536000))
@@ -93,5 +114,13 @@ public class SecurityConfig {
                     .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)));
 
         return http.build();
+    }
+
+    private String oauth2ProviderFromCallback(String requestUri) {
+        String prefix = "/login/oauth2/code/";
+        if (requestUri != null && requestUri.startsWith(prefix) && requestUri.length() > prefix.length()) {
+            return requestUri.substring(prefix.length());
+        }
+        return "unknown";
     }
 }

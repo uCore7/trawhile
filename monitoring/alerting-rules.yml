@@ -1,0 +1,35 @@
+groups:
+  - name: trawhile.rules
+    rules:
+      - alert: PurgeJobStale
+        expr: time() - trawhile_purge_job_last_completed_seconds > 26 * 60 * 60
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Purge job has not completed in the last 26 hours
+
+      - alert: DatabaseErrors
+        expr: rate(trawhile_db_transaction_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Database transaction errors are persisting
+
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_seconds_count{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: HTTP 5xx rate is elevated
+
+      - alert: InstanceDown
+        expr: up{job="trawhile"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: trawhile instance is down
+

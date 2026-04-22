@@ -1,11 +1,13 @@
 package com.trawhile.sse;
 
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,6 +25,11 @@ public class SseEmitterRegistry {
     private final ConcurrentHashMap<UUID, CopyOnWriteArrayList<SseEmitter>> emitters =
         new ConcurrentHashMap<>();
 
+    public SseEmitterRegistry(MeterRegistry meterRegistry) {
+        Gauge.builder("trawhile_sse_connections_active", this, SseEmitterRegistry::activeEmitterCount)
+            .register(meterRegistry);
+    }
+
     public SseEmitter register(UUID userId) {
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE); // no timeout; client reconnects on drop
         emitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
@@ -32,27 +39,15 @@ public class SseEmitterRegistry {
         return emitter;
     }
 
-    /**
-     * Send an event to all active emitters for a user.
-     * Each send is synchronized on the emitter to prevent concurrent writes from different threads.
-     * Dead emitters (IOException on send) are removed immediately.
-     */
-    public void send(UUID userId, SseEmitter.SseEventBuilder event) {
+    public List<SseEmitter> emittersFor(UUID userId) {
         List<SseEmitter> userEmitters = emitters.get(userId);
-        if (userEmitters == null) return;
-
-        for (SseEmitter emitter : userEmitters) {
-            synchronized (emitter) {
-                try {
-                    emitter.send(event);
-                } catch (IOException e) {
-                    remove(userId, emitter);
-                }
-            }
+        if (userEmitters == null) {
+            return List.of();
         }
+        return new ArrayList<>(userEmitters);
     }
 
-    private void remove(UUID userId, SseEmitter emitter) {
+    public void remove(UUID userId, SseEmitter emitter) {
         List<SseEmitter> userEmitters = emitters.get(userId);
         if (userEmitters != null) {
             userEmitters.remove(emitter);
@@ -61,5 +56,11 @@ public class SseEmitterRegistry {
             }
         }
         log.debug("Removed SSE emitter for user {}", userId);
+    }
+
+    public int activeEmitterCount() {
+        return emitters.values().stream()
+            .mapToInt(List::size)
+            .sum();
     }
 }

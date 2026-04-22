@@ -1,0 +1,8 @@
+# Paste this under `scrape_configs:` in your Prometheus config.
+# The target port must match Spring Boot's `management.server.port`.
+- job_name: trawhile
+  metrics_path: /actuator/prometheus
+  static_configs:
+    - targets:
+        - trawhile:9090
+

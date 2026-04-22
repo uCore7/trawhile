@@ -3,6 +3,7 @@ package com.trawhile.config;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.stereotype.Component;
@@ -21,8 +22,7 @@ public class StartupValidator implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        boolean hasProviders = clientRegistrationRepository instanceof InMemoryClientRegistrationRepository repo
-            && repo.iterator().hasNext();
+        boolean hasProviders = hasConfiguredProviders(clientRegistrationRepository);
 
         if (!hasProviders) {
             throw new IllegalStateException(
@@ -31,5 +31,18 @@ public class StartupValidator implements ApplicationRunner {
                 "GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, MICROSOFT_CLIENT_ID, KEYCLOAK_CLIENT_ID " +
                 "(the legacy SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_* variables are also accepted).");
         }
+    }
+
+    private boolean hasConfiguredProviders(ClientRegistrationRepository repository) {
+        if (!(repository instanceof InMemoryClientRegistrationRepository registrations)) {
+            return false;
+        }
+
+        for (ClientRegistration registration : registrations) {
+            if (registration.getClientId() != null && !registration.getClientId().isBlank()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

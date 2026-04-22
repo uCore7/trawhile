@@ -341,7 +341,7 @@ public class NodeService {
         );
 
         sseDispatcher.dispatch(userId,
-            new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, java.util.Map.of("userId", userId)));
+            new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, java.util.Map.of("userId", userId, "nodeId", nodeId)));
     }
 
     @Transactional
@@ -365,7 +365,7 @@ public class NodeService {
 
         nodeAuthorizationRepository.delete(authorization);
         sseDispatcher.dispatch(userId,
-            new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, java.util.Map.of("userId", userId)));
+            new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, java.util.Map.of("userId", userId, "nodeId", nodeId)));
     }
 
     @Transactional(readOnly = true)

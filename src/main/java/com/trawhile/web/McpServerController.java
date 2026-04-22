@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trawhile.config.TrawhileConfig;
 import com.trawhile.domain.TimeRecord;
+import com.trawhile.monitoring.MonitoringMetrics;
 import com.trawhile.repository.AuthorizationQueries;
 import com.trawhile.repository.NodeRepository;
 import com.trawhile.repository.TimeRecordRepository;
@@ -57,6 +58,7 @@ public class McpServerController {
     private final TrackingService trackingService;
     private final ReportService reportService;
     private final SecurityEventService securityEventService;
+    private final MonitoringMetrics monitoringMetrics;
     private final ZoneId companyZone;
 
     public McpServerController(ObjectMapper objectMapper,
@@ -69,6 +71,7 @@ public class McpServerController {
                                TrackingService trackingService,
                                ReportService reportService,
                                SecurityEventService securityEventService,
+                               MonitoringMetrics monitoringMetrics,
                                TrawhileConfig trawhileConfig) {
         this.objectMapper = objectMapper;
         this.mcpTokenService = mcpTokenService;
@@ -80,6 +83,7 @@ public class McpServerController {
         this.trackingService = trackingService;
         this.reportService = reportService;
         this.securityEventService = securityEventService;
+        this.monitoringMetrics = monitoringMetrics;
         this.companyZone = ZoneId.of(trawhileConfig.getTimezone());
     }
 
@@ -104,6 +108,7 @@ public class McpServerController {
             authenticated.userId(),
             Map.of("tokenId", authenticated.tokenId(), "tool", toolName)
         );
+        monitoringMetrics.recordMcpToolInvocation(toolName);
 
         Object result = switch (toolName) {
             case "get_node_tree" -> getNodeTree(authenticated.userId());

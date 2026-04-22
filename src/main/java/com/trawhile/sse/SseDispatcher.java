@@ -6,6 +6,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,12 +28,19 @@ public class SseDispatcher {
 
     /** Send an event to a single user. */
     public void dispatch(UUID userId, SseEvent event) {
-        try {
-            registry.send(userId, SseEmitter.event()
-                .name(event.type().name())
-                .data(event.payload(), MediaType.APPLICATION_JSON));
-        } catch (Exception e) {
-            log.warn("Failed to send SSE event {} for user {}: {}", event.type(), userId, e.getMessage());
+        for (SseEmitter emitter : registry.emittersFor(userId)) {
+            synchronized (emitter) {
+                try {
+                    emitter.send(SseEmitter.event()
+                        .name(event.type().name())
+                        .data(event.payload(), MediaType.APPLICATION_JSON));
+                } catch (IOException e) {
+                    registry.remove(userId, emitter);
+                    log.debug("Removed dead SSE emitter after {} for user {}", event.type(), userId);
+                } catch (Exception e) {
+                    log.warn("Failed to send SSE event {} for user {}: {}", event.type(), userId, e.getMessage());
+                }
+            }
         }
     }
 

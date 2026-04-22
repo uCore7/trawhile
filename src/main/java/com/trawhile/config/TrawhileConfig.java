@@ -4,6 +4,7 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.validation.annotation.Validated;
 
 import java.net.URI;
@@ -40,6 +41,10 @@ public class TrawhileConfig {
     @Min(2)
     private int retentionYears = 5;
 
+    /** Spring cron expression interpreted in trawhile.timezone. */
+    @NotBlank
+    private String purgeCron = "0 59 23 * * *";
+
     /** Additional years before deactivated nodes are deleted beyond retentionYears; minimum 0. */
     @Min(0)
     private int nodeRetentionExtraYears = 1;
@@ -56,6 +61,16 @@ public class TrawhileConfig {
     public boolean isTimezoneValid() {
         try {
             ZoneId.of(timezone);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @AssertTrue(message = "purge-cron must be a valid Spring cron expression")
+    public boolean isPurgeCronValid() {
+        try {
+            CronExpression.parse(purgeCron);
             return true;
         } catch (Exception e) {
             return false;
@@ -86,6 +101,9 @@ public class TrawhileConfig {
 
     public int getRetentionYears() { return retentionYears; }
     public void setRetentionYears(int retentionYears) { this.retentionYears = retentionYears; }
+
+    public String getPurgeCron() { return purgeCron; }
+    public void setPurgeCron(String purgeCron) { this.purgeCron = purgeCron; }
 
     public int getNodeRetentionExtraYears() { return nodeRetentionExtraYears; }
     public void setNodeRetentionExtraYears(int nodeRetentionExtraYears) { this.nodeRetentionExtraYears = nodeRetentionExtraYears; }

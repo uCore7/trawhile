@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trawhile.domain.SecurityEvent;
+import com.trawhile.monitoring.MonitoringMetrics;
 import com.trawhile.repository.SecurityEventRepository;
 import com.trawhile.web.dto.ListSecurityEvents200Response;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -41,17 +42,20 @@ public class SecurityEventService {
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final MonitoringMetrics monitoringMetrics;
 
     public SecurityEventService(SecurityEventRepository securityEventRepository,
                                 AuthorizationService authorizationService,
                                 NamedParameterJdbcTemplate namedParameterJdbcTemplate,
                                 JdbcTemplate jdbcTemplate,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                MonitoringMetrics monitoringMetrics) {
         this.securityEventRepository = securityEventRepository;
         this.authorizationService = authorizationService;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.monitoringMetrics = monitoringMetrics;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -151,6 +155,7 @@ public class SecurityEventService {
             ipAddress,
             OffsetDateTime.now()
         ));
+        monitoringMetrics.recordSecurityEvent(eventType);
     }
 
     private String writeJson(Map<String, Object> metadata) {

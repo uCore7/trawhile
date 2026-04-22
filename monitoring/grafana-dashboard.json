@@ -1,0 +1,132 @@
+{
+  "title": "trawhile",
+  "tags": ["trawhile", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "JVM Heap",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "GC Activity",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(jvm_gc_pause_seconds_count[5m])" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "HikariCP Usage",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "hikaricp_connections_active" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_count[5m])" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HTTP Latency p50/p95/p99",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Purge Last Completed",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "trawhile_purge_job_last_completed_seconds" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Purge Failures",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "trawhile_purge_job_failures_total" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Purge Deleted Rows",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "trawhile_purge_job_deleted_total" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "DB Transaction Errors",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(trawhile_db_transaction_errors_total[5m])" }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Rate Limit Rejections",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(trawhile_rate_limit_rejections_total[5m])" }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Security Events",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(trawhile_security_events_total[5m])" }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "OAuth2 Login Failures",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(trawhile_oauth2_login_failures_total[5m])" }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Active SSE Connections",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "trawhile_sse_connections_active" }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Active Tracking Sessions",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "trawhile_tracking_sessions_active" }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "MCP Tool Invocations",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(trawhile_mcp_tool_invocations_total[5m])" }
+      ]
+    }
+  ]
+}
