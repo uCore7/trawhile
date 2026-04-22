@@ -103,7 +103,7 @@ All methods insert via `jdbc.update(...)` — never via the service layer.
 
 ## Acceptance criteria
 
-- `mvn test` with an empty test class extending `BaseIT` passes
+- `./scripts/mvn-local.sh test` with an empty test class extending `BaseIT` passes
 - Container starts once per JVM run (reuse = true) — verify by checking log output shows single container start
 - Each test gets a clean slate via `@BeforeEach` truncation
 - `TestFixtures.insertUser` + `TestFixtures.grantAuth` + `TestSecurityHelper.authenticatedAs` work together in a minimal smoke test

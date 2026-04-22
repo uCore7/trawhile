@@ -37,7 +37,7 @@ Make the failing Epic 9 tests pass. Implement MCP token lifecycle and the MCP to
 
 ## Acceptance criteria
 
-`mvn test -Dtest=McpTokenIT,McpToolIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=McpTokenIT,McpToolIT test` passes. Do not modify test files.
 
 ## Watch out for
 

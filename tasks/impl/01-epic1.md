@@ -46,7 +46,7 @@ Make the failing Epic 1 tests pass. Implement user management, invitation lifecy
 
 ## Acceptance criteria
 
-`mvn test -Dtest=BootstrapIT,DataMinimizationIT,UserManagementIT,InvitationIT,UserScrubbingIT,AuthFlowIT,SettingsIT` passes with all tests green. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=BootstrapIT,DataMinimizationIT,UserManagementIT,InvitationIT,UserScrubbingIT,AuthFlowIT,SettingsIT test` passes with all tests green. Do not modify test files.
 
 ## Watch out for
 

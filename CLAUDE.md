@@ -13,6 +13,10 @@ Before starting any work, read the following files in order:
 
 These are the authoritative source of truth. Code, tests, and migrations must be consistent with them. If implementation forces a change to a requirement, update the relevant doc file in the same commit.
 
+Run Maven through `./scripts/mvn-local.sh ...`, not bare `mvn` or `./mvnw`, so wrapper and repository caches stay inside the project.
+For native app startup, run `make development-db` first, then `./scripts/mvn-local.sh spring-boot:run`. The wrapper auto-skips the frontend Maven plugin for `spring-boot:run`; Angular runs separately via `ng serve`.
+If the agent sandbox blocks Docker or localhost DB sockets, request escalation for `make development-db` and/or `./scripts/mvn-local.sh spring-boot:run` instead of treating the startup failure as an application bug.
+
 ## Stack
 
 - Backend: Spring Boot + Spring Data JDBC + Flyway + Spring Security (OAuth2)

@@ -2,7 +2,8 @@
 #
 # Option A: native (hot reload, debugger)
 #   make development-db               — start PostgreSQL in Docker
-#   mvn spring-boot:run               — Spring Boot on :8080
+#   ./scripts/mvn-local.sh spring-boot:run
+#                                     — Spring Boot on :8080
 #   cd src/main/frontend && ng serve  — Angular on :4200 (proxies API to :8080)
 #
 # Option B: full Docker stack (production-like)
@@ -47,7 +48,7 @@ development-db-logs: ## Tail dev PostgreSQL logs
 # ── Dev: full stack in Docker (production-like) ────────────────────────────────
 
 development-build: ## Build the application JAR and Docker image
-	mvn --batch-mode package -DskipTests
+	./scripts/mvn-local.sh --batch-mode package -DskipTests
 	docker build -t trawhile:latest .
 
 development-up: development-build ## Build and start the full stack (db + app + caddy)

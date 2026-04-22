@@ -36,7 +36,7 @@ Make the failing Epic 4 tests pass. Implement time reports (summary and detailed
 
 ## Acceptance criteria
 
-`mvn test -Dtest=ReportIT,ReportServiceTest` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=ReportIT,ReportServiceTest test` passes. Do not modify test files.
 
 ## Watch out for
 

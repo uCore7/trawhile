@@ -33,7 +33,7 @@ Make the failing Epic 5 tests pass. Implement request submission, listing, and c
 
 ## Acceptance criteria
 
-`mvn test -Dtest=RequestIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=RequestIT test` passes. Do not modify test files.
 
 ## Watch out for
 

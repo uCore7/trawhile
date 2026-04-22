@@ -85,6 +85,8 @@ cd src/main/frontend && ng serve
 make development-up
 ```
 
+`./scripts/mvn-local.sh spring-boot:run` automatically skips the frontend Maven plugin because the native dev flow serves Angular separately via `ng serve`.
+
 If you already created a PostgreSQL data volume with an older image/layout, recreate it once after pulling these changes:
 
 ```bash

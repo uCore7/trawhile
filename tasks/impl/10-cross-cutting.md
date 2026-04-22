@@ -48,7 +48,7 @@ Make the failing cross-cutting tests pass. Complete OIDC auth flows, HTTP securi
 
 ## Acceptance criteria
 
-`mvn test -Dtest=AuthFlowIT,SecurityHeadersIT,RateLimitIT,SseIT,MetricsIT,AuthControllerIT,TrawhileConfigTest,StartupValidatorTest,MonitoringArtifactsTest` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=AuthFlowIT,SecurityHeadersIT,RateLimitIT,SseIT,MetricsIT,AuthControllerIT,TrawhileConfigTest,StartupValidatorTest,MonitoringArtifactsTest test` passes. Do not modify test files.
 
 ## Watch out for
 

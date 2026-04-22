@@ -38,7 +38,7 @@ Make the failing Epic 8 tests pass. Implement the activity purge job on the conf
 
 ## Acceptance criteria
 
-`mvn test -Dtest=ActivityPurgeJobIT,NodePurgeJobIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=ActivityPurgeJobIT,NodePurgeJobIT test` passes. Do not modify test files.
 
 ## Watch out for
 

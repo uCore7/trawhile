@@ -40,7 +40,7 @@ Make the failing Epic 3 tests pass. Implement tracking start/switch/stop, recent
 
 ## Acceptance criteria
 
-`mvn test -Dtest=TrackingIT,QuickAccessIT,TimeRecordIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=TrackingIT,QuickAccessIT,TimeRecordIT test` passes. Do not modify test files.
 
 ## Watch out for
 

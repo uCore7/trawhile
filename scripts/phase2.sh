@@ -162,8 +162,8 @@ compile_if_requested() {
     return 0
   fi
   info "Running compile check"
-  (cd "$ROOT" && mvn --batch-mode -q -DskipTests compile)
-  printf "  ok       mvn -DskipTests compile\n"
+  (cd "$ROOT" && ./scripts/mvn-local.sh --batch-mode -q -DskipTests compile)
+  printf "  ok       ./scripts/mvn-local.sh -DskipTests compile\n"
 }
 
 print_usage() {
@@ -179,7 +179,7 @@ Purpose:
 Behavior:
   - `check` validates the current Phase 1/Phase 2 baseline.
   - `run` executes any configured generators, then runs the same checks.
-  - `--compile` adds `mvn -DskipTests compile` at the end.
+  - `--compile` adds `./scripts/mvn-local.sh -DskipTests compile` at the end.
 
 Optional generator hooks:
   PHASE2_GENERATE_V1_CMD

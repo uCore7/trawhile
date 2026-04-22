@@ -396,7 +396,7 @@ No NgRx or other state library. Angular signals + services with `signal()` / `co
 ### Build and serving
 
 - `ng build` outputs to `src/main/resources/static/` (configured in `angular.json`).
-- Maven frontend plugin runs `ng build` as part of `mvn package`.
+- Maven frontend plugin runs `ng build` as part of `./scripts/mvn-local.sh package`.
 - Spring Boot serves static files from classpath `/static/`. All non-API paths return `index.html` (Angular router handles routing client-side).
 
 ---
@@ -463,7 +463,7 @@ on: [push, pull_request]
 jobs:
   build:
     steps:
-      - mvn verify
+      - ./scripts/mvn-local.sh verify
           # includes:
           # - compile + test
           # - SpotBugs + Find Security Bugs (fail on HIGH/CRITICAL)

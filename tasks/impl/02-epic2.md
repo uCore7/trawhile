@@ -36,7 +36,7 @@ Make the failing Epic 2 tests pass. Implement node CRUD, logo management, deacti
 
 ## Acceptance criteria
 
-`mvn test -Dtest=NodeIT,AuthorizationIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=NodeIT,AuthorizationIT test` passes. Do not modify test files.
 
 ## Watch out for
 

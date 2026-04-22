@@ -38,7 +38,7 @@ Make the failing Epic 6 tests pass. Implement profile, provider link/unlink, own
 
 ## Acceptance criteria
 
-`mvn test -Dtest=AccountIT,AboutIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=AccountIT,AboutIT test` passes. Do not modify test files.
 
 ## Watch out for
 

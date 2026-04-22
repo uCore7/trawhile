@@ -33,6 +33,9 @@ Each file in `tasks/` is a self-contained brief for one agent. Start from the fi
 
 These rules apply to every agent task, regardless of type:
 
+- **Use the repo Maven wrapper script** — run Maven commands via `./scripts/mvn-local.sh ...`, not bare `mvn` or `./mvnw`, so wrapper and repository caches stay inside the project.
+- **Native app startup path** — start PostgreSQL first (`make development-db`), then run `./scripts/mvn-local.sh spring-boot:run`. The wrapper auto-skips the frontend Maven plugin for `spring-boot:run`; Angular runs separately via `ng serve` in native dev.
+- **Sandbox note for live app runs** — if the agent sandbox blocks Docker or localhost DB sockets, request escalation for `make development-db` and/or `./scripts/mvn-local.sh spring-boot:run` rather than treating startup failure as an application bug.
 - **No git write operations** — do not run `git commit`, `git push`, `git pull`, `git fetch`, `git merge`, `git rebase`, `git reset`, `git stash`, `git branch -D`, or any command that modifies git state or communicates with a remote. Read-only commands (`git status`, `git log`, `git diff`, `git show`) are fine.
 - **Test agents** (`tasks/tests/`): do not create or modify any file under `src/main/`.
 - **Impl agents** (`tasks/impl/`): do not create or modify any file under `src/test/`. If a test appears wrong, report it and stop — do not fix it.

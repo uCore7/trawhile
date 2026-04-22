@@ -35,7 +35,7 @@ Make the failing Epic 7 tests pass. Implement security event logging, the securi
 
 ## Acceptance criteria
 
-`mvn test -Dtest=SecurityEventIT` passes. Do not modify test files.
+`./scripts/mvn-local.sh -Dtest=SecurityEventIT test` passes. Do not modify test files.
 
 ## Watch out for
 
