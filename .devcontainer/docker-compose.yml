@@ -1,0 +1,37 @@
+services:
+  workspace:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    command: bash -lc "bash .devcontainer/post-create.sh && sleep infinity"
+    working_dir: /workspaces/timetracker
+    volumes:
+      - ..:/workspaces/timetracker:z
+      - codex_home_v2:/root/.codex-devcontainer
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CODEX_HOME: /root/.codex-devcontainer
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/trawhile
+      SPRING_DATASOURCE_USERNAME: tt
+      SPRING_DATASOURCE_PASSWORD: dev
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: trawhile
+      POSTGRES_USER: tt
+      POSTGRES_PASSWORD: dev
+    volumes:
+      - pgdata_devcontainer:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tt -d trawhile"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  codex_home_v2:
+  pgdata_devcontainer:

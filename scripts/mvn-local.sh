@@ -15,6 +15,9 @@ for arg in "$@"; do
     spring-boot:run)
       should_skip_frontend=true
       ;;
+    test|surefire:test)
+      should_skip_frontend=true
+      ;;
     -Dskip.npm| -Dskip.npm=*)
       has_skip_npm=true
       ;;
@@ -24,8 +27,9 @@ for arg in "$@"; do
   esac
 done
 
-# Native backend runs pair Spring Boot with `ng serve`, so avoid the frontend
-# install/build steps unless the caller explicitly overrides the skip flags.
+# Native backend runs pair Spring Boot with `ng serve`, and backend test runs do
+# not need packaged frontend assets. Avoid the frontend install/build steps
+# unless the caller explicitly overrides the skip flags.
 if [ "$should_skip_frontend" = true ] && [ "$has_skip_npm" = false ]; then
   set -- -Dskip.npm=true "$@"
 fi

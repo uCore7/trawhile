@@ -87,6 +87,127 @@ make development-up
 
 `./scripts/mvn-local.sh spring-boot:run` automatically skips the frontend Maven plugin because the native dev flow serves Angular separately via `ng serve`.
 
+### Codex in a Docker sandbox
+
+This repository also includes a `.devcontainer/` setup for running Codex inside Docker while still giving the agent full access inside that container. This follows the current Codex guidance for containerized environments: if Docker is your intended isolation boundary, run Codex inside the container with `danger-full-access` instead of trying to stack a second Linux sandbox inside it.
+
+What the devcontainer does:
+
+- starts a `workspace` container for your editor / terminal work
+- starts a dedicated PostgreSQL `db` service reachable as `db:5432`
+- sets `SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/trawhile` inside the workspace container
+- installs the Codex CLI with `npm`
+- seeds a container-local Codex config on container startup with:
+
+```toml
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+```
+
+Terminal-first workflow:
+
+```bash
+make devcontainer-up
+```
+
+Interactive TUI mode:
+
+```bash
+make devcontainer-codex
+```
+
+Batch / agentic mode from a task file:
+
+```bash
+make devcontainer-codex-task TASK=tasks/00-base-it.md
+make devcontainer-codex-task TASK=tasks/00-base-it.md ARGS='--json'
+```
+
+Useful companion commands:
+
+```bash
+make host-auth-check
+make devcontainer-shell
+make devcontainer-logs
+make devcontainer-down
+```
+
+This path does not require VS Code. It uses `docker compose` directly and keeps Codex entirely inside the `workspace` container.
+
+This setup is intentionally focused on ChatGPT-managed Codex auth inside the devcontainer. The recommended flow is to validate the host `auth.json` first, run `codex login` on the host only if that check fails, then sync the host auth file into the container.
+
+The host and devcontainer keep separate `CODEX_HOME` directories by design. If `codex` works on the host but the devcontainer does not, sync the host auth cache into the container before debugging anything else.
+
+On systems where Codex stores credentials in the OS credential store instead of `~/.codex/auth.json`, switch the host to file-based storage before you sync:
+
+```toml
+# ~/.codex/config.toml on the host
+cli_auth_credentials_store = "file"
+```
+
+The browser-based ChatGPT login flow is often awkward in containers because Codex opens a localhost callback server inside the container. The current Codex docs explicitly recommend device-code authentication for remote or headless environments and for setups where the localhost callback is blocked.
+
+Reliable ChatGPT-managed flow:
+
+First try:
+
+```bash
+make host-auth-check
+make devcontainer-up
+make devcontainer-sync-auth
+make devcontainer-codex-task TASK=tasks/00-base-it.md
+```
+
+If `make host-auth-check` fails, repair host auth first:
+
+```bash
+codex login
+make host-auth-check
+```
+
+If you are upgrading from an older version of this devcontainer setup and see `Permission denied` for `${CODEX_HOME}/config.toml`, restart the devcontainer so Docker creates the fresh Codex home volume used by the current setup:
+
+```bash
+make devcontainer-down
+make devcontainer-up
+```
+
+The task runner also accepts extra `codex exec` arguments when run directly inside the container:
+
+```bash
+./scripts/run-codex-task.sh tasks/00-base-it.md --json
+./scripts/run-codex-task.sh tasks/00-base-it.md --output-last-message /tmp/codex-last.txt
+```
+
+If you prefer a raw Docker command instead of `make`, the equivalent startup is:
+
+```bash
+docker compose -f .devcontainer/docker-compose.yml up -d --build
+docker compose -f .devcontainer/docker-compose.yml exec \
+  workspace bash -lc "cd /workspaces/timetracker && exec codex"
+```
+
+Raw batch command:
+
+```bash
+docker compose -f .devcontainer/docker-compose.yml exec \
+  workspace bash -lc "cd /workspaces/timetracker && ./scripts/run-codex-task.sh tasks/00-base-it.md"
+```
+
+If you do use the Codex IDE extension later, keep the repository attached to the devcontainer before you start the agent so the agent runs inside the container too.
+
+Once inside the devcontainer, use the normal project commands:
+
+```bash
+./scripts/mvn-local.sh spring-boot:run
+cd src/main/frontend && npm install && npx ng serve
+./scripts/mvn-local.sh test
+```
+
+Inside this setup you do not need `make development-db`, because the devcontainer already starts PostgreSQL for you.
+
+Security note: this setup is intentionally powerful. It mounts `/var/run/docker.sock` so Testcontainers and other Docker-backed flows can work from inside the workspace container. That also means code running in the devcontainer can control the host Docker daemon. Use this only for trusted repositories.
+
 If you already created a PostgreSQL data volume with an older image/layout, recreate it once after pulling these changes:
 
 ```bash
@@ -102,6 +223,8 @@ To keep Maven and Maven Wrapper caches inside the project instead of `~/.m2`, us
 ```
 
 This uses `.mvn/home` for the wrapper distribution cache and `.mvn/repository` for the Maven local repository.
+
+`./scripts/mvn-local.sh test` now skips the frontend Maven plugin automatically. Database-backed tests still need Docker/Testcontainers access; in restricted agent sandboxes, request escalation for `./scripts/mvn-local.sh test` rather than treating blocked DB sockets as an application bug.
 
 Run `make help` for all available targets.
 

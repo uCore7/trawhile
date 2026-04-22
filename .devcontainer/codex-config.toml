@@ -1,0 +1,5 @@
+# This config is copied into the container-local CODEX_HOME on first start.
+# It is intentionally scoped to the devcontainer so the host setup keeps its
+# normal safety defaults.
+sandbox_mode = "danger-full-access"
+approval_policy = "never"

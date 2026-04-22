@@ -30,7 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 public abstract class BaseIT {
 
     // Container is started once via static initializer and kept running for the entire JVM
-    // lifetime.  We intentionally bypass the @Testcontainers/@Container JUnit lifecycle so
+    // lifetime. We intentionally bypass the @Testcontainers/@Container JUnit lifecycle so
     // that TC 2.x does not stop the container between test classes (which would invalidate
     // the cached Spring context's datasource URL).
     static final PostgreSQLContainer<?> postgres;

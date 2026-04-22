@@ -1,0 +1,37 @@
+{
+  "name": "trawhile-codex",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "runServices": [
+    "workspace",
+    "db"
+  ],
+  "workspaceFolder": "/workspaces/timetracker",
+  "shutdownAction": "stopCompose",
+  "overrideCommand": false,
+  "remoteUser": "root",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [
+    8080,
+    4200,
+    9090
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "Spring Boot"
+    },
+    "4200": {
+      "label": "Angular dev server"
+    },
+    "9090": {
+      "label": "Spring Boot management"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
