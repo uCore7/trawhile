@@ -12,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * bucket4j rate limiting configuration.
  * A per-IP bucket is created on demand and stored in a ConcurrentHashMap.
  * Limits: 20 requests/second burst, 200 requests/minute sustained.
+ * Interval refill is used instead of greedy refill so the "21st request in the same second"
+ * limit remains deterministic under fast local/integration test traffic.
  */
 @Configuration
 public class RateLimitConfig {

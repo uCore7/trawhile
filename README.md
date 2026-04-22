@@ -114,7 +114,7 @@ Default behavior follows the repository process rules: `UR-F` and `UR-Q` must ha
 
 For execution traceability, run the full suite before `./scripts/check-traceability.py`. Focused runs such as `-Dtest=ReportIT#...` overwrite individual Surefire XML files and can make untouched methods appear as `not_run` until you rerun the full suite.
 
-This script is intended for local use while closing traceability gaps; it is not wired into CI yet.
+The same traceability check is also enforced in CI after the backend verify step, so a green local run of `./scripts/mvn-local.sh test` followed by `./scripts/check-traceability.py` should match the GitHub Actions gate.
 
 ### Codex in a Docker sandbox
 

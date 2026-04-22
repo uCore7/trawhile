@@ -29,6 +29,9 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 
+      - name: Traceability check
+        run: ./scripts/check-traceability.py
+
       # Angular: npm audit
       - name: npm audit
         run: npm audit --audit-level=high

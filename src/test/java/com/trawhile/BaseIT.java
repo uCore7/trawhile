@@ -15,6 +15,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.Map;
+
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import static org.springframework.security.oauth2.core.AuthorizationGrantType.AUTHORIZATION_CODE;
 import static org.springframework.security.oauth2.core.ClientAuthenticationMethod.CLIENT_SECRET_BASIC;
@@ -28,6 +35,10 @@ import org.junit.jupiter.api.BeforeEach;
     properties = "spring.main.allow-bean-definition-overriding=true"
 )
 public abstract class BaseIT {
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(2))
+        .build();
 
     // Container is started once via static initializer and kept running for the entire JVM
     // lifetime. We intentionally bypass the @Testcontainers/@Container JUnit lifecycle so
@@ -81,6 +92,19 @@ public abstract class BaseIT {
                 new Object[] {"node", "idle"}
             )
         );
+    }
+
+    protected HttpResponse<String> httpGet(int port, String path) throws Exception {
+        return httpGet(port, path, Map.of());
+    }
+
+    protected HttpResponse<String> httpGet(int port, String path, Map<String, String> headers) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder()
+            .uri(URI.create("http://127.0.0.1:" + port + path))
+            .GET()
+            .timeout(Duration.ofSeconds(5));
+        headers.forEach(request::header);
+        return HTTP_CLIENT.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @TestConfiguration(proxyBeanMethods = false)

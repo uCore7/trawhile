@@ -68,8 +68,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/oauth2/**", "/login/oauth2/**").permitAll()
                 .requestMatchers(
-                    PathPatternRequestMatcher.pathPattern("/actuator/health"),
-                    PathPatternRequestMatcher.pathPattern("/actuator/prometheus")
+                    managementEndpoint("/actuator/health"),
+                    managementEndpoint("/actuator/prometheus")
                 ).permitAll()
                 .requestMatchers("/api/v1/about").permitAll()
                 .requestMatchers("/api/v1/auth/providers").permitAll()
@@ -130,6 +130,10 @@ public class SecurityConfig {
                     .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)));
 
         return http.build();
+    }
+
+    private static PathPatternRequestMatcher managementEndpoint(String path) {
+        return PathPatternRequestMatcher.pathPattern(path);
     }
 
     private String oauth2ProviderFromCallback(String requestUri) {

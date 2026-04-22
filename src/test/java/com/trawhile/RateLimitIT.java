@@ -7,11 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,15 +61,6 @@ class RateLimitIT extends BaseIT {
     }
 
     private HttpResponse<String> fetchProviders(String clientIp) throws Exception {
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
-            .build();
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("http://127.0.0.1:" + port + "/api/v1/auth/providers"))
-            .header("X-Forwarded-For", clientIp)
-            .GET()
-            .timeout(Duration.ofSeconds(5))
-            .build();
-        return client.send(request, HttpResponse.BodyHandlers.ofString());
+        return httpGet(port, "/api/v1/auth/providers", Map.of("X-Forwarded-For", clientIp));
     }
 }

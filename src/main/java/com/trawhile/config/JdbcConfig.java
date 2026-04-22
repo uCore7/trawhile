@@ -22,6 +22,10 @@ import java.util.List;
  * - AuthLevel ↔ PostgreSQL auth_level enum (lowercase string)
  * - PostgreSQL JSONB → String (for JSONB-backed read models)
  * - OffsetDateTime ↔ JDBC TIMESTAMPTZ values
+ *
+ * JSONB writes intentionally stay explicit in SQL (`CAST(? AS jsonb)`) instead of a global
+ * String -> jsonb converter. That keeps ordinary VARCHAR/String bindings from being
+ * accidentally treated as JSONB in unrelated repository operations.
  */
 @Configuration
 public class JdbcConfig extends AbstractJdbcConfiguration {

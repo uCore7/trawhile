@@ -8,11 +8,7 @@ import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -97,16 +93,8 @@ class MetricsIT extends BaseIT {
         throw new AssertionError("activity purge did not quiesce within 10 batch iterations");
     }
 
-    private HttpResponseData fetch(int port, String path) throws IOException, InterruptedException {
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
-            .build();
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create("http://127.0.0.1:" + port + path))
-            .GET()
-            .timeout(Duration.ofSeconds(5))
-            .build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    private HttpResponseData fetch(int port, String path) throws Exception {
+        HttpResponse<String> response = httpGet(port, path);
         return new HttpResponseData(
             response.statusCode(),
             response.headers().firstValue("Content-Type").orElse(""),

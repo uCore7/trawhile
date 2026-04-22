@@ -469,6 +469,8 @@ jobs:
           # - SpotBugs + Find Security Bugs (fail on HIGH/CRITICAL)
           # - OWASP Dependency Check (fail on HIGH/CRITICAL)
           # - CycloneDX SBOM generation (backend)
+      - ./scripts/check-traceability.py
+          # verifies UR -> SR -> TE coverage and executed backend TE-tagged tests
       - npm audit --audit-level=high (Angular)
       - ng build (production)
       - docker build
