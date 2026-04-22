@@ -42,19 +42,22 @@ public class NodeService {
     private final SseDispatcher sseDispatcher;
     private final JdbcTemplate jdbcTemplate;
     private final UserRepository userRepository;
+    private final SecurityEventService securityEventService;
 
     public NodeService(NodeRepository nodeRepository,
                        NodeAuthorizationRepository nodeAuthorizationRepository,
                        AuthorizationService authorizationService,
                        SseDispatcher sseDispatcher,
                        JdbcTemplate jdbcTemplate,
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       SecurityEventService securityEventService) {
         this.nodeRepository = nodeRepository;
         this.nodeAuthorizationRepository = nodeAuthorizationRepository;
         this.authorizationService = authorizationService;
         this.sseDispatcher = sseDispatcher;
         this.jdbcTemplate = jdbcTemplate;
         this.userRepository = userRepository;
+        this.securityEventService = securityEventService;
     }
 
     @Transactional(readOnly = true)
@@ -74,24 +77,22 @@ public class NodeService {
         com.trawhile.domain.Node parent = requireNode(parentId);
         authorizationService.requireAdmin(actingUserId, parent.id());
 
-        UUID nodeId = UUID.randomUUID();
         int nextSortOrder = nextChildSortOrder(parent.id());
-        nodeRepository.save(new com.trawhile.domain.Node(
-            nodeId,
+        OffsetDateTime createdAt = OffsetDateTime.now();
+        com.trawhile.domain.Node created = nodeRepository.save(new com.trawhile.domain.Node(
+            null,
             parent.id(),
             requireNonBlank(request.getName(), "name"),
             request.getDescription(),
             true,
             nextSortOrder,
-            null,
+            createdAt,
             null,
             null,
             null,
             null,
             null
         ));
-
-        com.trawhile.domain.Node created = requireNode(nodeId);
         dispatchNodeChange(created.id());
         return toDto(actingUserId, created);
     }
@@ -339,6 +340,15 @@ public class NodeService {
             userId,
             authorization.getValue()
         );
+        securityEventService.log(
+            "NODE_ADMIN_GRANTED",
+            actingUserId,
+            java.util.Map.of(
+                "nodeId", nodeId,
+                "targetUserId", userId,
+                "authorization", authorization.getValue()
+            )
+        );
 
         sseDispatcher.dispatch(userId,
             new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, java.util.Map.of("userId", userId, "nodeId", nodeId)));
@@ -364,6 +374,14 @@ public class NodeService {
         }
 
         nodeAuthorizationRepository.delete(authorization);
+        securityEventService.log(
+            "NODE_ADMIN_REVOKED",
+            actingUserId,
+            java.util.Map.of(
+                "nodeId", nodeId,
+                "targetUserId", userId
+            )
+        );
         sseDispatcher.dispatch(userId,
             new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, java.util.Map.of("userId", userId, "nodeId", nodeId)));
     }

@@ -8,10 +8,11 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.convert.ReadingConverter;
 import org.springframework.data.convert.WritingConverter;
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions;
+import org.springframework.data.jdbc.core.mapping.JdbcValue;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 
+import java.sql.JDBCType;
 import java.sql.Timestamp;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -19,8 +20,8 @@ import java.util.List;
 /**
  * Registers custom type converters for Spring Data JDBC:
  * - AuthLevel ↔ PostgreSQL auth_level enum (lowercase string)
- * - String ↔ PostgreSQL JSONB (for last_report_settings)
- * - OffsetDateTime ↔ JDBC Timestamp for TIMESTAMPTZ columns
+ * - PostgreSQL JSONB → String (for JSONB-backed read models)
+ * - OffsetDateTime ↔ JDBC TIMESTAMPTZ values
  */
 @Configuration
 public class JdbcConfig extends AbstractJdbcConfiguration {
@@ -31,7 +32,6 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
         return new JdbcCustomConversions(List.of(
             new AuthLevelWritingConverter(),
             new AuthLevelReadingConverter(),
-            new JsonbWritingConverter(),
             new JsonbReadingConverter(),
             new OffsetDateTimeWritingConverter(),
             new OffsetDateTimeReadingConverter()
@@ -55,25 +55,6 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
     }
 
     /**
-     * Writes a JSON string into a PostgreSQL JSONB column.
-     * Spring Data JDBC calls this when persisting a String field mapped to a JSONB column.
-     */
-    @WritingConverter
-    static class JsonbWritingConverter implements Converter<String, PGobject> {
-        @Override
-        public PGobject convert(String source) {
-            try {
-                PGobject obj = new PGobject();
-                obj.setType("jsonb");
-                obj.setValue(source);
-                return obj;
-            } catch (SQLException e) {
-                throw new IllegalStateException("Failed to create PGobject for JSONB", e);
-            }
-        }
-    }
-
-    /**
      * Reads a PostgreSQL JSONB value back as a plain JSON string.
      */
     @ReadingConverter
@@ -85,14 +66,14 @@ public class JdbcConfig extends AbstractJdbcConfiguration {
     }
 
     /**
-     * Writes an OffsetDateTime into a JDBC Timestamp.
-     * PostgreSQL TIMESTAMPTZ stores an instant, not the original offset.
+     * Writes an OffsetDateTime with the JDBC TIMESTAMPTZ type so PostgreSQL
+     * receives a value it can bind directly to timestamptz columns.
      */
     @WritingConverter
-    static class OffsetDateTimeWritingConverter implements Converter<OffsetDateTime, Timestamp> {
+    static class OffsetDateTimeWritingConverter implements Converter<OffsetDateTime, JdbcValue> {
         @Override
-        public Timestamp convert(OffsetDateTime source) {
-            return Timestamp.from(source.toInstant());
+        public JdbcValue convert(OffsetDateTime source) {
+            return JdbcValue.of(source, JDBCType.TIMESTAMP_WITH_TIMEZONE);
         }
     }
 

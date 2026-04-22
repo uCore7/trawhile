@@ -56,6 +56,19 @@ class NodePurgeJobIT extends BaseIT {
     @Test
     @Tag("TE-F050.F04-01")
     void nodePurgeJob_deletesDeactivatedLeafNodesOlderThanCutoffWithNoReferences() {
+        jdbc.update(
+            """
+                UPDATE purge_jobs
+                SET status = 'idle',
+                    cutoff_date = ?,
+                    started_at = NOW() - INTERVAL '5 minutes',
+                    completed_at = NOW(),
+                    last_updated_at = NOW()
+                WHERE job_type = 'activity'
+                """,
+            currentDateMinusYears(trawhileConfig.getRetentionYears())
+        );
+
         OffsetDateTime staleDeactivatedAt = historicalTimestampYearsAgo(
             trawhileConfig.getRetentionYears() + trawhileConfig.getNodeRetentionExtraYears()
         ).minusDays(1);

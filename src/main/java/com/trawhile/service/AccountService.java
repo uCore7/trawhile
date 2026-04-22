@@ -19,6 +19,7 @@ import com.trawhile.web.dto.NodePathEntry;
 import com.trawhile.web.dto.UserAuthorization;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.net.URI;
 import java.time.OffsetDateTime;
@@ -78,6 +79,7 @@ public class AccountService {
     private final ObjectMapper objectMapper;
     private final TrawhileConfig trawhileConfig;
     private final SseDispatcher sseDispatcher;
+    private final JdbcTemplate jdbcTemplate;
 
     public AccountService(UserRepository userRepository,
                           UserProfileRepository userProfileRepository,
@@ -91,7 +93,8 @@ public class AccountService {
                           UserService userService,
                           ObjectMapper objectMapper,
                           TrawhileConfig trawhileConfig,
-                          SseDispatcher sseDispatcher) {
+                          SseDispatcher sseDispatcher,
+                          JdbcTemplate jdbcTemplate) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.oauthProviderRepository = oauthProviderRepository;
@@ -105,6 +108,7 @@ public class AccountService {
         this.objectMapper = objectMapper;
         this.trawhileConfig = trawhileConfig;
         this.sseDispatcher = sseDispatcher;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -127,12 +131,11 @@ public class AccountService {
     @Transactional
     public void saveReportSettings(UUID userId, Map<String, Object> reportSettings) {
         UserProfile profile = userProfile(userId);
-        userProfileRepository.save(new UserProfile(
-            profile.id(),
-            profile.userId(),
-            profile.name(),
-            writeJson(reportSettings)
-        ));
+        jdbcTemplate.update(
+            "UPDATE user_profile SET last_report_settings = CAST(? AS jsonb) WHERE id = ?",
+            writeJson(reportSettings),
+            profile.id()
+        );
     }
 
     @Transactional
@@ -156,7 +159,7 @@ public class AccountService {
 
         if (existingProvider == null) {
             oauthProviderRepository.save(new UserOauthProvider(
-                UUID.randomUUID(),
+                null,
                 profile.id(),
                 provider,
                 subject
@@ -226,21 +229,29 @@ public class AccountService {
         }
 
         if (sessionData.bootstrap() && !userRepository.existsById(sessionData.userId())) {
-            userRepository.save(new User(sessionData.userId(), now));
+            jdbcTemplate.update(
+                "INSERT INTO users (id, created_at) VALUES (?, ?)",
+                sessionData.userId(),
+                now
+            );
         }
 
         if (!sessionData.bootstrap() && !userRepository.existsById(sessionData.userId())) {
             throw new EntityNotFoundException("User", sessionData.userId());
         }
 
-        UserProfile profile = userProfileRepository.save(new UserProfile(
-            UUID.randomUUID(),
+        UUID profileId = jdbcTemplate.queryForObject(
+            "INSERT INTO user_profile (user_id, name) VALUES (?, ?) RETURNING id",
+            UUID.class,
             sessionData.userId(),
-            sessionData.name(),
-            null
-        ));
+            sessionData.name()
+        );
+        if (profileId == null) {
+            throw new IllegalStateException("Failed to create user profile");
+        }
+        UserProfile profile = new UserProfile(profileId, sessionData.userId(), sessionData.name(), null);
         oauthProviderRepository.save(new UserOauthProvider(
-            UUID.randomUUID(),
+            null,
             profile.id(),
             sessionData.provider(),
             sessionData.subject()
@@ -248,7 +259,7 @@ public class AccountService {
 
         if (sessionData.bootstrap()) {
             authorizationRepository.save(new NodeAuthorization(
-                UUID.randomUUID(),
+                null,
                 rootNodeId(),
                 sessionData.userId(),
                 com.trawhile.domain.AuthLevel.ADMIN

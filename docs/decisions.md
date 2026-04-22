@@ -15,6 +15,8 @@ Each entry records a non-obvious choice, the alternatives considered, and why th
 
 **Security implication:** Choosing Spring Data JDBC over JOOQ means compile-time SQL injection prevention via the type system is unavailable. This is compensated by SpotBugs + Find Security Bugs in CI (see below).
 
+**Re-evaluation note:** If the amount of hand-written SQL, PostgreSQL-specific typing (`jsonb`, `timestamptz`), or persistence boilerplate grows substantially, jOOQ is the most plausible future alternative. It would preserve the SQL-first architecture better than JPA/Hibernate while adding generated types and stronger compile-time checking. The current decision still stands: prefer Spring Data JDBC until the extra complexity of jOOQ is clearly justified by recurring maintenance cost.
+
 ---
 
 ## Security gate: SpotBugs + Find Security Bugs

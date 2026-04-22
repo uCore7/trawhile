@@ -136,7 +136,7 @@ public class TrackingService {
         }
 
         quickAccessRepository.save(new QuickAccess(
-            UUID.randomUUID(),
+            null,
             profileId,
             nodeId,
             existingEntries.size()
@@ -204,19 +204,16 @@ public class TrackingService {
             ));
         }
 
-        UUID recordId = UUID.randomUUID();
-        timeRecordRepository.save(new com.trawhile.domain.TimeRecord(
-            recordId,
+        com.trawhile.domain.TimeRecord created = timeRecordRepository.save(new com.trawhile.domain.TimeRecord(
+            null,
             actingUserId,
             node.id(),
             now,
             null,
             request.getTimezone(),
             null,
-            null
+            now
         ));
-        com.trawhile.domain.TimeRecord created = timeRecordRepository.findById(recordId)
-            .orElseThrow(() -> new EntityNotFoundException("TimeRecord", recordId));
 
         TrackingStatus status = toTrackingStatus(created);
         dispatchTrackingUpdate(actingUserId, status);

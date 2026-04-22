@@ -233,7 +233,8 @@ class RequestIT extends BaseIT {
             requestId
         );
         assertThat(persistedRow.get("status")).isEqualTo("closed");
-        assertThat(persistedRow.get("resolved_at")).isEqualTo(resolvedAtBefore);
+        assertThat(((java.sql.Timestamp) persistedRow.get("resolved_at")).toInstant())
+            .isEqualTo(resolvedAtBefore.toInstant());
         assertThat(persistedRow.get("resolved_by")).isEqualTo(requesterId);
     }
 

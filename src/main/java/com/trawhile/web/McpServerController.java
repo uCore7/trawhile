@@ -129,13 +129,7 @@ public class McpServerController {
         Map<UUID, com.trawhile.domain.Node> nodesById = nodeRepository.findAll().stream()
             .collect(Collectors.toMap(com.trawhile.domain.Node::id, node -> node));
         Set<UUID> visibleNodeIds = new LinkedHashSet<>(authorizationQueries.visibleNodeIds(actingUserId));
-        Map<UUID, List<com.trawhile.domain.Node>> childrenByParentId = nodeRepository.findAll().stream()
-            .collect(Collectors.groupingBy(
-                com.trawhile.domain.Node::parentId,
-                Collectors.collectingAndThen(Collectors.toList(), children -> children.stream()
-                    .sorted(Comparator.comparing(com.trawhile.domain.Node::sortOrder).thenComparing(com.trawhile.domain.Node::id))
-                    .toList())
-            ));
+        Map<UUID, List<com.trawhile.domain.Node>> childrenByParentId = childNodesByParentId();
 
         return visibleNodeIds.stream()
             .map(nodesById::get)
@@ -288,6 +282,7 @@ public class McpServerController {
         }
 
         Map<UUID, List<UUID>> childrenByParentId = nodeRepository.findAll().stream()
+            .filter(node -> node.parentId() != null)
             .collect(Collectors.groupingBy(
                 com.trawhile.domain.Node::parentId,
                 Collectors.mapping(com.trawhile.domain.Node::id, Collectors.toList())
@@ -305,6 +300,17 @@ public class McpServerController {
         }
         subtreeNodeIds.retainAll(visibleNodeIds);
         return subtreeNodeIds;
+    }
+
+    private Map<UUID, List<com.trawhile.domain.Node>> childNodesByParentId() {
+        return nodeRepository.findAll().stream()
+            .filter(node -> node.parentId() != null)
+            .collect(Collectors.groupingBy(
+                com.trawhile.domain.Node::parentId,
+                Collectors.collectingAndThen(Collectors.toList(), children -> children.stream()
+                    .sorted(Comparator.comparing(com.trawhile.domain.Node::sortOrder).thenComparing(com.trawhile.domain.Node::id))
+                    .toList())
+            ));
     }
 
     private long overlapSeconds(TimeRecord record, ZonedDateTime bucketStart, ZonedDateTime bucketEnd) {

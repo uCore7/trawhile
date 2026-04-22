@@ -130,6 +130,13 @@ class UserScrubbingIT extends BaseIT {
         UUID userId = TestFixtures.insertUserWithProfile(jdbc, "Token User");
         UUID nodeId = TestFixtures.insertNode(jdbc, TestFixtures.ROOT_NODE_ID, "Task Board");
         TestFixtures.grantAuth(jdbc, userId, nodeId, "track");
+        TestFixtures.insertTimeRecord(
+            jdbc,
+            userId,
+            nodeId,
+            OffsetDateTime.now().minusHours(3).withNano(0),
+            OffsetDateTime.now().minusHours(2).withNano(0)
+        );
 
         // Insert an active MCP token (revoked_at IS NULL)
         UUID tokenId = UUID.randomUUID();

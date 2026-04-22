@@ -90,7 +90,7 @@ make development-up
 
 `./scripts/mvn-local.sh spring-boot:run` automatically skips the frontend Maven plugin because the native dev flow serves Angular separately via `ng serve`.
 
-`./scripts/mvn-local.sh test` runs the backend test suite via the repository Maven wrapper settings.
+`./scripts/mvn-local.sh test` runs the backend test suite via the repository Maven wrapper settings, including both `*Test` and `*IT` classes.
 
 ### Traceability
 
@@ -111,6 +111,8 @@ Use the local traceability checker to compare requirements, planned test cases, 
 ```
 
 Default behavior follows the repository process rules: `UR-F` and `UR-Q` must have at least one SR, and `SR-F` and `SR-Q` must have at least one TE. Use `--rule-profile strict` if you want the checker to require coverage for every non-retired UR and every SR.
+
+For execution traceability, run the full suite before `./scripts/check-traceability.py`. Focused runs such as `-Dtest=ReportIT#...` overwrite individual Surefire XML files and can make untouched methods appear as `not_run` until you rerun the full suite.
 
 This script is intended for local use while closing traceability gaps; it is not wired into CI yet.
 

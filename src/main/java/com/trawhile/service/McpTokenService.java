@@ -60,20 +60,18 @@ public class McpTokenService {
     public GeneratedToken generateToken(UUID userId, String label, OffsetDateTime expiresAt) {
         String trimmedLabel = requireNonBlank(label, "label");
         String rawToken = generateRawToken();
+        OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
 
-        UUID tokenId = UUID.randomUUID();
-        mcpTokenRepository.save(new com.trawhile.domain.McpToken(
-            tokenId,
+        com.trawhile.domain.McpToken saved = mcpTokenRepository.save(new com.trawhile.domain.McpToken(
+            null,
             userId,
             sha256Hex(rawToken),
             trimmedLabel,
-            null,
+            createdAt,
             null,
             expiresAt,
             null
         ));
-
-        com.trawhile.domain.McpToken saved = requireToken(tokenId);
         securityEventService.log(
             "MCP_TOKEN_GENERATED",
             userId,

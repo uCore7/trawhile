@@ -2,6 +2,7 @@ package com.trawhile;
 
 import com.trawhile.security.OidcLoginSuccessHandler;
 import com.trawhile.security.TrawhileOidcUserService;
+import com.trawhile.config.TrawhileConfig;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,6 +42,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * TE-C002.F01-01  OIDC callback with no matching invitation redirects to login error (same for not-found and expired)
  */
 class AuthFlowIT extends BaseIT {
+
+    @Autowired
+    private TrawhileConfig trawhileConfig;
 
     @Autowired
     private TrawhileOidcUserService oidcUserService;
@@ -284,6 +289,66 @@ class AuthFlowIT extends BaseIT {
             Integer.class,
             "google-sub-withdrawn-001"
         )).as("withdrawn invitation must not leave behind a partial user_oauth_providers row").isZero();
+    }
+
+    @Test
+    @Tag("TE-F060.F02-03")
+    void acknowledgeGdpr_privacyNoticeUrlReturnedOnlyWhenUserHasEffectiveAuthorization() throws Exception {
+        String originalPrivacyNoticeUrl = trawhileConfig.getPrivacyNoticeUrl();
+        trawhileConfig.setPrivacyNoticeUrl("https://example.com/privacy");
+        try {
+            UUID authorizedUserId = TestFixtures.insertUser(jdbc);
+            UUID authorizedInvitationId = TestFixtures.insertPendingInvitation(
+                jdbc,
+                "authorized@example.com",
+                authorizedUserId
+            );
+            UUID nodeId = TestFixtures.insertNode(jdbc, TestFixtures.ROOT_NODE_ID, "Authorized Node");
+            TestFixtures.grantAuth(jdbc, authorizedUserId, nodeId, "view");
+
+            MockHttpSession authorizedSession = new MockHttpSession();
+            authorizedSession.setAttribute("PENDING_GDPR", Map.of(
+                "invitationId", authorizedInvitationId.toString(),
+                "userId", authorizedUserId.toString(),
+                "provider", "google",
+                "subject", "google-sub-authorized-001",
+                "name", "Authorized Member"
+            ));
+
+            mvc.perform(post("/api/v1/auth/gdpr-notice")
+                            .session(authorizedSession)
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                        "$.privacyNoticeUrl"
+                    ).value("https://example.com/privacy"));
+
+            UUID unauthorizedUserId = TestFixtures.insertUser(jdbc);
+            UUID unauthorizedInvitationId = TestFixtures.insertPendingInvitation(
+                jdbc,
+                "unauthorized@example.com",
+                unauthorizedUserId
+            );
+
+            MockHttpSession unauthorizedSession = new MockHttpSession();
+            unauthorizedSession.setAttribute("PENDING_GDPR", Map.of(
+                "invitationId", unauthorizedInvitationId.toString(),
+                "userId", unauthorizedUserId.toString(),
+                "provider", "google",
+                "subject", "google-sub-unauthorized-001",
+                "name", "Unauthorized Member"
+            ));
+
+            mvc.perform(post("/api/v1/auth/gdpr-notice")
+                            .session(unauthorizedSession)
+                            .with(csrf()))
+                    .andExpect(status().isOk())
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                        "$.privacyNoticeUrl"
+                    ).value(nullValue()));
+        } finally {
+            trawhileConfig.setPrivacyNoticeUrl(originalPrivacyNoticeUrl);
+        }
     }
 
     // -----------------------------------------------------------------------

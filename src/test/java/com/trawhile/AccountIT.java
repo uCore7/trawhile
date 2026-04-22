@@ -20,10 +20,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Epic 6 account integration tests.
- *
- * Note: the task brief labels the path-annotated authorization check as TE-F043.F01-02 on
- * GET /account, but the OpenAPI contract exposes that list on GET /account/authorizations.
- * The test follows the documented endpoint while preserving the requested tag coverage.
  */
 class AccountIT extends BaseIT {
 
@@ -53,7 +49,7 @@ class AccountIT extends BaseIT {
     }
 
     @Test
-    @Tag("TE-F043.F01-02")
+    @Tag("TE-F046.F01-01")
     void getOwnAuthorizations_returnsPathAnnotatedList() throws Exception {
         UUID userId = TestFixtures.insertUserWithProfile(jdbc, "Authorized Member");
         insertProvider(userId, "google", "google-sub-authorized-member");

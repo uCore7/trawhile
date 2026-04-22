@@ -89,12 +89,26 @@ class TrawhileConfigTest {
                 .contains("valid HTTPS URL"));
     }
 
+    @Test
+    @Tag("TE-F050.F05-05")
+    void purgeCronInvalid_failsValidation() {
+        TrawhileConfig config = validConfig();
+        config.setPurgeCron("not-a-cron");
+
+        Set<ConstraintViolation<TrawhileConfig>> violations = VALIDATOR.validate(config);
+
+        assertThat(violations)
+            .anySatisfy(violation -> assertThat(violation.getMessage())
+                .contains("valid Spring cron expression"));
+    }
+
     private TrawhileConfig validConfig() {
         TrawhileConfig config = new TrawhileConfig();
         config.setName("trawhile");
         config.setTimezone("Europe/Zurich");
         config.setFreezeOffsetYears(2);
         config.setRetentionYears(5);
+        config.setPurgeCron("0 59 23 * * *");
         config.setNodeRetentionExtraYears(1);
         config.setPrivacyNoticeUrl("https://example.com/privacy");
         return config;

@@ -146,6 +146,17 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
 
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+        </configuration>
+      </plugin>
+
       <!-- SpotBugs + Find Security Bugs: fail on HIGH/CRITICAL -->
       <plugin>
         <groupId>com.github.spotbugs</groupId>

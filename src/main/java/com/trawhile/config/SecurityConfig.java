@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.net.URLEncoder;
@@ -66,6 +67,10 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/oauth2/**", "/login/oauth2/**").permitAll()
+                .requestMatchers(
+                    PathPatternRequestMatcher.pathPattern("/actuator/health"),
+                    PathPatternRequestMatcher.pathPattern("/actuator/prometheus")
+                ).permitAll()
                 .requestMatchers("/api/v1/about").permitAll()
                 .requestMatchers("/api/v1/auth/providers").permitAll()
                 .requestMatchers("/api/v1/auth/gdpr-notice").permitAll()

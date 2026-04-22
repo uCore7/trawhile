@@ -8,6 +8,7 @@ import com.trawhile.repository.PendingInvitationRepository;
 import com.trawhile.repository.UserOauthProviderRepository;
 import com.trawhile.repository.UserProfileRepository;
 import com.trawhile.service.AccountService;
+import com.trawhile.service.SecurityEventService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -52,6 +53,7 @@ public class TrawhileOidcUserService extends OidcUserService {
     private final PendingInvitationRepository pendingInvitationRepository;
     private final AuthorizationQueries authorizationQueries;
     private final AccountService accountService;
+    private final SecurityEventService securityEventService;
 
     @Value("${BOOTSTRAP_ADMIN_EMAIL:}")
     private String bootstrapAdminEmail;
@@ -60,12 +62,14 @@ public class TrawhileOidcUserService extends OidcUserService {
                                    UserProfileRepository userProfileRepository,
                                    PendingInvitationRepository pendingInvitationRepository,
                                    AuthorizationQueries authorizationQueries,
-                                   AccountService accountService) {
+                                   AccountService accountService,
+                                   SecurityEventService securityEventService) {
         this.oauthProviderRepository = oauthProviderRepository;
         this.userProfileRepository = userProfileRepository;
         this.pendingInvitationRepository = pendingInvitationRepository;
         this.authorizationQueries = authorizationQueries;
         this.accountService = accountService;
+        this.securityEventService = securityEventService;
     }
 
     @Override
@@ -90,6 +94,7 @@ public class TrawhileOidcUserService extends OidcUserService {
             UserProfile profile = userProfileRepository.findById(existing.get().profileId())
                 .orElseThrow(() -> new IllegalStateException(
                     "OIDC provider row " + existing.get().id() + " has no linked profile"));
+            logSuccessfulLogin(profile.userId(), provider);
             return principalForInternalUser(oidcUser, profile.userId());
         }
 
@@ -102,6 +107,7 @@ public class TrawhileOidcUserService extends OidcUserService {
                 "name", displayName(oidcUser),
                 "bootstrap", Boolean.TRUE
             ));
+            logSuccessfulLogin(null, provider);
             return principalForInternalUser(oidcUser, userId);
         }
 
@@ -124,6 +130,7 @@ public class TrawhileOidcUserService extends OidcUserService {
             "subject", subject,
             "name", displayName(oidcUser)
         ));
+        logSuccessfulLogin(pending.get().userId(), provider);
         return principalForInternalUser(oidcUser, pending.get().userId());
     }
 
@@ -186,5 +193,13 @@ public class TrawhileOidcUserService extends OidcUserService {
         } catch (IllegalArgumentException ex) {
             throw new OAuth2AuthenticationException(new OAuth2Error("linking_requires_session"), ex);
         }
+    }
+
+    private void logSuccessfulLogin(UUID userId, String provider) {
+        securityEventService.log(
+            "OAUTH_LOGIN_SUCCESS",
+            userId,
+            Map.of("provider", provider)
+        );
     }
 }

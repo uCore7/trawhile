@@ -194,7 +194,7 @@ def strip_code_ticks(value: str) -> str:
     return value.strip().strip("`")
 
 
-def parse_planned_tes(path: Path, allowed_types: set[str]) -> dict[str, PlannedTeEntry]:
+def parse_planned_tes(path: Path, allowed_types: set[str] | None = None) -> dict[str, PlannedTeEntry]:
     entries: dict[str, PlannedTeEntry] = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
@@ -207,7 +207,7 @@ def parse_planned_tes(path: Path, allowed_types: set[str]) -> dict[str, PlannedT
         sr_id = strip_code_ticks(parts[1])
         test_type = strip_code_ticks(parts[3])
         test_class = strip_code_ticks(parts[4])
-        if test_type not in allowed_types:
+        if allowed_types is not None and test_type not in allowed_types:
             continue
         entries[te_id] = PlannedTeEntry(
             id=te_id,
@@ -414,7 +414,11 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
     root = args.root.resolve()
     urs = parse_urs(root / "docs/requirements-ur.md")
     srs = parse_srs(root / "docs/requirements-sr.md")
-    planned_tes = parse_planned_tes(root / "spec/test-plan.md", selected_test_types(args.scope))
+    all_planned_tes = parse_planned_tes(root / "spec/test-plan.md")
+    selected_types = selected_test_types(args.scope)
+    planned_tes = {
+        te_id: entry for te_id, entry in all_planned_tes.items() if entry.test_type in selected_types
+    }
     implemented = parse_implemented_methods((root / args.test_src).resolve())
     report_directories = report_dirs(root, args.reports_dir)
     executed, discovered_reports = parse_executed_methods(report_directories)
@@ -427,11 +431,21 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
     for te in planned_tes.values():
         sr_to_tes.setdefault(te.sr_id, set()).add(te.id)
 
+    sr_to_nonselected_tes: dict[str, set[str]] = {}
+    for te in all_planned_tes.values():
+        if te.test_type in selected_types:
+            continue
+        sr_to_nonselected_tes.setdefault(te.sr_id, set()).add(te.id)
+
     required_ur_ids = required_urs(urs, args.rule_profile)
     required_sr_ids = required_srs(srs, args.rule_profile)
 
     missing_sr_for_ur = sorted(ur_id for ur_id in required_ur_ids if not ur_to_srs.get(ur_id))
-    missing_te_for_sr = sorted(sr_id for sr_id in required_sr_ids if not sr_to_tes.get(sr_id))
+    missing_te_for_sr = sorted(
+        sr_id
+        for sr_id in required_sr_ids
+        if not sr_to_tes.get(sr_id) and not sr_to_nonselected_tes.get(sr_id)
+    )
 
     planned_te_ids = sorted(planned_tes)
     implemented_te_ids = sorted(implemented)
@@ -525,6 +539,7 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
             "urs": [asdict(entry) for entry in urs.values()],
             "srs": [asdict(entry) for entry in srs.values()],
             "planned_tes": [asdict(entry) for entry in planned_tes.values()],
+            "all_planned_tes": [asdict(entry) for entry in all_planned_tes.values()],
         },
     }
 

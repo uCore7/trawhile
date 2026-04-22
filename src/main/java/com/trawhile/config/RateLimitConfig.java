@@ -28,11 +28,11 @@ public class RateLimitConfig {
         return () -> Bucket.builder()
             .addLimit(Bandwidth.builder()
                 .capacity(20)
-                .refillGreedy(20, Duration.ofSeconds(1))
+                .refillIntervally(20, Duration.ofSeconds(1))
                 .build())
             .addLimit(Bandwidth.builder()
                 .capacity(200)
-                .refillGreedy(200, Duration.ofMinutes(1))
+                .refillIntervally(200, Duration.ofMinutes(1))
                 .build())
             .build();
     }

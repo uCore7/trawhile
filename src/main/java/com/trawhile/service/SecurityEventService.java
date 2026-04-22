@@ -78,22 +78,31 @@ public class SecurityEventService {
         authorizationService.requireAdmin(actingUserId, ROOT_NODE_ID);
 
         MapSqlParameterSource parameters = new MapSqlParameterSource()
-            .addValue("eventType", filters.eventType())
-            .addValue("userId", filters.userId())
-            .addValue("from", filters.from())
-            .addValue("to", filters.to())
             .addValue("limit", filters.limit())
             .addValue("offset", filters.offset());
 
-        String whereClause = """
+        StringBuilder whereClause = new StringBuilder("""
             FROM security_events se
             LEFT JOIN user_profile up ON up.user_id = se.user_id
             LEFT JOIN pending_invitations pi ON pi.user_id = se.user_id
-            WHERE (:eventType IS NULL OR se.event_type = :eventType)
-              AND (:userId IS NULL OR se.user_id = :userId)
-              AND (:from IS NULL OR se.occurred_at >= :from)
-              AND (:to IS NULL OR se.occurred_at <= :to)
-            """;
+            WHERE 1 = 1
+            """);
+        if (filters.eventType() != null) {
+            whereClause.append(" AND se.event_type = :eventType");
+            parameters.addValue("eventType", filters.eventType());
+        }
+        if (filters.userId() != null) {
+            whereClause.append(" AND se.user_id = :userId");
+            parameters.addValue("userId", filters.userId());
+        }
+        if (filters.from() != null) {
+            whereClause.append(" AND se.occurred_at >= :from");
+            parameters.addValue("from", filters.from());
+        }
+        if (filters.to() != null) {
+            whereClause.append(" AND se.occurred_at <= :to");
+            parameters.addValue("to", filters.to());
+        }
 
         Integer total = namedParameterJdbcTemplate.queryForObject(
             "SELECT COUNT(*) " + whereClause,
@@ -147,14 +156,17 @@ public class SecurityEventService {
     }
 
     private void saveEvent(UUID userId, String eventType, String details, String ipAddress) {
-        securityEventRepository.save(new SecurityEvent(
-            null,
+        jdbcTemplate.update(
+            """
+                INSERT INTO security_events (user_id, event_type, details, ip_address, occurred_at)
+                VALUES (?, ?, CAST(? AS jsonb), ?, ?)
+                """,
             userId,
             eventType,
             details,
             ipAddress,
             OffsetDateTime.now()
-        ));
+        );
         monitoringMetrics.recordSecurityEvent(eventType);
     }
 

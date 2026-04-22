@@ -107,21 +107,18 @@ public class UserService {
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        UUID userId = UUID.randomUUID();
-        UUID invitationId = UUID.randomUUID();
-
-        userRepository.save(new User(userId, now));
+        User user = userRepository.save(new User(null, now));
         PendingInvitation invitation = pendingInvitationRepository.save(new PendingInvitation(
-            invitationId,
-            userId,
+            null,
+            user.id(),
             normalizedEmail,
             actingUserId,
             now,
             now.plusDays(90)
         ));
 
-        sseDispatcher.dispatch(userId,
-            new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, Map.of("userId", userId)));
+        sseDispatcher.dispatch(user.id(),
+            new SseEvent(SseEvent.EventType.AUTHORIZATION_CHANGE, Map.of("userId", user.id())));
 
         return new CreateInvitation201Response(
             mailtoLink(invitation.email(), baseUrl),

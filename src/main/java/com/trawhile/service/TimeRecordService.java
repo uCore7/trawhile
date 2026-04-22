@@ -45,19 +45,19 @@ public class TimeRecordService {
     public com.trawhile.web.dto.TimeRecord createRetroactive(UUID actingUserId, CreateTimeRecordRequest request) {
         validateTimeRange(request.getStartedAt(), request.getEndedAt());
         com.trawhile.domain.Node node = requireTrackableNodeForUser(actingUserId, request.getNodeId());
+        OffsetDateTime createdAt = OffsetDateTime.now();
 
-        UUID recordId = UUID.randomUUID();
-        timeRecordRepository.save(new com.trawhile.domain.TimeRecord(
-            recordId,
+        com.trawhile.domain.TimeRecord created = timeRecordRepository.save(new com.trawhile.domain.TimeRecord(
+            null,
             actingUserId,
             node.id(),
             request.getStartedAt(),
             request.getEndedAt(),
             request.getTimezone(),
             request.getDescription(),
-            null
+            createdAt
         ));
-        return toDto(requireOwnedRecord(actingUserId, recordId));
+        return toDto(created);
     }
 
     @Transactional
@@ -108,19 +108,19 @@ public class TimeRecordService {
         com.trawhile.domain.TimeRecord original = requireOwnedRecord(actingUserId, recordId);
         validateTimeRange(request.getStartedAt(), request.getEndedAt());
         requireTrackableNodeForUser(actingUserId, original.nodeId());
+        OffsetDateTime createdAt = OffsetDateTime.now();
 
-        UUID duplicatedRecordId = UUID.randomUUID();
-        timeRecordRepository.save(new com.trawhile.domain.TimeRecord(
-            duplicatedRecordId,
+        com.trawhile.domain.TimeRecord duplicated = timeRecordRepository.save(new com.trawhile.domain.TimeRecord(
+            null,
             actingUserId,
             original.nodeId(),
             request.getStartedAt(),
             request.getEndedAt(),
             original.timezone(),
             original.description(),
-            null
+            createdAt
         ));
-        return toDto(requireOwnedRecord(actingUserId, duplicatedRecordId));
+        return toDto(duplicated);
     }
 
     private com.trawhile.domain.TimeRecord requireOwnedRecord(UUID actingUserId, UUID recordId) {

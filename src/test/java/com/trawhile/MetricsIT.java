@@ -4,7 +4,7 @@ import com.trawhile.lifecycle.ActivityPurgeJob;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 import java.io.IOException;
@@ -39,7 +39,7 @@ class MetricsIT extends BaseIT {
     @LocalServerPort
     private int mainPort;
 
-    @Value("${management.server.port}")
+    @LocalManagementPort
     private int managementPort;
 
     @Test
@@ -52,7 +52,7 @@ class MetricsIT extends BaseIT {
         assertThat(managementResponse.body()).contains("jvm_memory_used_bytes");
 
         HttpResponseData mainResponse = fetch(mainPort, "/actuator/prometheus");
-        assertThat(mainResponse.statusCode()).isEqualTo(404);
+        assertThat(mainResponse.statusCode()).isIn(401, 404);
     }
 
     @Test

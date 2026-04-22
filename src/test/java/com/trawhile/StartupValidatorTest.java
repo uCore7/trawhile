@@ -46,6 +46,25 @@ class StartupValidatorTest {
             .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    @Tag("TE-F065.F01-04")
+    void startupValidation_errorMessageIdentifiesInvalidPropertyOrConstraint() {
+        StartupValidator validator = new StartupValidator();
+        ClientRegistrationRepository emptyRepository = new ClientRegistrationRepository() {
+            @Override
+            public ClientRegistration findByRegistrationId(String registrationId) {
+                return null;
+            }
+        };
+        ReflectionTestUtils.setField(validator, "clientRegistrationRepository", emptyRepository);
+
+        assertThatThrownBy(() -> validator.run(new DefaultApplicationArguments(new String[0])))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Startup validation failed (SR-F065.F01)")
+            .hasMessageContaining("at least one OIDC provider must be configured")
+            .hasMessageContaining("GOOGLE_CLIENT_ID");
+    }
+
     private ClientRegistration googleRegistration() {
         return ClientRegistration.withRegistrationId("google")
             .clientId("test-client-id")

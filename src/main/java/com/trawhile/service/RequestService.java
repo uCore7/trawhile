@@ -48,23 +48,23 @@ public class RequestService {
     public RequestRecord submitRequest(UUID actingUserId, UUID nodeId, CreateRequestRequest request) {
         requireNode(nodeId);
         authorizationService.requireView(actingUserId, nodeId);
+        OffsetDateTime createdAt = OffsetDateTime.now();
 
-        UUID requestId = UUID.randomUUID();
-        requestRepository.save(new com.trawhile.domain.Request(
-            requestId,
+        com.trawhile.domain.Request created = requestRepository.save(new com.trawhile.domain.Request(
+            null,
             actingUserId,
             nodeId,
             request.getTemplate().getValue(),
             request.getBody(),
             "open",
-            null,
+            createdAt,
             null,
             null
         ));
 
-        RequestRecord created = toDto(requireRequest(requestId));
-        dispatchRequestEvent(nodeId, created);
-        return created;
+        RequestRecord dto = toDto(created);
+        dispatchRequestEvent(nodeId, dto);
+        return dto;
     }
 
     @Transactional(readOnly = true)

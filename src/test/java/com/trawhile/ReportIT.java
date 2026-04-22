@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * TE-F036.F01-01/02/03, TE-F036.F02-01/02, TE-F038.F01-01, TE-F052.F01-01/02/03
+ * TE-F036.F01-01/02/03, TE-F036.F02-01/02, TE-F038.F01-01, TE-F052.F01-01/02/03/04
  */
 class ReportIT extends BaseIT {
 
@@ -336,6 +336,43 @@ class ReportIT extends BaseIT {
             .doesNotContain("description")
             .doesNotContain("overlapping")
             .doesNotContain("hasGapBefore");
+    }
+
+    @Test
+    @Tag("TE-F052.F01-04")
+    void getMemberSummaries_filterByDataQualityFlag_returnsOnlyMatchingBuckets() throws Exception {
+        UUID requesterId = TestFixtures.insertUserWithProfile(jdbc, "Requester");
+        UUID cleanMemberId = TestFixtures.insertUserWithProfile(jdbc, "Clean Member");
+        UUID issueMemberId = TestFixtures.insertUserWithProfile(jdbc, "Issue Member");
+        UUID nodeId = TestFixtures.insertNode(jdbc, TestFixtures.ROOT_NODE_ID, "Department");
+        TestFixtures.grantAuth(jdbc, requesterId, TestFixtures.ROOT_NODE_ID, "view");
+
+        OffsetDateTime base = OffsetDateTime.of(2024, 6, 19, 9, 0, 0, 0, ZoneOffset.UTC);
+        insertTimeRecord(cleanMemberId, nodeId, base, base.plusHours(1), "UTC", null);
+        insertTimeRecord(issueMemberId, nodeId, base, base.plusHours(2), "UTC", null);
+        insertTimeRecord(issueMemberId, nodeId, base.plusHours(1), base.plusHours(3), "UTC", null);
+
+        mvc.perform(get("/api/v1/reports/members")
+                        .param("interval", "day")
+                        .param("from", "2024-06-19")
+                        .param("to", "2024-06-19")
+                        .param("hasDataQualityIssues", "true")
+                        .with(TestSecurityHelper.authenticatedAs(requesterId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].userId").value(issueMemberId.toString()))
+                .andExpect(jsonPath("$[0].buckets[0].hasDataQualityIssues").value(true));
+
+        mvc.perform(get("/api/v1/reports/members")
+                        .param("interval", "day")
+                        .param("from", "2024-06-19")
+                        .param("to", "2024-06-19")
+                        .param("hasDataQualityIssues", "false")
+                        .with(TestSecurityHelper.authenticatedAs(requesterId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].userId").value(cleanMemberId.toString()))
+                .andExpect(jsonPath("$[0].buckets[0].hasDataQualityIssues").value(false));
     }
 
     private UUID insertTimeRecord(
