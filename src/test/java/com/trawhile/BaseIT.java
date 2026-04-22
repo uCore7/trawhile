@@ -36,7 +36,7 @@ public abstract class BaseIT {
     static final PostgreSQLContainer<?> postgres;
 
     static {
-        postgres = new PostgreSQLContainer<>("postgres:16");
+        postgres = new PostgreSQLContainer<>("postgres:18");
         postgres.start();
     }
 

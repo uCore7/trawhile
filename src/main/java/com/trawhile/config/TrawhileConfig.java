@@ -59,8 +59,11 @@ public class TrawhileConfig {
 
     @AssertTrue(message = "timezone must be a valid IANA timezone identifier")
     public boolean isTimezoneValid() {
+        if (timezone == null || timezone.isBlank()) {
+            return true;
+        }
         try {
-            ZoneId.of(timezone);
+            ZoneId.of(timezone.trim());
             return true;
         } catch (Exception e) {
             return false;
@@ -69,8 +72,11 @@ public class TrawhileConfig {
 
     @AssertTrue(message = "purge-cron must be a valid Spring cron expression")
     public boolean isPurgeCronValid() {
+        if (purgeCron == null || purgeCron.isBlank()) {
+            return true;
+        }
         try {
-            CronExpression.parse(purgeCron);
+            CronExpression.parse(purgeCron.trim());
             return true;
         } catch (Exception e) {
             return false;
@@ -81,8 +87,8 @@ public class TrawhileConfig {
     public boolean isPrivacyNoticeUrlValid() {
         if (privacyNoticeUrl == null || privacyNoticeUrl.isBlank()) return true;
         try {
-            var uri = URI.create(privacyNoticeUrl);
-            return "https".equals(uri.getScheme()) && uri.getHost() != null;
+            URI uri = URI.create(privacyNoticeUrl.trim());
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && !uri.getHost().isBlank();
         } catch (Exception e) {
             return false;
         }

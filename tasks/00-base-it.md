@@ -37,7 +37,7 @@ src/test/java/com/trawhile/
 public abstract class BaseIT {
     @Container
     static PostgreSQLContainer<?> postgres =
-        new PostgreSQLContainer<>("postgres:16").withReuse(true);
+        new PostgreSQLContainer<>("postgres:18").withReuse(true);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry r) {

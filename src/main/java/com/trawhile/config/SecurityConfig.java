@@ -12,13 +12,22 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Configuration
 @EnableWebSecurity
@@ -52,6 +61,8 @@ public class SecurityConfig {
                 .csrfTokenRepository(csrfRepo)
                 .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                 .ignoringRequestMatchers("/mcp"))
+
+            .addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
 
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/oauth2/**", "/login/oauth2/**").permitAll()
@@ -122,5 +133,22 @@ public class SecurityConfig {
             return requestUri.substring(prefix.length());
         }
         return "unknown";
+    }
+
+    /**
+     * Forces deferred CSRF token creation so Spring Security writes the XSRF-TOKEN cookie
+     * on normal GET responses for the SPA.
+     */
+    private static final class CsrfCookieFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(HttpServletRequest request,
+                                        HttpServletResponse response,
+                                        FilterChain filterChain) throws ServletException, IOException {
+            CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+            if (csrfToken != null) {
+                csrfToken.getToken();
+            }
+            filterChain.doFilter(request, response);
+        }
     }
 }

@@ -81,11 +81,16 @@ make development-db
 ./scripts/mvn-local.sh spring-boot:run
 cd src/main/frontend && ng serve
 
+# Run the backend test suite
+./scripts/mvn-local.sh test
+
 # Or start the full stack in Docker (production-like)
 make development-up
 ```
 
 `./scripts/mvn-local.sh spring-boot:run` automatically skips the frontend Maven plugin because the native dev flow serves Angular separately via `ng serve`.
+
+`./scripts/mvn-local.sh test` runs the backend test suite via the repository Maven wrapper settings.
 
 ### Codex in a Docker sandbox
 

@@ -40,6 +40,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
         String ip = resolveClientIp(request);
+        String endpoint = normalizeEndpoint(request);
         Bucket bucket = buckets.computeIfAbsent(ip, k -> bucketFactory.get());
 
         if (bucket.tryConsume(1)) {
@@ -48,13 +49,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.setStatus(429);
             response.setContentType("application/json");
             response.getWriter().write("{\"code\":\"RATE_LIMITED\",\"message\":\"Too many requests\"}");
-            monitoringMetrics.recordRateLimitRejection(normalizeEndpoint(request));
+            response.flushBuffer();
+            monitoringMetrics.recordRateLimitRejection(endpoint);
             securityEventService.log(
                 "RATE_LIMIT_BREACH",
                 null,
-                java.util.Map.of("endpoint", normalizeEndpoint(request)),
+                java.util.Map.of("endpoint", endpoint),
                 ip
             );
+            return;
         }
     }
 

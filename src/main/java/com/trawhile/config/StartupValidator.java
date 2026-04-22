@@ -20,9 +20,14 @@ public class StartupValidator implements ApplicationRunner {
     @Autowired(required = false)
     private ClientRegistrationRepository clientRegistrationRepository;
 
+    @Autowired(required = false)
+    private OidcClientProperties oidcClientProperties;
+
     @Override
     public void run(ApplicationArguments args) {
-        boolean hasProviders = hasConfiguredProviders(clientRegistrationRepository);
+        boolean hasProviders =
+            hasConfiguredProviders(clientRegistrationRepository)
+                || hasConfiguredProviders(oidcClientProperties);
 
         if (!hasProviders) {
             throw new IllegalStateException(
@@ -44,5 +49,20 @@ public class StartupValidator implements ApplicationRunner {
             }
         }
         return false;
+    }
+
+    private boolean hasConfiguredProviders(OidcClientProperties properties) {
+        if (properties == null) {
+            return false;
+        }
+
+        return hasText(properties.getGoogle().getClientId())
+            || hasText(properties.getApple().getClientId())
+            || hasText(properties.getMicrosoft().getClientId())
+            || hasText(properties.getKeycloak().getClientId());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

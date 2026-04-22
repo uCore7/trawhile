@@ -34,7 +34,7 @@ public class SseDispatcher {
                     emitter.send(SseEmitter.event()
                         .name(event.type().name())
                         .data(event.payload(), MediaType.APPLICATION_JSON));
-                } catch (IOException e) {
+                } catch (IOException | IllegalStateException e) {
                     registry.remove(userId, emitter);
                     log.debug("Removed dead SSE emitter after {} for user {}", event.type(), userId);
                 } catch (Exception e) {
