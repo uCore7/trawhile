@@ -92,6 +92,28 @@ make development-up
 
 `./scripts/mvn-local.sh test` runs the backend test suite via the repository Maven wrapper settings.
 
+### Traceability
+
+Use the local traceability checker to compare requirements, planned test cases, implemented `@Tag("TE-...")` tests, and executed backend test reports.
+
+```bash
+# Structural traceability only (good while fixing missing coverage)
+./scripts/check-traceability.py --no-execution
+
+# Full backend traceability, including executed test reports in target/surefire-reports
+./scripts/mvn-local.sh test
+./scripts/check-traceability.py
+
+# Alternative policies / output formats
+./scripts/check-traceability.py --rule-profile strict
+./scripts/check-traceability.py --json
+./scripts/check-traceability.py --show-methods
+```
+
+Default behavior follows the repository process rules: `UR-F` and `UR-Q` must have at least one SR, and `SR-F` and `SR-Q` must have at least one TE. Use `--rule-profile strict` if you want the checker to require coverage for every non-retired UR and every SR.
+
+This script is intended for local use while closing traceability gaps; it is not wired into CI yet.
+
 ### Codex in a Docker sandbox
 
 This repository also includes a `.devcontainer/` setup for running Codex inside Docker while still giving the agent full access inside that container. This follows the current Codex guidance for containerized environments: if Docker is your intended isolation boundary, run Codex inside the container with `danger-full-access` instead of trying to stack a second Linux sandbox inside it.
