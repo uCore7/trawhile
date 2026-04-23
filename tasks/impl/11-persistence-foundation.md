@@ -4,7 +4,9 @@
 
 - `tasks/00-base-it.md` merged
 - `tasks/tests/11-persistence-foundation.md` merged (tests exist and are failing)
-- A separate chat-mode schema change has already added the PostgreSQL function `visible_nodes(user_id)` to the canonical schema / runtime database setup
+- A separate chat-mode schema change has already added the PostgreSQL function `visible_nodes(user_id)` to `docs/schema.sql`
+- The Flyway V1 migration has been regenerated from the canonical schema
+- If a jOOQ schema input file is still needed, it has been regenerated from the canonical schema and is not treated as an independent hand-maintained source
 
 ## Guardrails
 
@@ -71,6 +73,7 @@ Prefer repository methods shaped like:
 
 - The goal is **authorized SQL, not SQL then filter**. The new node reads must not call `findAll()` and trim in Java afterward.
 - `visible_nodes(user_id)` is the shared primitive; do not duplicate its recursive logic inline unless a test proves it is unavoidable.
+- Do not treat `src/main/resources/db/codegen/jooq-schema.sql` as a second schema source. If the task needs it for code generation, consume the derived file that came from the canonical schema rather than editing it by hand.
 - Keep generated jOOQ artifacts build-generated. Do not add hand-maintained copies of generated schema classes to source control.
 - Preserve existing endpoint behavior where possible; this task is a persistence refactor, not an API redesign.
 - If jOOQ code generation needs a live PostgreSQL instance, start the dev DB via the documented path and request escalation if Docker or local DB access is sandbox-blocked.

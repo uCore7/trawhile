@@ -22,6 +22,7 @@ The process distinguishes between **canonical sources** and **derived artifacts*
 **Derived artifacts** are regenerated from canonical sources whenever identifiers, terminology, contracts, or epic structure change:
 - `spec/openapi.yaml`
 - Flyway V1 migration
+- jOOQ code-generation schema inputs (for example `src/main/resources/db/codegen/jooq-schema.sql`) when such a file is needed for build tooling
 - scaffold classes/interfaces and placeholder controllers/services
 - `spec/test-plan.md` baseline rows and ID structure
 - `tasks/tests/*.md` and `tasks/impl/*.md` scaffolds
@@ -29,6 +30,14 @@ The process distinguishes between **canonical sources** and **derived artifacts*
 **Rule of preference:** regeneration is preferred over manual patching for derived artifacts. Manual patching is allowed only for small exceptions, generator defects, or deliberate human refinements that are then folded back into the generator logic later.
 
 **Acceptance rule:** generated output is never accepted blindly. Every regeneration step requires human review before it becomes the new baseline.
+
+**Schema rule for jOOQ:** `docs/schema.sql` remains the single canonical database schema. Runtime database objects needed by the application or by generated query code — including PostgreSQL functions such as authorization helpers — must be defined there first. The Flyway V1 migration and any jOOQ-specific schema input file are derived artifacts generated from the canonical schema, possibly as filtered subsets for build purposes. They must not become independent hand-maintained schema sources.
+
+**Schema regeneration rule:** When `docs/schema.sql` changes, regenerate derived schema artifacts via the repository scripts rather than patching them manually:
+- Flyway V1 migration: `./scripts/generate-schema-v1.sh`
+- jOOQ schema input subset (if present): `./scripts/generate-jooq-schema.sh`
+
+Review the regenerated output before accepting it, but do not treat the derived files as a second place to edit schema definitions.
 
 **UML note:** UML files in `docs/uml/` are not canonical sources and are not treated as fully generated artifacts. They are maintained in chat mode as consistency and communication artifacts derived from the canonical documents, with human judgment deciding what to visualise and how much detail to include.
 

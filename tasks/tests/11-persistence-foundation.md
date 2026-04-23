@@ -8,7 +8,10 @@ You are a **test writer**. Derive all test logic from the canonical docs and thi
 
 - `tasks/00-base-it.md` merged
 - The architecture direction in `docs/architecture.md` and `docs/decisions.md` is the source of truth for this refactor
-- A separate chat-mode schema change will add the PostgreSQL authorization function `visible_nodes(user_id)`; do not attempt to create or patch migrations here
+- A separate chat-mode schema change has added the PostgreSQL authorization function `visible_nodes(user_id)` to `docs/schema.sql`
+- The Flyway V1 migration has been regenerated from the canonical schema
+- If a jOOQ code-generation schema input file still exists, it has been regenerated from the canonical schema and is not treated as a second handwritten schema
+- Do not attempt to create or patch migrations in this task
 
 ## Guardrails
 
@@ -84,4 +87,5 @@ Treat those names and semantics as the contract the production task must satisfy
 
 - `visible_nodes(user_id)` is a set-returning SQL function intended for `SELECT` composition, not a procedure.
 - Unauthorized access in this layer should usually surface as an empty result set, not as rows returned and filtered later in the test.
+- Do not derive expected behavior from a hand-maintained `jooq-schema.sql` subset. The canonical runtime contract is `docs/schema.sql`.
 - Keep the tests resilient to future DTO shaping: assert repository semantics, not web-controller JSON.

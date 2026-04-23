@@ -29,17 +29,7 @@ public class AuthorizationQueries {
      * Q1: all node IDs visible to a user (grant on N = effective on N and all descendants).
      */
     public List<UUID> visibleNodeIds(UUID userId) {
-        String sql = """
-            WITH RECURSIVE visible AS (
-              SELECT n.id FROM nodes n
-              JOIN node_authorizations na ON na.node_id = n.id
-              WHERE na.user_id = :userId
-              UNION ALL
-              SELECT n.id FROM nodes n
-              JOIN visible v ON n.parent_id = v.id
-            )
-            SELECT id FROM visible
-            """;
+        String sql = "SELECT node_id FROM visible_nodes(CAST(:userId AS uuid))";
         return jdbc.queryForList(sql, Map.of("userId", userId), UUID.class);
     }
 

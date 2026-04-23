@@ -33,6 +33,8 @@
     <node.version>v24.14.1</node.version>
     <npm.version>11.12.1</npm.version>
     <frontend.output.directory>${project.build.outputDirectory}/static</frontend.output.directory>
+    <jooq.codegen.package>com.trawhile.jooq</jooq.codegen.package>
+    <jooq.codegen.directory>${project.build.directory}/generated-sources/jooq</jooq.codegen.directory>
   </properties>
 
   <dependencies>
@@ -44,6 +46,10 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jooq</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -237,6 +243,59 @@
                 <skipDefaultInterface>false</skipDefaultInterface>
                 <openApiNullable>false</openApiNullable>
               </configOptions>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jooq</groupId>
+        <artifactId>jooq-codegen-maven</artifactId>
+        <version>${jooq.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq-meta-extensions</artifactId>
+            <version>${jooq.version}</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>generate-jooq</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <generator>
+                <database>
+                  <name>org.jooq.meta.extensions.ddl.DDLDatabase</name>
+                  <properties>
+                    <property>
+                      <key>scripts</key>
+                      <value>${project.basedir}/src/main/resources/db/codegen/jooq-schema.sql</value>
+                    </property>
+                    <property>
+                      <key>sort</key>
+                      <value>semantic</value>
+                    </property>
+                    <property>
+                      <key>dialect</key>
+                      <value>POSTGRES</value>
+                    </property>
+                  </properties>
+                </database>
+                <generate>
+                  <javaTimeTypes>true</javaTimeTypes>
+                  <deprecated>false</deprecated>
+                  <records>false</records>
+                  <pojos>false</pojos>
+                </generate>
+                <target>
+                  <packageName>${jooq.codegen.package}</packageName>
+                  <directory>${jooq.codegen.directory}</directory>
+                </target>
+              </generator>
             </configuration>
           </execution>
         </executions>

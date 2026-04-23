@@ -4,9 +4,11 @@ import com.trawhile.domain.AuthLevel;
 import com.trawhile.exception.BusinessRuleViolationException;
 import com.trawhile.exception.EntityNotFoundException;
 import com.trawhile.exception.InputValidationException;
+import com.trawhile.repository.AuthorizationQueries;
 import com.trawhile.repository.NodeAuthorizationRepository;
 import com.trawhile.repository.NodeRepository;
 import com.trawhile.repository.UserRepository;
+import com.trawhile.repository.read.NodeReadQueries;
 import com.trawhile.sse.SseDispatcher;
 import com.trawhile.sse.SseEvent;
 import com.trawhile.web.dto.CreateChildNodeRequest;
@@ -39,36 +41,50 @@ public class NodeService {
     private final NodeRepository nodeRepository;
     private final NodeAuthorizationRepository nodeAuthorizationRepository;
     private final AuthorizationService authorizationService;
+    private final AuthorizationQueries authorizationQueries;
     private final SseDispatcher sseDispatcher;
     private final JdbcTemplate jdbcTemplate;
+    private final NodeReadQueries nodeReadQueries;
     private final UserRepository userRepository;
     private final SecurityEventService securityEventService;
 
     public NodeService(NodeRepository nodeRepository,
                        NodeAuthorizationRepository nodeAuthorizationRepository,
                        AuthorizationService authorizationService,
+                       AuthorizationQueries authorizationQueries,
                        SseDispatcher sseDispatcher,
                        JdbcTemplate jdbcTemplate,
+                       NodeReadQueries nodeReadQueries,
                        UserRepository userRepository,
                        SecurityEventService securityEventService) {
         this.nodeRepository = nodeRepository;
         this.nodeAuthorizationRepository = nodeAuthorizationRepository;
         this.authorizationService = authorizationService;
+        this.authorizationQueries = authorizationQueries;
         this.sseDispatcher = sseDispatcher;
         this.jdbcTemplate = jdbcTemplate;
+        this.nodeReadQueries = nodeReadQueries;
         this.userRepository = userRepository;
         this.securityEventService = securityEventService;
     }
 
     @Transactional(readOnly = true)
     public Node getRootNode(UUID actingUserId) {
-        return toDto(actingUserId, rootNode());
+        NodeReadQueries.NodeSummaryRow rootNode = nodeReadQueries.findVisibleRootNodeSummary(actingUserId)
+            .orElseGet(() -> {
+                authorizationService.requireView(actingUserId, rootNodeId());
+                throw new EntityNotFoundException("Root node not found");
+            });
+        return toDto(actingUserId, rootNode);
     }
 
     @Transactional(readOnly = true)
     public Node getNode(UUID actingUserId, UUID nodeId) {
-        com.trawhile.domain.Node node = requireNode(nodeId);
-        authorizationService.requireView(actingUserId, nodeId);
+        NodeReadQueries.NodeSummaryRow node = nodeReadQueries.findVisibleNodeSummary(actingUserId, nodeId)
+            .orElseGet(() -> {
+                requireVisibleNodeAfterReadMiss(actingUserId, nodeId);
+                throw new EntityNotFoundException("Node", nodeId);
+            });
         return toDto(actingUserId, node);
     }
 
@@ -148,12 +164,31 @@ public class NodeService {
 
     @Transactional(readOnly = true)
     public com.trawhile.domain.Node getLogo(UUID actingUserId, UUID nodeId) {
-        com.trawhile.domain.Node node = requireNode(nodeId);
-        authorizationService.requireView(actingUserId, node.id());
-        if (node.logo() == null || node.logoMimeType() == null) {
+        NodeReadQueries.NodeContentRow content = nodeReadQueries.findVisibleNodeContent(actingUserId, nodeId)
+            .orElseGet(() -> {
+                if (nodeReadQueries.findVisibleNodeSummary(actingUserId, nodeId).isPresent()) {
+                    throw new EntityNotFoundException("Node logo not found: " + nodeId);
+                }
+                requireVisibleNodeAfterReadMiss(actingUserId, nodeId);
+                throw new EntityNotFoundException("Node logo not found: " + nodeId);
+            });
+        if (content.logo() == null || content.logoMimeType() == null) {
             throw new EntityNotFoundException("Node logo not found: " + nodeId);
         }
-        return node;
+        return new com.trawhile.domain.Node(
+            content.nodeId(),
+            null,
+            "",
+            null,
+            true,
+            0,
+            OffsetDateTime.now(),
+            null,
+            null,
+            null,
+            content.logo(),
+            content.logoMimeType()
+        );
     }
 
     @Transactional
@@ -427,7 +462,7 @@ public class NodeService {
         );
     }
 
-    private com.trawhile.domain.Node rootNode() {
+    private UUID rootNodeId() {
         UUID rootId = jdbcTemplate.queryForObject(
             "SELECT id FROM nodes WHERE parent_id IS NULL",
             UUID.class
@@ -435,7 +470,7 @@ public class NodeService {
         if (rootId == null) {
             throw new EntityNotFoundException("Root node not found");
         }
-        return requireNode(rootId);
+        return rootId;
     }
 
     private com.trawhile.domain.Node requireNode(UUID nodeId) {
@@ -443,10 +478,9 @@ public class NodeService {
             .orElseThrow(() -> new EntityNotFoundException("Node", nodeId));
     }
 
-    private Node toDto(UUID actingUserId, com.trawhile.domain.Node node) {
-        List<NodeSummary> visibleChildren = nodeRepository.findByParentIdOrderBySortOrder(node.id()).stream()
-            .filter(child -> authorizationService.hasView(actingUserId, child.id()))
-            .map(child -> toSummary(actingUserId, child))
+    private Node toDto(UUID actingUserId, NodeReadQueries.NodeSummaryRow node) {
+        List<NodeSummary> visibleChildren = nodeReadQueries.findVisibleChildren(actingUserId, node.id()).stream()
+            .map(this::toSummary)
             .toList();
 
         Node dto = new Node(
@@ -461,30 +495,48 @@ public class NodeService {
         dto.setParentId(node.parentId());
         dto.setDescription(node.description());
         dto.setDeactivatedAt(node.deactivatedAt());
-        dto.setEffectiveAuthorization(toDtoAuth(effectiveAuthorization(actingUserId, node.id())));
+        dto.setEffectiveAuthorization(toDtoAuth(node.effectiveAuthorization()));
         dto.setColor(node.color());
         dto.setIcon(node.icon());
         dto.setLogoUrl(logoUrl(node));
         return dto;
     }
 
-    private NodeSummary toSummary(UUID actingUserId, com.trawhile.domain.Node node) {
+    private Node toDto(UUID actingUserId, com.trawhile.domain.Node node) {
+        return toDto(actingUserId, new NodeReadQueries.NodeSummaryRow(
+            node.id(),
+            node.parentId(),
+            node.name(),
+            node.description(),
+            node.isActive(),
+            node.sortOrder(),
+            node.createdAt(),
+            node.deactivatedAt(),
+            hasActiveChildren(node.id()),
+            effectiveAuthorization(actingUserId, node.id()),
+            node.color(),
+            node.icon(),
+            node.logo() != null && node.logoMimeType() != null
+        ));
+    }
+
+    private NodeSummary toSummary(NodeReadQueries.NodeSummaryRow node) {
         NodeSummary summary = new NodeSummary(
             node.id(),
             node.name(),
             node.isActive(),
             node.sortOrder(),
-            hasActiveChildren(node.id())
+            node.hasActiveChildren()
         );
         summary.setDescription(node.description());
-        summary.setEffectiveAuthorization(toDtoAuth(effectiveAuthorization(actingUserId, node.id())));
+        summary.setEffectiveAuthorization(toDtoAuth(node.effectiveAuthorization()));
         summary.setColor(node.color());
         summary.setIcon(node.icon());
         summary.setLogoUrl(logoUrl(node));
         return summary;
     }
 
-    private List<NodePathEntry> ancestorPath(com.trawhile.domain.Node node) {
+    private List<NodePathEntry> ancestorPath(NodeReadQueries.NodeSummaryRow node) {
         List<com.trawhile.domain.Node> path = new ArrayList<>();
         UUID currentId = node.parentId();
         while (currentId != null) {
@@ -542,32 +594,20 @@ public class NodeService {
         return authorization == null ? null : com.trawhile.web.dto.AuthLevel.fromValue(authorization.name().toLowerCase(Locale.ROOT));
     }
 
-    private AuthLevel effectiveAuthorization(UUID actingUserId, UUID nodeId) {
-        return jdbcTemplate.queryForObject(
-            """
-                WITH RECURSIVE ancestors AS (
-                  SELECT id, parent_id FROM nodes WHERE id = ?
-                  UNION ALL
-                  SELECT n.id, n.parent_id
-                  FROM nodes n
-                  JOIN ancestors a ON n.id = a.parent_id
-                )
-                SELECT MAX(na.auth_level)::text
-                FROM ancestors a
-                JOIN node_authorizations na ON na.node_id = a.id
-                WHERE na.user_id = ?
-                """,
-            (rs, rowNum) -> {
-                String value = rs.getString(1);
-                return value == null ? null : AuthLevel.valueOf(value.toUpperCase(Locale.ROOT));
-            },
-            nodeId,
-            actingUserId
-        );
+
+    private String logoUrl(NodeReadQueries.NodeSummaryRow node) {
+        return node.hasLogo() ? LOGO_URL_PREFIX + node.id() + "/logo" : null;
     }
 
-    private String logoUrl(com.trawhile.domain.Node node) {
-        return node.logo() == null ? null : LOGO_URL_PREFIX + node.id() + "/logo";
+    private AuthLevel effectiveAuthorization(UUID actingUserId, UUID nodeId) {
+        return authorizationQueries.effectiveAuthorization(actingUserId, nodeId);
+    }
+
+    private void requireVisibleNodeAfterReadMiss(UUID actingUserId, UUID nodeId) {
+        if (!nodeRepository.existsById(nodeId)) {
+            throw new EntityNotFoundException("Node", nodeId);
+        }
+        authorizationService.requireView(actingUserId, nodeId);
     }
 
     private String requireNonBlank(String value, String fieldName) {
@@ -592,24 +632,7 @@ public class NodeService {
     }
 
     private List<UUID> viewersOf(UUID nodeId) {
-        return jdbcTemplate.queryForList(
-            """
-                WITH RECURSIVE ancestors AS (
-                  SELECT id, parent_id FROM nodes WHERE id = ?
-                  UNION ALL
-                  SELECT n.id, n.parent_id
-                  FROM nodes n
-                  JOIN ancestors a ON n.id = a.parent_id
-                )
-                SELECT na.user_id
-                FROM ancestors a
-                JOIN node_authorizations na ON na.node_id = a.id
-                GROUP BY na.user_id
-                HAVING MAX(na.auth_level) >= CAST('view' AS auth_level)
-                """,
-            UUID.class,
-            nodeId
-        );
+        return authorizationQueries.usersWithAuthorization(nodeId, AuthLevel.VIEW);
     }
 
     private void dispatchNodeChange(UUID nodeId) {

@@ -19,7 +19,7 @@ If the agent sandbox blocks Docker or localhost DB sockets, request escalation f
 
 ## Stack
 
-- Backend: Spring Boot + Spring Data JDBC + Flyway + Spring Security (OAuth2)
+- Backend: Spring Boot + Spring Data JDBC + jOOQ + Flyway + Spring Security (OAuth2)
 - Database: PostgreSQL
 - Frontend: Angular SPA + PrimeNG + Tailwind CSS
 - Deployment: Docker Compose + Caddy (reverse proxy + TLS)
@@ -32,6 +32,8 @@ If the agent sandbox blocks Docker or localhost DB sockets, request escalation f
 - No sessions table. Sessions managed by Spring HttpSession (implementation detail).
 - No email stored for registered users (UR-C006). Email only in `pending_invitations`, deleted on first login match.
 - Authorization is recursive: a grant on node N is effective on N and all descendants. Use recursive CTEs (Q1–Q4 in schema.sql) — do not flatten the tree.
+- `docs/schema.sql` is the canonical schema. Runtime PostgreSQL functions such as `visible_nodes(user_id)` belong there first; Flyway V1 and any jOOQ schema input file are derived artifacts, not independent schema sources.
+- For new security-sensitive node-scoped reads and mutations, prefer authorization-shaped PostgreSQL functions plus jOOQ-generated `repository/read` and `repository/command` classes. Generic table-shaped repository reads plus Java-side filtering are transitional only.
 - Freeze cutoff: entries with `started_at < NOW() - freeze_offset_years * INTERVAL '1 year'` are immutable. The offset is read from `TrawhileConfig.freezeOffsetYears`. No admin override.
 - Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub plus any `time_records`/`requests` until purge removes them. Irreversible.
 - Purge jobs are idempotent. On startup, any `purge_jobs` row with `status = 'active'` is resumed using stored `cutoff_date`.

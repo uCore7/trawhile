@@ -23,7 +23,7 @@ Each file in `tasks/` is a self-contained brief for one agent. Start from the fi
 
 - `@Transactional` on service methods only — never on controllers or repositories
 - Authorization checked via `AuthorizationService` at the top of each service method — no `@PreAuthorize`
-- No JPA — Spring Data JDBC only; recursive CTEs via `AuthorizationQueries`
+- No JPA. The canonical schema lives in `docs/schema.sql`. For new security-sensitive node-scoped reads and mutations, prefer PostgreSQL authorization functions plus jOOQ-generated read/command queries over generic Spring Data repositories. `AuthorizationQueries` is transitional, not the target end state.
 - SSE dispatch after every state mutation via `SseDispatcher`
 - No email stored for registered users (C-2) — enforced by SR-002 / TE-002-01
 - Freeze cutoff = `NOW() - trawhileConfig.freezeOffsetYears() * INTERVAL '1 year'` — no hardcoding
@@ -42,3 +42,4 @@ These rules apply to every agent task, regardless of type:
 - **Impl agents** (`tasks/impl/`): do not create or modify any file under `src/test/`. If a test appears wrong, report it and stop — do not fix it.
 - **No Flyway migrations** — never create or modify files under `src/main/resources/db/migration/`. All schema changes are applied in chat mode, not by agents.
 - **No frontend files** — impl agents must not create or modify any file under `src/main/frontend/`.
+- **Persistence preference** — for new sensitive access paths, do not introduce fresh `findAll()` / table-shaped repository reads plus Java-side filtering. Prefer `repository/authz/`, `repository/read/`, and `repository/command/` with authorization encoded in SQL. Any jOOQ schema input file is derived from `docs/schema.sql`, not a second handwritten schema source.

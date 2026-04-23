@@ -54,20 +54,36 @@ com.trawhile
     PendingInvitation.java
     QuickAccess.java
   repository/
-    NodeRepository.java        — Spring Data JDBC CrudRepository
-    TimeRecordRepository.java
-    UserRepository.java
-    UserProfileRepository.java
-    NodeAuthorizationRepository.java
-    RequestRepository.java
-    SecurityEventRepository.java
-    PurgeJobRepository.java
-    PendingInvitationRepository.java
-    QuickAccessRepository.java
-    NodeColorRepository.java
-    AuthorizationQueries.java  — NamedParameterJdbcTemplate; all recursive CTEs (Q1–Q4)
+    authz/
+      AuthorizationFunctions.java   — wrappers over PostgreSQL auth functions such as `visible_nodes(user_id)`
+      AuthorizationQueries.java     — transitional/raw SQL helpers while migrating from the old repository model
+    read/
+      NodeReadQueries.java          — authorization-shaped node reads (summary/content split)
+      ReportReadQueries.java        — owner-detail vs aggregate-only report reads
+      RequestReadQueries.java
+      TrackingReadQueries.java
+      UserReadQueries.java
+      McpReadQueries.java
+    command/
+      NodeCommands.java             — verb-shaped node mutations with authorization in SQL
+      TimeRecordCommands.java
+      RequestCommands.java
+      InvitationCommands.java
+      UserCommands.java
+      McpTokenCommands.java
+    legacy/
+      NodeRepository.java           — Spring Data JDBC CrudRepository kept only for transitional/simple persistence
+      TimeRecordRepository.java
+      UserRepository.java
+      UserProfileRepository.java
+      NodeAuthorizationRepository.java
+      RequestRepository.java
+      SecurityEventRepository.java
+      PurgeJobRepository.java
+      PendingInvitationRepository.java
+      QuickAccessRepository.java
   service/
-    AuthorizationService.java  — thin wrapper over AuthorizationQueries; used by all services
+    AuthorizationService.java  — thin wrapper over authorization primitives; used by all services
     NodeService.java
     TimeRecordService.java
     TrackingService.java
@@ -158,6 +174,8 @@ The intended split is:
 The repository API should therefore be shaped around business and authorization semantics instead of table shape. Preferred examples are `findVisibleNodeSummary`, `findVisibleChildren`, `findOwnDetailedRecords`, `findVisibleMemberSummaries`, `grantAuthorization`, or `moveNode`. Generic repository methods remain acceptable for simple owner-local persistence, but they are not the target abstraction for node-scoped reporting, tree reads, request visibility, or similar sensitive access paths.
 
 **jOOQ usage expectation**: The planned benefit of jOOQ is compile-time checking against generated schema objects and clearer composition of authorization-shaped queries. This benefit is only realized when the DSL and generated artefacts are used directly. Falling back to broad plain-SQL strings should be the exception, not the default, for the new read/command layer.
+
+**Schema source expectation for jOOQ**: The canonical schema remains `docs/schema.sql`. Runtime PostgreSQL functions such as `visible_nodes(user_id)` must be introduced there first. The Flyway V1 migration and any jOOQ-specific schema input file are derived from that canonical schema and must not become independently maintained alternate schema sources.
 
 **Repository testing expectation**: The repository layer is verified primarily with PostgreSQL-backed integration tests, not mocks. Each authorization function and each read/command query class must have contract tests that prove both positive access and non-disclosure or non-mutation for unauthorized cases.
 

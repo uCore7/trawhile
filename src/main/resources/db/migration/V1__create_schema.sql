@@ -95,6 +95,29 @@ CREATE TABLE node_authorizations (
   UNIQUE (node_id, user_id)
 );
 
+-- Shared authorization primitive for node-scoped reads.
+-- Returns all nodes visible to the given user:
+-- a direct grant on N makes N and all descendants visible.
+-- Duplicate node IDs are removed so callers can safely join on the result.
+CREATE FUNCTION visible_nodes(p_user_id UUID)
+RETURNS TABLE (node_id UUID)
+LANGUAGE sql
+STABLE
+AS $$
+  WITH RECURSIVE visible AS (
+    SELECT n.id
+    FROM nodes n
+    JOIN node_authorizations na ON na.node_id = n.id
+    WHERE na.user_id = p_user_id
+    UNION ALL
+    SELECT n.id
+    FROM nodes n
+    JOIN visible v ON n.parent_id = v.id
+  )
+  SELECT DISTINCT id AS node_id
+  FROM visible
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Time records
 -- Active record: ended_at IS NULL. Partial unique index enforces at most one per user.
