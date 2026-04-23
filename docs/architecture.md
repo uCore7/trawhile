@@ -147,6 +147,20 @@ public boolean hasAuthorization(UUID userId, UUID nodeId, AuthLevel required) {
 
 **Transaction boundaries**: `@Transactional` on service methods, not repositories. Controllers are never transactional.
 
+**Target persistence direction**: For security-sensitive business reads and writes, the target architecture is an authorization-shaped SQL layer built on PostgreSQL functions plus jOOQ code generation, rather than generic table repositories.
+
+The intended split is:
+
+- `repository/authz/` — PostgreSQL authorization primitives and thin Java wrappers over them. Shared authorization logic belongs in the database as reusable SQL functions, with `visible_nodes(user_id)` as the foundational primitive. For `SELECT`-style composition this should be implemented as a set-returning SQL function, not duplicated inline across Java query strings.
+- `repository/read/` — jOOQ-based read models and query classes whose method signatures always encode caller context (`actingUserId`) or explicit owner-only semantics. Node-scoped reads must join an authorization primitive such as `visible_nodes(...)` or a related helper in SQL rather than load broad result sets and filter in Java.
+- `repository/command/` — jOOQ-based mutation-oriented command classes (`create`, `update`, `delete`, `move`, `grant`, `revoke`, etc.). For node-scoped mutations, authorization should be part of the statement itself, typically via `WITH authorized_target AS (...)`, `UPDATE ... FROM`, `DELETE ... USING`, `INSERT ... SELECT`, and `RETURNING`, rather than a separate Java-side pre-check followed by a generic update.
+
+The repository API should therefore be shaped around business and authorization semantics instead of table shape. Preferred examples are `findVisibleNodeSummary`, `findVisibleChildren`, `findOwnDetailedRecords`, `findVisibleMemberSummaries`, `grantAuthorization`, or `moveNode`. Generic repository methods remain acceptable for simple owner-local persistence, but they are not the target abstraction for node-scoped reporting, tree reads, request visibility, or similar sensitive access paths.
+
+**jOOQ usage expectation**: The planned benefit of jOOQ is compile-time checking against generated schema objects and clearer composition of authorization-shaped queries. This benefit is only realized when the DSL and generated artefacts are used directly. Falling back to broad plain-SQL strings should be the exception, not the default, for the new read/command layer.
+
+**Repository testing expectation**: The repository layer is verified primarily with PostgreSQL-backed integration tests, not mocks. Each authorization function and each read/command query class must have contract tests that prove both positive access and non-disclosure or non-mutation for unauthorized cases.
+
 ### 2. SSE — Spring MVC SseEmitter
 
 WebFlux is not used. The app uses Spring MVC (servlet stack). SSE is implemented with `SseEmitter` — adequate for a small user base.

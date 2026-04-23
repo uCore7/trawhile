@@ -77,6 +77,27 @@ Each entry records a non-obvious choice, the alternatives considered, and why th
 
 ---
 
+## Persistence layer: authorization-shaped read/command SQL instead of generic repositories for sensitive access
+
+**Chosen:** Keep Spring Data JDBC and plain SQL, but move security-sensitive persistence toward explicit authorization-shaped query and command classes  
+**Rejected:**
+- Continuing to model most persistence around generic table repositories (`findAll`, `findById`, `findByNodeId`, etc.) and relying on service-layer filtering
+- ORM-style "load entity, authorize in Java, mutate, save" flows for node-scoped operations
+
+**Reason:** The review of SQL usage showed that generic repository reads are too easy to call before authorization, or to call broadly and filter afterward in Java. For node-scoped and otherwise sensitive business data, this is structurally weaker than making authorization part of the SQL contract itself. The target repository shape is:
+
+- `repository/authz/` for shared PostgreSQL authorization primitives such as `visible_nodes(user_id)` and related helpers
+- `repository/read/` for read models whose methods always encode caller scope (`actingUserId`) or explicit owner-only semantics
+- `repository/command/` for mutation-oriented SQL that folds authorization into the statement via `WITH authorized_target AS (...)`, `UPDATE ... FROM`, `DELETE ... USING`, `INSERT ... SELECT`, and `RETURNING`
+
+**Security implication:** The intended invariant is "authorized SQL, not SQL then filter". If a query returns node-scoped business data, it should join an authorization primitive in the database. If a mutation affects node-scoped business data, authorization should be part of the statement that performs the change. This reduces accidental over-read, narrows race windows between authorization and mutation, and makes code review easier because the authorization boundary is visible in the SQL itself.
+
+**Testing implication:** This design depends on PostgreSQL-backed integration tests for the repository layer. Each authorization primitive, read query class, and command class needs contract tests that prove both allowed access and non-disclosure / non-mutation for unauthorized cases. Mock-heavy tests are insufficient for this layer because they cannot validate recursive SQL, joins, or authorized subqueries.
+
+**Naming implication:** Repository APIs should be shaped around business and authorization semantics rather than table shape. Preferred examples: `findVisibleNodeSummary`, `findVisibleChildren`, `findOwnDetailedRecords`, `findVisibleMemberSummaries`, `grantAuthorization`, `moveNode`, `revokeToken`. Discouraged examples for sensitive reads: `findAll`, `findByNodeId`, `findByUserId`, or similarly generic table-shaped methods that do not encode caller scope.
+
+---
+
 ## One instance = one company (no multi-tenancy)
 
 **Chosen:** Single-tenant deployment  
