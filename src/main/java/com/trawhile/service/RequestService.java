@@ -7,6 +7,7 @@ import com.trawhile.repository.AuthorizationQueries;
 import com.trawhile.repository.NodeRepository;
 import com.trawhile.repository.RequestRepository;
 import com.trawhile.repository.UserProfileRepository;
+import com.trawhile.repository.read.RequestReadQueries;
 import com.trawhile.sse.SseDispatcher;
 import com.trawhile.sse.SseEvent;
 import com.trawhile.web.dto.CreateRequestRequest;
@@ -27,6 +28,7 @@ public class RequestService {
     private final NodeRepository nodeRepository;
     private final UserProfileRepository userProfileRepository;
     private final AuthorizationQueries authorizationQueries;
+    private final RequestReadQueries requestReadQueries;
     private final AuthorizationService authorizationService;
     private final SseDispatcher sseDispatcher;
 
@@ -34,12 +36,14 @@ public class RequestService {
                           NodeRepository nodeRepository,
                           UserProfileRepository userProfileRepository,
                           AuthorizationQueries authorizationQueries,
+                          RequestReadQueries requestReadQueries,
                           AuthorizationService authorizationService,
                           SseDispatcher sseDispatcher) {
         this.requestRepository = requestRepository;
         this.nodeRepository = nodeRepository;
         this.userProfileRepository = userProfileRepository;
         this.authorizationQueries = authorizationQueries;
+        this.requestReadQueries = requestReadQueries;
         this.authorizationService = authorizationService;
         this.sseDispatcher = sseDispatcher;
     }
@@ -72,7 +76,7 @@ public class RequestService {
         requireNode(nodeId);
         authorizationService.requireView(actingUserId, nodeId);
 
-        return requestRepository.findByNodeIdOrderByCreatedAtDesc(nodeId).stream()
+        return requestReadQueries.findVisibleRequestsOnNode(actingUserId, nodeId).stream()
             .map(this::toDto)
             .toList();
     }
@@ -144,6 +148,23 @@ public class RequestService {
         dto.setResolvedAt(request.resolvedAt());
         dto.setResolvedBy(request.resolvedBy());
         dto.setResolvedByName(request.resolvedBy() == null ? null : displayName(request.resolvedBy()));
+        return dto;
+    }
+
+    private RequestRecord toDto(RequestReadQueries.RequestRow request) {
+        RequestRecord dto = new RequestRecord(
+            request.id(),
+            request.requesterId(),
+            request.requesterName() != null ? request.requesterName() : ANONYMISED_PLACEHOLDER,
+            request.nodeId(),
+            RequestRecord.TemplateEnum.fromValue(request.template()),
+            RequestRecord.StatusEnum.fromValue(request.status()),
+            request.createdAt()
+        );
+        dto.setBody(request.body());
+        dto.setResolvedAt(request.resolvedAt());
+        dto.setResolvedBy(request.resolvedBy());
+        dto.setResolvedByName(request.resolvedByName());
         return dto;
     }
 

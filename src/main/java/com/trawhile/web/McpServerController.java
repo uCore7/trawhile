@@ -3,12 +3,8 @@ package com.trawhile.web;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.trawhile.config.TrawhileConfig;
-import com.trawhile.domain.TimeRecord;
 import com.trawhile.monitoring.MonitoringMetrics;
-import com.trawhile.repository.AuthorizationQueries;
-import com.trawhile.repository.NodeRepository;
-import com.trawhile.repository.TimeRecordRepository;
-import com.trawhile.repository.UserProfileRepository;
+import com.trawhile.repository.read.McpReadQueries;
 import com.trawhile.service.AuthorizationService;
 import com.trawhile.service.McpTokenService;
 import com.trawhile.service.ReportService;
@@ -22,25 +18,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Duration;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * MCP JSON-RPC tool endpoint. SR-F053.F02 and SR-F069.F01.
@@ -51,10 +36,7 @@ public class McpServerController {
     private final ObjectMapper objectMapper;
     private final McpTokenService mcpTokenService;
     private final AuthorizationService authorizationService;
-    private final AuthorizationQueries authorizationQueries;
-    private final NodeRepository nodeRepository;
-    private final TimeRecordRepository timeRecordRepository;
-    private final UserProfileRepository userProfileRepository;
+    private final McpReadQueries mcpReadQueries;
     private final TrackingService trackingService;
     private final ReportService reportService;
     private final SecurityEventService securityEventService;
@@ -64,10 +46,7 @@ public class McpServerController {
     public McpServerController(ObjectMapper objectMapper,
                                McpTokenService mcpTokenService,
                                AuthorizationService authorizationService,
-                               AuthorizationQueries authorizationQueries,
-                               NodeRepository nodeRepository,
-                               TimeRecordRepository timeRecordRepository,
-                               UserProfileRepository userProfileRepository,
+                               McpReadQueries mcpReadQueries,
                                TrackingService trackingService,
                                ReportService reportService,
                                SecurityEventService securityEventService,
@@ -76,10 +55,7 @@ public class McpServerController {
         this.objectMapper = objectMapper;
         this.mcpTokenService = mcpTokenService;
         this.authorizationService = authorizationService;
-        this.authorizationQueries = authorizationQueries;
-        this.nodeRepository = nodeRepository;
-        this.timeRecordRepository = timeRecordRepository;
-        this.userProfileRepository = userProfileRepository;
+        this.mcpReadQueries = mcpReadQueries;
         this.trackingService = trackingService;
         this.reportService = reportService;
         this.securityEventService = securityEventService;
@@ -126,29 +102,62 @@ public class McpServerController {
     }
 
     private List<Map<String, Object>> getNodeTree(UUID actingUserId) {
-        Map<UUID, com.trawhile.domain.Node> nodesById = nodeRepository.findAll().stream()
-            .collect(Collectors.toMap(com.trawhile.domain.Node::id, node -> node));
-        Set<UUID> visibleNodeIds = new LinkedHashSet<>(authorizationQueries.visibleNodeIds(actingUserId));
-        Map<UUID, List<com.trawhile.domain.Node>> childrenByParentId = childNodesByParentId();
+        List<McpReadQueries.VisibleNodeRow> rows = mcpReadQueries.findVisibleNodeTree(actingUserId);
+        Map<UUID, Map<String, Object>> payloadsById = new LinkedHashMap<>();
+        for (McpReadQueries.VisibleNodeRow row : rows) {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("id", row.id());
+            payload.put("parentId", row.parentId());
+            payload.put("name", row.name());
+            payload.put("description", row.description());
+            payload.put("isActive", row.isActive());
+            payload.put("sortOrder", row.sortOrder());
+            payload.put("createdAt", row.createdAt());
+            payload.put("deactivatedAt", row.deactivatedAt());
+            payload.put("color", row.color());
+            payload.put("icon", row.icon());
+            payload.put("logoUrl", row.hasLogo() ? "/api/v1/nodes/" + row.id() + "/logo" : null);
+            payload.put("children", new ArrayList<Map<String, Object>>());
+            payloadsById.put(row.id(), payload);
+        }
 
-        return visibleNodeIds.stream()
-            .map(nodesById::get)
-            .filter(Objects::nonNull)
-            .filter(node -> node.parentId() == null || !visibleNodeIds.contains(node.parentId()))
-            .sorted(Comparator.comparing(com.trawhile.domain.Node::sortOrder).thenComparing(com.trawhile.domain.Node::id))
-            .map(node -> toVisibleNode(node, visibleNodeIds, childrenByParentId))
-            .toList();
+        List<Map<String, Object>> roots = new ArrayList<>();
+        for (McpReadQueries.VisibleNodeRow row : rows) {
+            Map<String, Object> payload = payloadsById.get(row.id());
+            Map<String, Object> parent = row.parentId() == null ? null : payloadsById.get(row.parentId());
+            if (parent == null) {
+                roots.add(payload);
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> children = (List<Map<String, Object>>) parent.get("children");
+            children.add(payload);
+        }
+        return roots;
     }
 
     private Object getTimeRecords(UUID actingUserId, JsonNode arguments) {
         UUID requestedUserId = uuidArgument(arguments, "user_id", "userId");
-        UUID effectiveUserId = requestedUserId == null ? actingUserId : requestedUserId;
         UUID nodeId = uuidArgument(arguments, "node_id", "nodeId");
         LocalDate from = localDateArgument(arguments, "date_from", "dateFrom");
         LocalDate to = localDateArgument(arguments, "date_to", "dateTo");
 
-        if (!actingUserId.equals(effectiveUserId)) {
-            return aggregateDailyTotals(actingUserId, effectiveUserId, nodeId, from, to);
+        if (nodeId != null) {
+            authorizationService.requireView(actingUserId, nodeId);
+        }
+
+        if (requestedUserId != null && !actingUserId.equals(requestedUserId)) {
+            return mcpReadQueries.findVisibleDailyTotalsForOtherUser(actingUserId, requestedUserId, nodeId, from, to)
+                .stream()
+                .map(row -> {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("userId", row.userId());
+                    payload.put("userName", row.userName());
+                    payload.put("date", row.periodStart());
+                    payload.put("totalSeconds", row.totalSeconds());
+                    return payload;
+                })
+                .toList();
         }
 
         return reportService.getReport(
@@ -180,152 +189,19 @@ public class McpServerController {
             to = from;
         }
 
+        UUID nodeId = uuidArgument(arguments, "node_id", "nodeId");
+        if (nodeId != null) {
+            authorizationService.requireView(actingUserId, nodeId);
+        }
+
         return reportService.getMemberSummaries(
             actingUserId,
             interval.toLowerCase(Locale.ROOT),
             from,
             to,
-            uuidArgument(arguments, "node_id", "nodeId"),
+            nodeId,
             null
         );
-    }
-
-    private List<Map<String, Object>> aggregateDailyTotals(UUID actingUserId,
-                                                           UUID targetUserId,
-                                                           UUID nodeId,
-                                                           LocalDate from,
-                                                           LocalDate to) {
-        Set<UUID> visibleNodeIds = new HashSet<>(authorizationQueries.visibleNodeIds(actingUserId));
-        if (nodeId != null) {
-            authorizationService.requireView(actingUserId, nodeId);
-        }
-
-        Set<UUID> allowedNodeIds = resolveAllowedNodeIds(visibleNodeIds, nodeId);
-        List<TimeRecord> records = timeRecordRepository.findAll().stream()
-            .filter(record -> targetUserId.equals(record.userId()))
-            .filter(record -> allowedNodeIds.contains(record.nodeId()))
-            .sorted(Comparator.comparing(TimeRecord::startedAt).thenComparing(TimeRecord::id))
-            .toList();
-
-        if (records.isEmpty()) {
-            return List.of();
-        }
-
-        LocalDate effectiveFrom = from != null ? from : records.stream()
-            .map(record -> record.startedAt().atZoneSameInstant(companyZone).toLocalDate())
-            .min(LocalDate::compareTo)
-            .orElse(null);
-        LocalDate effectiveTo = to != null ? to : records.stream()
-            .map(record -> effectiveEndedAt(record).atZoneSameInstant(companyZone).toLocalDate())
-            .max(LocalDate::compareTo)
-            .orElse(null);
-
-        if (effectiveFrom == null || effectiveTo == null || effectiveTo.isBefore(effectiveFrom)) {
-            return List.of();
-        }
-
-        String userName = userProfileRepository.findByUserId(targetUserId)
-            .map(com.trawhile.domain.UserProfile::name)
-            .orElse(null);
-
-        List<Map<String, Object>> totals = new ArrayList<>();
-        for (LocalDate date = effectiveFrom; !date.isAfter(effectiveTo); date = date.plusDays(1)) {
-            ZonedDateTime bucketStart = date.atStartOfDay(companyZone);
-            ZonedDateTime bucketEnd = date.plusDays(1).atStartOfDay(companyZone);
-
-            long totalSeconds = 0L;
-            for (TimeRecord record : records) {
-                totalSeconds += overlapSeconds(record, bucketStart, bucketEnd);
-            }
-            if (totalSeconds == 0L) {
-                continue;
-            }
-
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("userId", targetUserId);
-            row.put("userName", userName);
-            row.put("date", date);
-            row.put("totalSeconds", totalSeconds);
-            totals.add(row);
-        }
-        return totals;
-    }
-
-    private Map<String, Object> toVisibleNode(com.trawhile.domain.Node node,
-                                              Set<UUID> visibleNodeIds,
-                                              Map<UUID, List<com.trawhile.domain.Node>> childrenByParentId) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("id", node.id());
-        payload.put("parentId", node.parentId());
-        payload.put("name", node.name());
-        payload.put("description", node.description());
-        payload.put("isActive", node.isActive());
-        payload.put("sortOrder", node.sortOrder());
-        payload.put("createdAt", node.createdAt());
-        payload.put("deactivatedAt", node.deactivatedAt());
-        payload.put("color", node.color());
-        payload.put("icon", node.icon());
-        payload.put("logoUrl", node.logo() == null ? null : "/api/v1/nodes/" + node.id() + "/logo");
-        payload.put(
-            "children",
-            childrenByParentId.getOrDefault(node.id(), List.of()).stream()
-                .filter(child -> visibleNodeIds.contains(child.id()))
-                .map(child -> toVisibleNode(child, visibleNodeIds, childrenByParentId))
-                .toList()
-        );
-        return payload;
-    }
-
-    private Set<UUID> resolveAllowedNodeIds(Set<UUID> visibleNodeIds, UUID nodeId) {
-        if (nodeId == null) {
-            return visibleNodeIds;
-        }
-
-        Map<UUID, List<UUID>> childrenByParentId = nodeRepository.findAll().stream()
-            .filter(node -> node.parentId() != null)
-            .collect(Collectors.groupingBy(
-                com.trawhile.domain.Node::parentId,
-                Collectors.mapping(com.trawhile.domain.Node::id, Collectors.toList())
-            ));
-
-        Set<UUID> subtreeNodeIds = new HashSet<>();
-        ArrayDeque<UUID> queue = new ArrayDeque<>();
-        queue.add(nodeId);
-        while (!queue.isEmpty()) {
-            UUID current = queue.removeFirst();
-            if (!subtreeNodeIds.add(current)) {
-                continue;
-            }
-            childrenByParentId.getOrDefault(current, List.of()).forEach(queue::addLast);
-        }
-        subtreeNodeIds.retainAll(visibleNodeIds);
-        return subtreeNodeIds;
-    }
-
-    private Map<UUID, List<com.trawhile.domain.Node>> childNodesByParentId() {
-        return nodeRepository.findAll().stream()
-            .filter(node -> node.parentId() != null)
-            .collect(Collectors.groupingBy(
-                com.trawhile.domain.Node::parentId,
-                Collectors.collectingAndThen(Collectors.toList(), children -> children.stream()
-                    .sorted(Comparator.comparing(com.trawhile.domain.Node::sortOrder).thenComparing(com.trawhile.domain.Node::id))
-                    .toList())
-            ));
-    }
-
-    private long overlapSeconds(TimeRecord record, ZonedDateTime bucketStart, ZonedDateTime bucketEnd) {
-        ZonedDateTime recordStart = record.startedAt().atZoneSameInstant(companyZone);
-        ZonedDateTime recordEnd = effectiveEndedAt(record).atZoneSameInstant(companyZone);
-        ZonedDateTime overlapStart = recordStart.isAfter(bucketStart) ? recordStart : bucketStart;
-        ZonedDateTime overlapEnd = recordEnd.isBefore(bucketEnd) ? recordEnd : bucketEnd;
-        if (!overlapStart.isBefore(overlapEnd)) {
-            return 0L;
-        }
-        return Duration.between(overlapStart, overlapEnd).toSeconds();
-    }
-
-    private OffsetDateTime effectiveEndedAt(TimeRecord record) {
-        return record.endedAt() != null ? record.endedAt() : OffsetDateTime.now();
     }
 
     private String extractBearerToken(String authorizationHeader) {

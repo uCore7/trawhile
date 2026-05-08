@@ -2,12 +2,12 @@ package com.trawhile.service;
 
 import com.trawhile.config.TrawhileConfig;
 import com.trawhile.domain.TimeRecord;
-import com.trawhile.domain.UserProfile;
 import com.trawhile.exception.BusinessRuleViolationException;
 import com.trawhile.repository.AuthorizationQueries;
 import com.trawhile.repository.NodeRepository;
 import com.trawhile.repository.TimeRecordRepository;
 import com.trawhile.repository.UserProfileRepository;
+import com.trawhile.repository.read.ReportReadQueries;
 import com.trawhile.web.dto.MemberSummary;
 import com.trawhile.web.dto.MemberSummaryBucket;
 import com.trawhile.web.dto.NodePathEntry;
@@ -55,6 +55,7 @@ public class ReportService {
     private final NodeRepository nodeRepository;
     private final UserProfileRepository userProfileRepository;
     private final AuthorizationService authorizationService;
+    private final ReportReadQueries reportReadQueries;
     private final ZoneId companyZone;
 
     @Autowired
@@ -63,6 +64,7 @@ public class ReportService {
                          NodeRepository nodeRepository,
                          UserProfileRepository userProfileRepository,
                          AuthorizationService authorizationService,
+                         ReportReadQueries reportReadQueries,
                          TrawhileConfig trawhileConfig) {
         this(
             timeRecordRepository,
@@ -70,6 +72,7 @@ public class ReportService {
             nodeRepository,
             userProfileRepository,
             authorizationService,
+            reportReadQueries,
             ZoneId.of(trawhileConfig.getTimezone())
         );
     }
@@ -82,6 +85,7 @@ public class ReportService {
             null,
             null,
             null,
+            null,
             ZoneId.of("Europe/Berlin")
         );
     }
@@ -91,12 +95,14 @@ public class ReportService {
                           NodeRepository nodeRepository,
                           UserProfileRepository userProfileRepository,
                           AuthorizationService authorizationService,
+                          ReportReadQueries reportReadQueries,
                           ZoneId companyZone) {
         this.timeRecordRepository = timeRecordRepository;
         this.authorizationQueries = authorizationQueries;
         this.nodeRepository = nodeRepository;
         this.userProfileRepository = userProfileRepository;
         this.authorizationService = authorizationService;
+        this.reportReadQueries = reportReadQueries;
         this.companyZone = companyZone;
     }
 
@@ -108,14 +114,23 @@ public class ReportService {
                             UUID userId,
                             UUID nodeId) {
         Report.ModeEnum reportMode = Report.ModeEnum.fromValue(mode.toLowerCase(Locale.ROOT));
-        FilteredContext context = loadFilteredContext(actingUserId, from, to, userId, nodeId);
+        validateDateRange(from, to);
+        requireViewIfNeeded(actingUserId, nodeId);
+
+        if (reportReadQueries == null) {
+            return legacyReport(actingUserId, reportMode, from, to, userId, nodeId);
+        }
 
         Report report = new Report(reportMode);
         if (reportMode == Report.ModeEnum.SUMMARY) {
-            report.setSummary(buildSummary(context.records(), context.nodesById()));
+            report.setSummary(buildSummary(
+                reportReadQueries.findVisibleSummaryTotals(actingUserId, from, to, userId, nodeId)
+            ));
             report.setDetailed(null);
         } else {
-            report.setDetailed(buildDetailed(context.records(), context.nodesById(), context.userNamesById()));
+            report.setDetailed(buildDetailed(
+                reportReadQueries.findVisibleDetailedRecords(actingUserId, from, to, userId, nodeId)
+            ));
             report.setSummary(null);
         }
         return report;
@@ -130,9 +145,84 @@ public class ReportService {
                                                   Boolean hasDataQualityIssues) {
         IntervalKind intervalKind = IntervalKind.fromValue(interval);
         DateRange dateRange = resolveMemberSummaryRange(intervalKind, from, to);
-        FilteredContext context = loadFilteredContext(actingUserId, dateRange.from(), dateRange.to(), null, nodeId);
+        requireViewIfNeeded(actingUserId, nodeId);
+
+        if (reportReadQueries == null) {
+            return legacyMemberSummaries(actingUserId, intervalKind, dateRange, nodeId, hasDataQualityIssues);
+        }
+
+        List<ReportReadQueries.MemberDaySummaryRow> rows = reportReadQueries.findVisibleMemberSummaries(
+            actingUserId,
+            nodeId,
+            dateRange.from(),
+            dateRange.to(),
+            interval,
+            hasDataQualityIssues
+        );
+        return buildMemberSummaries(rows, intervalKind, dateRange, hasDataQualityIssues);
+    }
+
+    private Report legacyReport(UUID actingUserId,
+                                Report.ModeEnum reportMode,
+                                LocalDate from,
+                                LocalDate to,
+                                UUID userId,
+                                UUID nodeId) {
+        List<TimeRecord> records = timeRecordRepository.findAll().stream()
+            .filter(record -> visibleNodeIds(actingUserId, nodeId).contains(record.nodeId()))
+            .filter(record -> userId == null || userId.equals(record.userId()))
+            .filter(record -> isWithinDateRange(record, from, to))
+            .toList();
+
+        Report report = new Report(reportMode);
+        if (reportMode == Report.ModeEnum.SUMMARY) {
+            Map<UUID, Long> totalsByNode = new LinkedHashMap<>();
+            for (TimeRecord record : records) {
+                totalsByNode.merge(record.nodeId(), durationSeconds(record), Long::sum);
+            }
+            report.setSummary(totalsByNode.entrySet().stream()
+                .sorted(Comparator.comparing(entry -> nodePathLabel(entry.getKey())))
+                .map(entry -> {
+                    ReportSummaryEntry summary = new ReportSummaryEntry();
+                    summary.setNodeId(entry.getKey());
+                    summary.setNodePath(nodePath(entry.getKey()));
+                    summary.setTotalSeconds(Math.toIntExact(entry.getValue()));
+                    return summary;
+                })
+                .toList());
+            report.setDetailed(null);
+        } else {
+            List<ReportReadQueries.DetailedRecordRow> rows = records.stream()
+                .map(record -> new ReportReadQueries.DetailedRecordRow(
+                    record.id(),
+                    record.userId(),
+                    displayName(record.userId()),
+                    record.nodeId(),
+                    record.startedAt(),
+                    record.endedAt(),
+                    record.timezone(),
+                    record.description(),
+                    record.createdAt()
+                ))
+                .toList();
+            report.setDetailed(buildDetailed(rows));
+            report.setSummary(null);
+        }
+        return report;
+    }
+
+    private List<MemberSummary> legacyMemberSummaries(UUID actingUserId,
+                                                      IntervalKind intervalKind,
+                                                      DateRange dateRange,
+                                                      UUID nodeId,
+                                                      Boolean hasDataQualityIssues) {
+        List<TimeRecord> records = timeRecordRepository.findAll().stream()
+            .filter(record -> visibleNodeIds(actingUserId, nodeId).contains(record.nodeId()))
+            .filter(record -> isWithinDateRange(record, dateRange.from(), dateRange.to()))
+            .sorted(Comparator.comparing(TimeRecord::userId).thenComparing(TimeRecord::startedAt).thenComparing(TimeRecord::id))
+            .toList();
         List<BucketWindow> buckets = buildBuckets(intervalKind, dateRange);
-        Map<UUID, List<TimeRecord>> recordsByUser = context.records().stream()
+        Map<UUID, List<TimeRecord>> recordsByUser = records.stream()
             .collect(Collectors.groupingBy(TimeRecord::userId));
 
         List<MemberSummary> summaries = new ArrayList<>();
@@ -141,7 +231,7 @@ public class ReportService {
                 .sorted(Comparator.comparing(TimeRecord::startedAt).thenComparing(TimeRecord::id))
                 .toList();
             Map<UUID, RecordFlags> flagsByRecordId = computeFlags(userRecords);
-            List<MemberSummaryBucket> bucketDtos = buildMemberBuckets(
+            List<MemberSummaryBucket> bucketDtos = buildLegacyMemberBuckets(
                 buckets,
                 userRecords,
                 flagsByRecordId,
@@ -153,7 +243,116 @@ public class ReportService {
 
             MemberSummary summary = new MemberSummary();
             summary.setUserId(entry.getKey());
-            summary.setUserName(context.userNamesById().get(entry.getKey()));
+            summary.setUserName(displayName(entry.getKey()));
+            summary.setBuckets(bucketDtos);
+            summaries.add(summary);
+        }
+        summaries.sort(Comparator
+            .comparing((MemberSummary summary) -> summary.getUserName() == null ? "" : summary.getUserName().toLowerCase(Locale.ROOT))
+            .thenComparing(MemberSummary::getUserId));
+        return summaries;
+    }
+
+    private List<ReportSummaryEntry> buildSummary(List<ReportReadQueries.SummaryTotalRow> totals) {
+        return totals.stream()
+            .sorted(Comparator.comparing(total -> nodePathLabel(total.nodeId())))
+            .map(total -> {
+                ReportSummaryEntry entry = new ReportSummaryEntry();
+                entry.setNodeId(total.nodeId());
+                entry.setNodePath(nodePath(total.nodeId()));
+                entry.setTotalSeconds(Math.toIntExact(total.totalSeconds()));
+                return entry;
+            })
+            .toList();
+    }
+
+    private List<ReportDetailEntry> buildDetailed(List<ReportReadQueries.DetailedRecordRow> rows) {
+        List<ReportReadQueries.DetailedRecordRow> sortedRows = rows.stream()
+            .sorted(Comparator.comparing(ReportReadQueries.DetailedRecordRow::userId)
+                .thenComparing(ReportReadQueries.DetailedRecordRow::startedAt)
+                .thenComparing(ReportReadQueries.DetailedRecordRow::id))
+            .toList();
+        Map<UUID, List<ReportReadQueries.DetailedRecordRow>> rowsByUser = sortedRows.stream()
+            .collect(Collectors.groupingBy(
+                ReportReadQueries.DetailedRecordRow::userId,
+                LinkedHashMap::new,
+                Collectors.toList()
+            ));
+
+        Map<UUID, RecordFlags> flagsByRecordId = new HashMap<>();
+        for (List<ReportReadQueries.DetailedRecordRow> userRows : rowsByUser.values()) {
+            flagsByRecordId.putAll(computeDetailedFlags(userRows));
+        }
+
+        List<ReportDetailEntry> entries = new ArrayList<>();
+        for (ReportReadQueries.DetailedRecordRow row : sortedRows) {
+            RecordFlags flags = flagsByRecordId.getOrDefault(row.id(), RecordFlags.NONE);
+            ReportDetailEntry entry = new ReportDetailEntry();
+            entry.setId(row.id());
+            entry.setUserId(row.userId());
+            entry.setUserName(row.userName());
+            entry.setNodeId(row.nodeId());
+            entry.setNodePath(nodePath(row.nodeId()));
+            entry.setStartedAt(toCompanyOffset(row.startedAt()));
+            entry.setEndedAt(row.endedAt() == null ? null : toCompanyOffset(row.endedAt()));
+            entry.setTimezone(row.timezone());
+            entry.setDescription(row.description());
+            entry.setOverlapping(flags.overlapping());
+            entry.setHasGapBefore(flags.hasGapBefore());
+            entries.add(entry);
+        }
+        return entries;
+    }
+
+    private List<MemberSummary> buildMemberSummaries(List<ReportReadQueries.MemberDaySummaryRow> rows,
+                                                     IntervalKind intervalKind,
+                                                     DateRange dateRange,
+                                                     Boolean hasDataQualityIssues) {
+        List<BucketWindow> buckets = buildBuckets(intervalKind, dateRange);
+        Map<UUID, List<ReportReadQueries.MemberDaySummaryRow>> rowsByUser = rows.stream()
+            .collect(Collectors.groupingBy(
+                ReportReadQueries.MemberDaySummaryRow::userId,
+                LinkedHashMap::new,
+                Collectors.toList()
+            ));
+
+        List<MemberSummary> summaries = new ArrayList<>();
+        for (Map.Entry<UUID, List<ReportReadQueries.MemberDaySummaryRow>> entry : rowsByUser.entrySet()) {
+            List<MemberSummaryBucket> bucketDtos = new ArrayList<>();
+            for (BucketWindow bucket : buckets) {
+                long totalSeconds = 0L;
+                boolean hasIssues = false;
+
+                for (ReportReadQueries.MemberDaySummaryRow row : entry.getValue()) {
+                    if (row.periodStart().isBefore(bucket.startDate()) || row.periodStart().isAfter(bucket.endDate())) {
+                        continue;
+                    }
+                    totalSeconds += row.totalSeconds();
+                    hasIssues = hasIssues || row.hasDataQualityIssues();
+                }
+
+                if (totalSeconds == 0L && !hasIssues) {
+                    continue;
+                }
+                if (hasDataQualityIssues != null && hasIssues != hasDataQualityIssues) {
+                    continue;
+                }
+
+                MemberSummaryBucket bucketDto = new MemberSummaryBucket();
+                bucketDto.setPeriodStart(bucket.startDate());
+                bucketDto.setPeriodEnd(bucket.endDate());
+                bucketDto.setTotalSeconds(Math.toIntExact(totalSeconds));
+                bucketDto.setHasDataQualityIssues(hasIssues);
+                bucketDtos.add(bucketDto);
+            }
+
+            if (bucketDtos.isEmpty()) {
+                continue;
+            }
+
+            MemberSummary summary = new MemberSummary();
+            summary.setUserId(entry.getKey());
+            summary.setUserName(entry.getValue().getFirst().userName());
             summary.setBuckets(bucketDtos);
             summaries.add(summary);
         }
@@ -164,62 +363,10 @@ public class ReportService {
         return summaries;
     }
 
-    private List<ReportSummaryEntry> buildSummary(List<TimeRecord> records, Map<UUID, com.trawhile.domain.Node> nodesById) {
-        Map<UUID, Long> totalsByNode = new LinkedHashMap<>();
-        for (TimeRecord record : records) {
-            totalsByNode.merge(record.nodeId(), durationSeconds(record), Long::sum);
-        }
-
-        return totalsByNode.entrySet().stream()
-            .sorted(Comparator.comparing(entry -> nodePathLabel(entry.getKey(), nodesById)))
-            .map(entry -> {
-                ReportSummaryEntry summaryEntry = new ReportSummaryEntry();
-                summaryEntry.setNodeId(entry.getKey());
-                summaryEntry.setNodePath(nodePath(entry.getKey(), nodesById));
-                summaryEntry.setTotalSeconds(Math.toIntExact(entry.getValue()));
-                return summaryEntry;
-            })
-            .toList();
-    }
-
-    private List<ReportDetailEntry> buildDetailed(List<TimeRecord> records,
-                                                  Map<UUID, com.trawhile.domain.Node> nodesById,
-                                                  Map<UUID, String> userNamesById) {
-        List<TimeRecord> sortedRecords = records.stream()
-            .sorted(Comparator.comparing(TimeRecord::userId).thenComparing(TimeRecord::startedAt).thenComparing(TimeRecord::id))
-            .toList();
-        Map<UUID, List<TimeRecord>> recordsByUser = sortedRecords.stream()
-            .collect(Collectors.groupingBy(TimeRecord::userId, LinkedHashMap::new, Collectors.toList()));
-
-        Map<UUID, RecordFlags> flagsByRecordId = new HashMap<>();
-        for (List<TimeRecord> userRecords : recordsByUser.values()) {
-            flagsByRecordId.putAll(computeFlags(userRecords));
-        }
-
-        List<ReportDetailEntry> entries = new ArrayList<>();
-        for (TimeRecord record : sortedRecords) {
-            RecordFlags flags = flagsByRecordId.getOrDefault(record.id(), RecordFlags.NONE);
-            ReportDetailEntry detailEntry = new ReportDetailEntry();
-            detailEntry.setId(record.id());
-            detailEntry.setUserId(record.userId());
-            detailEntry.setUserName(userNamesById.get(record.userId()));
-            detailEntry.setNodeId(record.nodeId());
-            detailEntry.setNodePath(nodePath(record.nodeId(), nodesById));
-            detailEntry.setStartedAt(toCompanyOffset(record.startedAt()));
-            detailEntry.setEndedAt(record.endedAt() == null ? null : toCompanyOffset(record.endedAt()));
-            detailEntry.setTimezone(record.timezone());
-            detailEntry.setDescription(record.description());
-            detailEntry.setOverlapping(flags.overlapping());
-            detailEntry.setHasGapBefore(flags.hasGapBefore());
-            entries.add(detailEntry);
-        }
-        return entries;
-    }
-
-    private List<MemberSummaryBucket> buildMemberBuckets(List<BucketWindow> buckets,
-                                                         List<TimeRecord> userRecords,
-                                                         Map<UUID, RecordFlags> flagsByRecordId,
-                                                         Boolean hasDataQualityIssuesFilter) {
+    private List<MemberSummaryBucket> buildLegacyMemberBuckets(List<BucketWindow> buckets,
+                                                               List<TimeRecord> userRecords,
+                                                               Map<UUID, RecordFlags> flagsByRecordId,
+                                                               Boolean hasDataQualityIssuesFilter) {
         List<MemberSummaryBucket> results = new ArrayList<>();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
@@ -256,6 +403,32 @@ public class ReportService {
         return results;
     }
 
+    private Map<UUID, RecordFlags> computeDetailedFlags(List<ReportReadQueries.DetailedRecordRow> rows) {
+        Map<UUID, RecordFlags> flagsByRecordId = new HashMap<>();
+        for (ReportReadQueries.DetailedRecordRow row : rows) {
+            flagsByRecordId.put(row.id(), RecordFlags.NONE);
+        }
+
+        for (int index = 0; index < rows.size(); index++) {
+            ReportReadQueries.DetailedRecordRow current = rows.get(index);
+            if (index > 0) {
+                ReportReadQueries.DetailedRecordRow previous = rows.get(index - 1);
+                if (previous.endedAt() != null && previous.endedAt().isBefore(current.startedAt())) {
+                    flagsByRecordId.put(current.id(), flagsByRecordId.get(current.id()).withGapBefore());
+                }
+            }
+            for (int nextIndex = index + 1; nextIndex < rows.size(); nextIndex++) {
+                ReportReadQueries.DetailedRecordRow next = rows.get(nextIndex);
+                if (overlaps(current, next)) {
+                    flagsByRecordId.put(current.id(), flagsByRecordId.get(current.id()).withOverlapping());
+                    flagsByRecordId.put(next.id(), flagsByRecordId.get(next.id()).withOverlapping());
+                }
+            }
+        }
+
+        return flagsByRecordId;
+    }
+
     private Map<UUID, RecordFlags> computeFlags(List<TimeRecord> userRecords) {
         List<TimeRecord> sorted = userRecords.stream()
             .sorted(Comparator.comparing(TimeRecord::startedAt).thenComparing(TimeRecord::id))
@@ -285,33 +458,38 @@ public class ReportService {
         return flagsByRecordId;
     }
 
+    private boolean overlaps(ReportReadQueries.DetailedRecordRow left, ReportReadQueries.DetailedRecordRow right) {
+        OffsetDateTime leftEnd = left.endedAt() != null ? left.endedAt() : OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime rightEnd = right.endedAt() != null ? right.endedAt() : OffsetDateTime.now(ZoneOffset.UTC);
+        return left.startedAt().isBefore(rightEnd) && right.startedAt().isBefore(leftEnd);
+    }
+
     private boolean overlaps(TimeRecord left, TimeRecord right) {
         OffsetDateTime leftEnd = effectiveEndedAt(left);
         OffsetDateTime rightEnd = effectiveEndedAt(right);
         return left.startedAt().isBefore(rightEnd) && right.startedAt().isBefore(leftEnd);
     }
 
-    private FilteredContext loadFilteredContext(UUID actingUserId,
-                                                LocalDate from,
-                                                LocalDate to,
-                                                UUID userId,
-                                                UUID nodeId) {
-        validateDateRange(from, to);
-        requireViewIfNeeded(actingUserId, nodeId);
-
+    private Set<UUID> visibleNodeIds(UUID actingUserId, UUID nodeId) {
         Set<UUID> visibleNodeIds = new HashSet<>(authorizationQueries.visibleNodeIds(actingUserId));
-        Map<UUID, com.trawhile.domain.Node> nodesById = loadNodesById();
-        Set<UUID> allowedNodeIds = resolveAllowedNodeIds(visibleNodeIds, nodeId, nodesById);
-        Map<UUID, String> userNamesById = loadUserNamesById();
+        if (nodeId == null || nodeRepository == null) {
+            return visibleNodeIds;
+        }
 
-        List<TimeRecord> records = timeRecordRepository.findAll().stream()
-            .filter(record -> allowedNodeIds.contains(record.nodeId()))
-            .filter(record -> userId == null || userId.equals(record.userId()))
-            .filter(record -> isWithinDateRange(record, from, to))
-            .sorted(Comparator.comparing(TimeRecord::startedAt).thenComparing(TimeRecord::id))
-            .toList();
-
-        return new FilteredContext(records, nodesById, userNamesById);
+        Set<UUID> subtreeNodeIds = new HashSet<>();
+        LinkedList<UUID> queue = new LinkedList<>();
+        queue.add(nodeId);
+        while (!queue.isEmpty()) {
+            UUID currentNodeId = queue.removeFirst();
+            if (!subtreeNodeIds.add(currentNodeId)) {
+                continue;
+            }
+            nodeRepository.findByParentIdOrderBySortOrder(currentNodeId).stream()
+                .map(com.trawhile.domain.Node::id)
+                .forEach(queue::addLast);
+        }
+        subtreeNodeIds.retainAll(visibleNodeIds);
+        return subtreeNodeIds;
     }
 
     private void requireViewIfNeeded(UUID actingUserId, UUID nodeId) {
@@ -327,47 +505,13 @@ public class ReportService {
         }
     }
 
-    private Map<UUID, com.trawhile.domain.Node> loadNodesById() {
-        if (nodeRepository == null) {
-            return Map.of();
-        }
-        return nodeRepository.findAll().stream()
-            .collect(Collectors.toMap(com.trawhile.domain.Node::id, node -> node));
-    }
-
-    private Map<UUID, String> loadUserNamesById() {
+    private String displayName(UUID userId) {
         if (userProfileRepository == null) {
-            return Map.of();
+            return null;
         }
-        return userProfileRepository.findAll().stream()
-            .collect(Collectors.toMap(UserProfile::userId, UserProfile::name));
-    }
-
-    private Set<UUID> resolveAllowedNodeIds(Set<UUID> visibleNodeIds,
-                                            UUID nodeId,
-                                            Map<UUID, com.trawhile.domain.Node> nodesById) {
-        if (nodeId == null) {
-            return visibleNodeIds;
-        }
-        if (nodesById.isEmpty()) {
-            return visibleNodeIds.contains(nodeId) ? Set.of(nodeId) : Set.of();
-        }
-
-        Set<UUID> subtreeNodeIds = new HashSet<>();
-        LinkedList<UUID> queue = new LinkedList<>();
-        queue.add(nodeId);
-        while (!queue.isEmpty()) {
-            UUID currentNodeId = queue.removeFirst();
-            if (!subtreeNodeIds.add(currentNodeId)) {
-                continue;
-            }
-            nodesById.values().stream()
-                .filter(node -> currentNodeId.equals(node.parentId()))
-                .map(com.trawhile.domain.Node::id)
-                .forEach(queue::addLast);
-        }
-        subtreeNodeIds.retainAll(visibleNodeIds);
-        return subtreeNodeIds;
+        return userProfileRepository.findByUserId(userId)
+            .map(com.trawhile.domain.UserProfile::name)
+            .orElse(null);
     }
 
     private boolean isWithinDateRange(TimeRecord record, LocalDate from, LocalDate to) {
@@ -382,26 +526,24 @@ public class ReportService {
         return timestamp.atZoneSameInstant(companyZone).toOffsetDateTime();
     }
 
-    private List<NodePathEntry> nodePath(UUID nodeId, Map<UUID, com.trawhile.domain.Node> nodesById) {
-        if (nodesById.isEmpty()) {
+    private List<NodePathEntry> nodePath(UUID nodeId) {
+        if (nodeRepository == null) {
             return List.of(new NodePathEntry(nodeId, nodeId.toString()));
         }
-
         LinkedList<NodePathEntry> path = new LinkedList<>();
-        com.trawhile.domain.Node current = nodesById.get(nodeId);
+        com.trawhile.domain.Node current = nodeRepository.findById(nodeId).orElse(null);
         if (current == null) {
             return List.of(new NodePathEntry(nodeId, nodeId.toString()));
         }
-
         while (current != null) {
             path.addFirst(new NodePathEntry(current.id(), current.name()));
-            current = current.parentId() == null ? null : nodesById.get(current.parentId());
+            current = current.parentId() == null ? null : nodeRepository.findById(current.parentId()).orElse(null);
         }
         return List.copyOf(path);
     }
 
-    private String nodePathLabel(UUID nodeId, Map<UUID, com.trawhile.domain.Node> nodesById) {
-        return nodePath(nodeId, nodesById).stream()
+    private String nodePathLabel(UUID nodeId) {
+        return nodePath(nodeId).stream()
             .map(NodePathEntry::getName)
             .collect(Collectors.joining(" / "));
     }
@@ -460,10 +602,7 @@ public class ReportService {
                 case MONTH, MONTH_TO_DATE -> bucketStart.withDayOfMonth(bucketStart.lengthOfMonth());
                 case YEAR, YEAR_TO_DATE -> bucketStart.withDayOfYear(bucketStart.lengthOfYear());
             };
-            LocalDate bucketEnd = switch (intervalKind) {
-                case MONTH_TO_DATE, YEAR_TO_DATE -> naturalEnd.isAfter(dateRange.to()) ? dateRange.to() : naturalEnd;
-                default -> naturalEnd.isAfter(dateRange.to()) ? dateRange.to() : naturalEnd;
-            };
+            LocalDate bucketEnd = naturalEnd.isAfter(dateRange.to()) ? dateRange.to() : naturalEnd;
 
             buckets.add(new BucketWindow(
                 bucketStart,
@@ -481,11 +620,6 @@ public class ReportService {
         if (from != null && to != null && to.isBefore(from)) {
             throw new BusinessRuleViolationException("INVALID_REPORT_RANGE", "to must not be before from");
         }
-    }
-
-    private record FilteredContext(List<TimeRecord> records,
-                                   Map<UUID, com.trawhile.domain.Node> nodesById,
-                                   Map<UUID, String> userNamesById) {
     }
 
     private record DateRange(LocalDate from, LocalDate to) {

@@ -23,6 +23,13 @@ CREATE TABLE users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE user_profile (
+  id                    UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               UUID    NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  name                  TEXT    NOT NULL,
+  last_report_settings  JSONB                            -- last used report filter state; persisted for multi-device consistency
+);
+
 CREATE TYPE auth_level AS ENUM ('view', 'track', 'admin');
 
 CREATE TABLE node_authorizations (
@@ -31,4 +38,35 @@ CREATE TABLE node_authorizations (
   user_id       UUID       NOT NULL REFERENCES users(id),
   auth_level    auth_level NOT NULL,
   UNIQUE (node_id, user_id)
+);
+
+CREATE TABLE time_records (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users(id),
+  node_id     UUID        NOT NULL REFERENCES nodes(id),
+  started_at  TIMESTAMPTZ NOT NULL,
+  ended_at    TIMESTAMPTZ,
+  timezone    TEXT        NOT NULL,             -- IANA string from browser; private (discloses coarse location) — protected by per-owner access control on time_records
+  description TEXT,                             -- optional short note by the member
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE quick_access (
+  id         UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID    NOT NULL REFERENCES user_profile(id) ON DELETE CASCADE,
+  node_id    UUID    NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (profile_id, node_id)
+);
+
+CREATE TABLE requests (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  requester_id UUID        NOT NULL REFERENCES users(id),
+  node_id      UUID        NOT NULL REFERENCES nodes(id),
+  template     TEXT        NOT NULL,  -- system template ID or 'free_text'
+  body         TEXT,
+  status       TEXT        NOT NULL DEFAULT 'open',  -- 'open' | 'closed'
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at  TIMESTAMPTZ,
+  resolved_by  UUID        REFERENCES users(id)
 );

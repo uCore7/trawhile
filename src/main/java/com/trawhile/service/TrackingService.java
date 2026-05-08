@@ -8,6 +8,7 @@ import com.trawhile.repository.QuickAccessRepository;
 import com.trawhile.repository.NodeRepository;
 import com.trawhile.repository.TimeRecordRepository;
 import com.trawhile.repository.UserProfileRepository;
+import com.trawhile.repository.read.TrackingReadQueries;
 import com.trawhile.sse.SseDispatcher;
 import com.trawhile.sse.SseEvent;
 import com.trawhile.web.dto.GetTrackingHistory200Response;
@@ -40,6 +41,7 @@ public class TrackingService {
     private final AuthorizationService authorizationService;
     private final SseDispatcher sseDispatcher;
     private final JdbcTemplate jdbcTemplate;
+    private final TrackingReadQueries trackingReadQueries;
 
     public TrackingService(TimeRecordRepository timeRecordRepository,
                            NodeRepository nodeRepository,
@@ -47,7 +49,8 @@ public class TrackingService {
                            UserProfileRepository userProfileRepository,
                            AuthorizationService authorizationService,
                            SseDispatcher sseDispatcher,
-                           JdbcTemplate jdbcTemplate) {
+                           JdbcTemplate jdbcTemplate,
+                           TrackingReadQueries trackingReadQueries) {
         this.timeRecordRepository = timeRecordRepository;
         this.nodeRepository = nodeRepository;
         this.quickAccessRepository = quickAccessRepository;
@@ -55,26 +58,30 @@ public class TrackingService {
         this.authorizationService = authorizationService;
         this.sseDispatcher = sseDispatcher;
         this.jdbcTemplate = jdbcTemplate;
+        this.trackingReadQueries = trackingReadQueries;
     }
 
     @Transactional(readOnly = true)
     public TrackingStatus getStatus(UUID actingUserId) {
-        return timeRecordRepository.findByUserIdAndEndedAtIsNull(actingUserId)
+        return trackingReadQueries.findOwnTrackingStatus(actingUserId)
             .map(this::toTrackingStatus)
             .orElseGet(this::emptyTrackingStatus);
     }
 
     @Transactional(readOnly = true)
     public GetTrackingHistory200Response getRecentEntries(UUID actingUserId, int limit, int offset) {
-        List<com.trawhile.domain.TimeRecord> allRecords = timeRecordRepository.findByUserIdOrderByStartedAtDesc(actingUserId);
+        List<TrackingReadQueries.TrackingHistoryRow> allRows = trackingReadQueries.findOwnTrackingHistoryRecords(actingUserId);
+        List<com.trawhile.domain.TimeRecord> allRecords = allRows.stream()
+            .map(this::toDomainRecord)
+            .toList();
         OffsetDateTime now = OffsetDateTime.now();
         Set<UUID> overlappingIds = overlappingRecordIds(allRecords, now);
         Set<UUID> gapBeforeIds = gapBeforeRecordIds(allRecords);
 
-        int total = allRecords.size();
+        int total = allRows.size();
         int fromIndex = Math.min(Math.max(offset, 0), total);
         int toIndex = Math.min(fromIndex + Math.max(limit, 0), total);
-        List<com.trawhile.web.dto.TimeRecord> items = allRecords.subList(fromIndex, toIndex).stream()
+        List<com.trawhile.web.dto.TimeRecord> items = allRows.subList(fromIndex, toIndex).stream()
             .map(record -> toDto(record, overlappingIds.contains(record.id()), gapBeforeIds.contains(record.id())))
             .toList();
 
@@ -117,8 +124,7 @@ public class TrackingService {
 
     @Transactional(readOnly = true)
     public List<QuickAccessEntry> getQuickAccess(UUID actingUserId) {
-        UUID profileId = requireProfileId(actingUserId);
-        return quickAccessRepository.findByProfileIdOrderBySortOrder(profileId).stream()
+        return trackingReadQueries.findOwnQuickAccess(actingUserId).stream()
             .map(this::toQuickAccessEntry)
             .toList();
     }
@@ -235,7 +241,41 @@ public class TrackingService {
         return dto;
     }
 
+    private QuickAccessEntry toQuickAccessEntry(TrackingReadQueries.QuickAccessRow entry) {
+        com.trawhile.domain.Node node = requireNode(entry.nodeId());
+        QuickAccessEntry dto = new QuickAccessEntry(
+            entry.nodeId(),
+            nodePath(node),
+            entry.sortOrder(),
+            !entry.active() || entry.hasActiveChildren()
+        );
+        dto.setColor(entry.color());
+        dto.setIcon(entry.icon());
+        dto.setLogoUrl(entry.hasLogo() ? "/api/v1/nodes/" + entry.nodeId() + "/logo" : null);
+        return dto;
+    }
+
     private com.trawhile.web.dto.TimeRecord toDto(com.trawhile.domain.TimeRecord record,
+                                                  boolean overlapping,
+                                                  boolean hasGapBefore) {
+        com.trawhile.domain.Node node = requireNode(record.nodeId());
+        com.trawhile.web.dto.TimeRecord dto = new com.trawhile.web.dto.TimeRecord(
+            record.id(),
+            record.userId(),
+            record.nodeId(),
+            nodePath(node),
+            record.startedAt(),
+            record.timezone(),
+            record.createdAt(),
+            overlapping,
+            hasGapBefore
+        );
+        dto.setEndedAt(record.endedAt());
+        dto.setDescription(record.description());
+        return dto;
+    }
+
+    private com.trawhile.web.dto.TimeRecord toDto(TrackingReadQueries.TrackingHistoryRow record,
                                                   boolean overlapping,
                                                   boolean hasGapBefore) {
         com.trawhile.domain.Node node = requireNode(record.nodeId());
@@ -268,12 +308,38 @@ public class TrackingService {
         return status;
     }
 
+    private TrackingStatus toTrackingStatus(TrackingReadQueries.TrackingStatusRow record) {
+        com.trawhile.domain.Node node = requireNode(record.nodeId());
+        long elapsedSeconds = Math.max(0L, Duration.between(record.startedAt(), OffsetDateTime.now()).getSeconds());
+        TrackingStatus status = new TrackingStatus(true);
+        status.setRecordId(record.recordId());
+        status.setNodeId(record.nodeId());
+        status.setNodePath(nodePath(node));
+        status.setStartedAt(record.startedAt());
+        status.setTimezone(record.timezone());
+        status.setElapsedSeconds((int) Math.min(Integer.MAX_VALUE, elapsedSeconds));
+        return status;
+    }
+
     private TrackingStatus emptyTrackingStatus() {
         return new TrackingStatus(false);
     }
 
     private void dispatchTrackingUpdate(UUID actingUserId, TrackingStatus status) {
         sseDispatcher.dispatch(actingUserId, new SseEvent(SseEvent.EventType.TRACKING_STATUS, status));
+    }
+
+    private com.trawhile.domain.TimeRecord toDomainRecord(TrackingReadQueries.TrackingHistoryRow row) {
+        return new com.trawhile.domain.TimeRecord(
+            row.id(),
+            row.userId(),
+            row.nodeId(),
+            row.startedAt(),
+            row.endedAt(),
+            row.timezone(),
+            row.description(),
+            row.createdAt()
+        );
     }
 
     private UUID requireProfileId(UUID actingUserId) {

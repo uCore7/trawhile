@@ -51,9 +51,17 @@ mkdir -p "$(dirname "$TARGET_FILE")"
   printf '\n'
   extract_statement "CREATE TABLE users ("
   printf '\n'
+  extract_statement "CREATE TABLE user_profile ("
+  printf '\n'
   extract_statement "CREATE TYPE auth_level AS ENUM ('view', 'track', 'admin');"
   printf '\n'
   extract_statement "CREATE TABLE node_authorizations ("
+  printf '\n'
+  extract_statement "CREATE TABLE time_records ("
+  printf '\n'
+  extract_statement "CREATE TABLE quick_access ("
+  printf '\n'
+  extract_statement "CREATE TABLE requests ("
 } > "$TMP_FILE"
 
 if [[ -f "$TARGET_FILE" ]] && cmp -s "$TMP_FILE" "$TARGET_FILE"; then
