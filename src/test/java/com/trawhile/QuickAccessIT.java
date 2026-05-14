@@ -29,6 +29,7 @@ class QuickAccessIT extends BaseIT {
     void listEntries_deactivatedNode_annotatedWithNonTrackableFlag() throws Exception {
         UUID userId = TestFixtures.insertUserWithProfile(jdbc, "Member");
         UUID nodeId = TestFixtures.insertNode(jdbc, TestFixtures.ROOT_NODE_ID, "Old Task");
+        TestFixtures.grantAuth(jdbc, userId, nodeId, "view");
         insertQuickAccess(userId, nodeId, 0);
         jdbc.update(
             "UPDATE nodes SET is_active = false, deactivated_at = NOW() WHERE id = ?",
