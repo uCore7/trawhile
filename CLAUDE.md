@@ -6,10 +6,10 @@ Before starting any work, read the following files in order:
 2. `docs/requirements-ur.md` — user requirements; stakeholders, system boundary, context boundary, key invariants
 3. `docs/requirements-sr.md` — system requirements
 4. `docs/glossary.md` — canonical definitions of all domain terms
-5. `docs/architecture.md` — package layout, key technical decisions, Docker Compose, CI/CD
+5. `docs/architecture.md` — arc42 architecture overview, building blocks, runtime and deployment views
 6. `spec/openapi.yaml` — REST API contract
 7. `docs/process.md` — development phases, conventions, and current status
-8. `docs/decisions.md` — rationale behind non-obvious architectural and process choices
+8. `docs/adr/` — Architecture Decision Records for non-obvious architectural and process choices
 
 These are the authoritative source of truth. Code, tests, and migrations must be consistent with them. If implementation forces a change to a requirement, update the relevant doc file in the same commit.
 
@@ -19,7 +19,7 @@ If the agent sandbox blocks Docker or localhost DB sockets, request escalation f
 
 ## Stack
 
-- Backend: Spring Boot + Spring Data JDBC + jOOQ + Flyway + Spring Security (OAuth2)
+- Backend: Spring Boot + jOOQ + Flyway + Spring Security (OAuth2); Spring Data JDBC is transitional legacy persistence
 - Database: PostgreSQL
 - Frontend: Angular SPA + PrimeNG + Tailwind CSS
 - Deployment: Docker Compose + Caddy (reverse proxy + TLS)
@@ -33,7 +33,7 @@ If the agent sandbox blocks Docker or localhost DB sockets, request escalation f
 - No email stored for registered users (UR-C006). Email only in `pending_invitations`, deleted on first login match.
 - Authorization is recursive: a grant on node N is effective on N and all descendants. Use recursive CTEs (Q1–Q4 in schema.sql) — do not flatten the tree.
 - `docs/schema.sql` is the canonical schema. Runtime PostgreSQL functions such as `visible_nodes(user_id)` belong there first; Flyway V1 and any jOOQ schema input file are derived artifacts, not independent schema sources.
-- For new security-sensitive node-scoped reads and mutations, prefer authorization-shaped PostgreSQL functions plus jOOQ-generated `repository/read` and `repository/command` classes. Generic table-shaped repository reads plus Java-side filtering are transitional only.
+- jOOQ is the target persistence standard throughout. Use authorization-shaped PostgreSQL functions plus jOOQ-generated `repository/read` and `repository/command` classes. Generic table-shaped repository reads plus Java-side filtering are transitional only.
 - Freeze cutoff: entries with `started_at < NOW() - freeze_offset_years * INTERVAL '1 year'` are immutable. The offset is read from `TrawhileConfig.freezeOffsetYears`. No admin override.
 - Anonymization: delete `user_profile` (cascades to personal tables); retain `users` stub plus any `time_records`/`requests` until purge removes them. Irreversible.
 - Purge jobs are idempotent. On startup, any `purge_jobs` row with `status = 'active'` is resumed using stored `cutoff_date`.
