@@ -1,45 +1,39 @@
 # Agent instructions — trawhile
 
-This file is the tool-agnostic entry point. If you are Claude Code, read `CLAUDE.md` instead (it is a superset of this file).
+This file is the tool-agnostic entry point for agents. `docs/process.md` owns the full development process, artifact dependency chain, and phase rules.
 
-## Authoritative documents — read before writing any code
+## Start Here
 
-| Document | Purpose |
-|---|---|
-| `docs/schema.sql` | PostgreSQL schema, FK constraints, authorization queries Q1–Q4 |
-| `docs/requirements-ur.md` | Stakeholder capabilities, role model, key invariants |
-| `docs/requirements-sr.md` | System behaviours, acceptance conditions |
-| `docs/architecture.md` | arc42 architecture overview, building blocks, runtime and deployment views |
-| `spec/openapi.yaml` | REST API contract — request/response shapes |
-| `spec/test-plan.md` | Traceability matrix UR → SR → TE-xxx-nn |
-| `docs/process.md` | Development phases, conventions, current status |
-| `docs/adr/` | Architecture Decision Records for non-obvious architectural and process choices |
+- Start with the assigned task file under `tasks/`.
+- The task file defines the role, scope, prerequisites, and concrete documents to read.
+- Read the assigned task file first, then `docs/process.md`, then the upstream canonical documents named by the task.
+- If there is no assigned task file, read only the canonical documents that are upstream of the work being requested. Do not use downstream artifacts as sources for upstream work.
+- Keep changes scoped to the assigned task.
 
-## Task files
+## Upstream Discipline
 
-Each file in `tasks/` is a self-contained brief for one agent. Start from the file that matches your assigned task. Always complete `tasks/00-base-it.md` before any other task.
+- Requirements-engineering work uses problem-space sources only, such as `docs/glossary.md` and `docs/requirements-ur.md`.
+- Architecture work may use requirements and glossary sources; ADR work also uses `docs/architecture.md` and `docs/adr/`.
+- System-requirements work may use requirements, architecture, and ADRs.
+- Technical-specification work may use requirements, architecture, ADRs, and system requirements before writing spec artifacts.
+- Test, implementation, and cleanup work follow the read list in the assigned task file.
+- If a task, requirement, architecture document, ADR, or implementation detail conflicts, stop and report the conflict.
 
-## Non-negotiable constraints
+## Execution Guardrails
 
-- `@Transactional` on service methods only — never on controllers or repositories
-- Authorization checked via `AuthorizationService` at the top of each service method — no `@PreAuthorize`
-- No JPA. The canonical schema lives in `docs/schema.sql`. jOOQ is the target persistence standard throughout. Do not add new generic Spring Data repository access paths; existing Spring Data JDBC repositories and `AuthorizationQueries` are transitional.
-- SSE dispatch after every state mutation via `SseDispatcher`
-- No email stored for registered users (C-2) — enforced by SR-002 / TE-002-01
-- Freeze cutoff = `NOW() - trawhileConfig.freezeOffsetYears() * INTERVAL '1 year'` — no hardcoding
-- Build fails on SpotBugs HIGH/CRITICAL and OWASP HIGH/CRITICAL
+- Use `./scripts/mvn-local.sh ...`, not bare `mvn` or `./mvnw`.
+- For native app startup, start PostgreSQL first with `make development-db`, then run `./scripts/mvn-local.sh spring-boot:run`.
+- If the sandbox blocks Docker, local DB sockets, Redis, or required test containers, request escalation for the exact command instead of treating the failure as an application bug.
+- Do not run git write operations: `git commit`, `git push`, `git pull`, `git fetch`, `git merge`, `git rebase`, `git reset`, `git stash`, `git branch -D`, or commands that modify git state or communicate with a remote.
+- Test agents under `tasks/tests/` must not modify `src/main/`.
+- Implementation and cleanup agents under `tasks/impl/` or `tasks/cleanup/` must not modify `src/test/`.
+- Implementation and cleanup agents must not modify frontend files unless explicitly assigned a frontend task.
+- Do not create or modify Flyway migrations under `src/main/resources/db/migration/`; schema changes start in chat mode from `spec/schema.sql`.
 
-## Guardrails
+## Implementation Guardrails
 
-These rules apply to every agent task, regardless of type:
-
-- **Use the repo Maven wrapper script** — run Maven commands via `./scripts/mvn-local.sh ...`, not bare `mvn` or `./mvnw`, so wrapper and repository caches stay inside the project.
-- **Native app startup path** — start PostgreSQL first (`make development-db`), then run `./scripts/mvn-local.sh spring-boot:run`. The wrapper auto-skips the frontend Maven plugin for `spring-boot:run`; Angular runs separately via `ng serve` in native dev.
-- **Sandbox note for live app runs** — if the agent sandbox blocks Docker or localhost DB sockets, request escalation for `make development-db` and/or `./scripts/mvn-local.sh spring-boot:run` rather than treating startup failure as an application bug.
-- **Sandbox note for database-backed tests** — if the agent sandbox blocks Docker or DB sockets, request escalation for `./scripts/mvn-local.sh test`. This applies to any test that needs PostgreSQL, regardless of whether the team labels it UT, IT, or otherwise.
-- **No git write operations** — do not run `git commit`, `git push`, `git pull`, `git fetch`, `git merge`, `git rebase`, `git reset`, `git stash`, `git branch -D`, or any command that modifies git state or communicates with a remote. Read-only commands (`git status`, `git log`, `git diff`, `git show`) are fine.
-- **Test agents** (`tasks/tests/`): do not create or modify any file under `src/main/`.
-- **Impl agents** (`tasks/impl/`): do not create or modify any file under `src/test/`. If a test appears wrong, report it and stop — do not fix it.
-- **No Flyway migrations** — never create or modify files under `src/main/resources/db/migration/`. All schema changes are applied in chat mode, not by agents.
-- **No frontend files** — impl agents must not create or modify any file under `src/main/frontend/`.
-- **Persistence preference** — use jOOQ-backed `repository/authz/`, `repository/read/`, and `repository/command/` code for new persistence work. For sensitive access paths, do not introduce fresh `findAll()` / table-shaped repository reads plus Java-side filtering; encode authorization in SQL. Any jOOQ schema input file is derived from `docs/schema.sql`, not a second handwritten schema source.
+- Put `@Transactional` on service methods only.
+- External-actor service methods check authorization explicitly through `AuthorizationService`.
+- Do not use `@PreAuthorize`.
+- Do not add JPA.
+- New persistence work follows the jOOQ-backed outbound persistence adapter structure from the architecture and ADRs.
