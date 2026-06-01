@@ -1,8 +1,14 @@
-# Paste this under `scrape_configs:` in your Prometheus config.
-# The target port must match Spring Boot's `management.server.port`.
+# Paste these jobs under `scrape_configs:` in your Prometheus config.
+# The trawhile target port must match Spring Boot's `management.server.port`.
 - job_name: trawhile
   metrics_path: /actuator/prometheus
   static_configs:
     - targets:
         - trawhile:9090
 
+# The Caddy target must expose Caddy's Prometheus metrics endpoint.
+- job_name: caddy
+  metrics_path: /metrics
+  static_configs:
+    - targets:
+        - caddy:2019

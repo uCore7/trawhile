@@ -44,7 +44,6 @@ SR-F and SR-Q must each have at least one TE. SR-C has none.
 | `trawhile_purge_job_deleted_total` | Counter | `job_type` | Cumulative count of rows deleted across all purge job runs |
 | `trawhile_purge_job_failures_total` | Counter | `job_type` | Number of purge job runs that terminated with an unhandled exception |
 | `trawhile_db_transaction_errors_total` | Counter | — | Number of database transactions that rolled back due to an error |
-| `trawhile_rate_limit_rejections_total` | Counter | `endpoint` | HTTP 429 responses issued by bucket4j |
 | `trawhile_security_events_total` | Counter | `event_type` | Security events recorded, per event type |
 | `trawhile_oauth2_login_failures_total` | Counter | `provider` | Failed OAuth2 login callbacks, per provider |
 | `trawhile_sse_connections_active` | Gauge | — | Number of currently active SSE emitter connections |
@@ -53,13 +52,13 @@ SR-F and SR-Q must each have at least one TE. SR-C has none.
 
 [Rationale: UR-F059; no email notification channel — Prometheus and AlertManager are the operator's primary alerting mechanism; persistent database errors are detected by AlertManager via sustained rate on `trawhile_db_transaction_errors_total`]
 
-**SR-F059.F03 (type F):** The system shall ship a `monitoring/` directory in the source repository containing the following artifacts, maintained in sync with the metric names defined in SR-F059.F02:
+**SR-F059.F03 (type F):** The system shall ship a `monitoring/` directory in the source repository containing the following artifacts, maintained in sync with the metric names defined in SR-F059.F02 and with the Caddy metrics/logs used for edge rate-limit observability:
 
-- **`monitoring/prometheus-scrape-config.yml`** — a ready-to-paste Prometheus scrape job block targeting the management port, with comments explaining the port configuration property.
+- **`monitoring/prometheus-scrape-config.yml`** — ready-to-paste Prometheus scrape job blocks targeting the Spring Boot management port and the Caddy metrics endpoint, with comments explaining the port configuration properties.
 - **`monitoring/alerting-rules.yml`** — an AlertManager-compatible rules file defining alerts for: purge job not completed within 26 hours (`trawhile_purge_job_last_completed_seconds` stale per `job_type`); sustained database transaction error rate (`rate(trawhile_db_transaction_errors_total[5m]) > 0 for 5m`); high HTTP 5xx rate; application instance down.
 - **`monitoring/grafana-dashboard.json`** — an importable Grafana dashboard JSON containing panels for: JVM heap and GC activity; HikariCP connection pool utilisation; HTTP request rate and latency (p50, p95, p99); purge job last completed (per `job_type`); purge job failure count (per `job_type`); database transaction error rate; rate limit rejections; security event rate (per `event_type`); OAuth2 login failure rate (per `provider`); active SSE connections; active tracking sessions; MCP tool invocation rate (per `tool`).
 
-These files are operator tooling only — they are not included in the application container image. [Rationale: UR-F059; monitoring artifacts that drift from metric names silently break dashboards and alerts — first-class maintenance is required]
+These files are operator tooling only — they are not included in the application container image. [Rationale: UR-F059; monitoring artifacts that drift from metric names or proxy observability assumptions silently break dashboards and alerts — first-class maintenance is required]
 
 **SR-F065.F01 (type F):** The system shall validate all supported application configuration defined in this specification at startup and fail fast with a descriptive error message identifying the invalid property or violated constraint if any of the following constraints are violated: any property constraint listed in SR-F050.F05; or no OIDC provider has a non-empty `client-id` configured (at least one of Google, Apple, Microsoft Entra ID, or Keycloak must be active, per UR-C002). [Rationale: UR-F065; UR-C002; operator usability — a misconfigured instance must not start silently]
 
@@ -169,7 +168,7 @@ The UI shall also clarify that permissions are inherited downward — a permissi
 
 ## Epic 7 — Security & audit
 
-**SR-F049.F01 (type F):** The system shall insert a `security_events` row for each of the following: successful OIDC login; failed OIDC login; Node Admin grant; Node Admin revoke; account anonymisation; user removal; rate limit breach; authorization failure on a protected endpoint; activity purge execution (one row per job run, recording cutoff date and deleted counts); node deletion execution (same); MCP token generation; MCP token revocation; MCP token use (one row per request). [Rationale: UR-F049; CRA; GDPR accountability]
+**SR-F049.F01 (type F):** The system shall insert a `security_events` row for each of the following: successful OIDC login; failed OIDC login; Node Admin grant; Node Admin revoke; account anonymisation; user removal; authorization failure on a protected endpoint; activity purge execution (one row per job run, recording cutoff date and deleted counts); node deletion execution (same); MCP token generation; MCP token revocation; MCP token use (one row per request). [Rationale: UR-F049; CRA; GDPR accountability]
 
 **SR-F049.F02 (type F):** The system shall return `security_events` rows, with filtering by `event_type`, `user_id`, and `occurred_at` range, exclusively to users with effective `admin` on root. [Rationale: UR-F049]
 
@@ -249,7 +248,7 @@ The application shall validate all properties on startup and fail fast (with a d
 
 **SR-C010.C01 (type C):** The system shall, on a scheduled daily basis, transition all users to the Ready for Scrubbing state (SR-F070.F01) whose `pending_invitations.expires_at < NOW()`. [Rationale: UR-C010; GDPR storage limitation]
 
-**SR-C011.C01 (type C):** The system shall enforce token-bucket rate limiting via bucket4j on all OAuth2 endpoints and all API endpoints. Requests exceeding the limit shall receive HTTP 429. Each breach shall be recorded as a `security_events` row. [Rationale: UR-C011]
+**SR-C011.C01 (type C):** The system shall enforce token-bucket rate limiting at the public HTTP entry point for all public application routes, including the SPA shell, static assets, SPA fallback routes, OAuth2 endpoints, API endpoints, and SSE connection attempts. Requests exceeding the limit shall receive HTTP 429. Rate-limit rejections shall be observable through Caddy metrics and logs. [Rationale: UR-C011; CRA and OWASP baseline hardening]
 
 **SR-C012.C01 (type C):** The system shall set the following headers on all HTTP responses: `Content-Security-Policy` (same-origin default, explicitly named external sources only); `Strict-Transport-Security: max-age=31536000; includeSubDomains`; `X-Frame-Options: DENY`; `X-Content-Type-Options: nosniff`; `Referrer-Policy: no-referrer`. [Rationale: UR-C012]
 

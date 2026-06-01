@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * All recursive CTE authorization queries (Q1–Q4 from schema.sql).
+ * All recursive CTE authorization queries (Q1–Q4 from spec/schema.sql).
  * Uses NamedParameterJdbcTemplate for full SQL control. Parameters bind values safely;
  * no dynamic identifiers are constructed from user input.
  */

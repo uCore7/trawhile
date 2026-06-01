@@ -85,7 +85,7 @@
       "title": "Rate Limit Rejections",
       "type": "timeseries",
       "targets": [
-        { "expr": "rate(trawhile_rate_limit_rejections_total[5m])" }
+        { "expr": "sum by (handler) (rate(caddy_http_request_duration_seconds_count{code=\"429\"}[5m]))" }
       ]
     },
     {

@@ -655,7 +655,6 @@ components:
             - NODE_ADMIN_REVOKED
             - ACCOUNT_ANONYMISED
             - USER_REMOVED
-            - RATE_LIMIT_BREACH
             - AUTHORIZATION_FAILURE
             - ACTIVITY_PURGE_COMPLETED
             - NODE_DELETION_COMPLETED

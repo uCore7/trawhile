@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Generates the jOOQ DDLDatabase input from docs/schema.sql.
+# Generates the jOOQ DDLDatabase input from spec/schema.sql.
 # This file is a build-only subset of the canonical schema and must not become
 # an independently maintained schema source.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_SCHEMA="${JOOQ_SOURCE_SCHEMA_PATH:-$ROOT/docs/schema.sql}"
+SOURCE_SCHEMA="${JOOQ_SOURCE_SCHEMA_PATH:-$ROOT/spec/schema.sql}"
 TARGET_FILE="${JOOQ_TARGET_PATH:-$ROOT/src/main/resources/db/codegen/jooq-schema.sql}"
 TMP_FILE="$(mktemp)"
 
@@ -43,8 +43,8 @@ mkdir -p "$(dirname "$TARGET_FILE")"
 
 {
   printf '%s\n' "-- Build-only schema subset for jOOQ code generation."
-  printf '%s\n' "-- Generated from docs/schema.sql by scripts/generate-jooq-schema.sh."
-  printf '%s\n' "-- Runtime schema remains the canonical docs/schema.sql and derived Flyway migration."
+  printf '%s\n' "-- Generated from spec/schema.sql by scripts/generate-jooq-schema.sh."
+  printf '%s\n' "-- Runtime schema remains the canonical spec/schema.sql and derived Flyway migration."
   printf '%s\n' "-- Runtime PostgreSQL functions are intentionally omitted here because the OSS jOOQ DDLDatabase parser cannot parse CREATE FUNCTION."
   printf '\n'
   extract_statement "CREATE TABLE nodes ("

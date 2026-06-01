@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Generates the Flyway V1 migration from docs/schema.sql.
+# Generates the Flyway V1 migration from spec/schema.sql.
 # Strips the authorization-query reference section (not needed in the migration),
 # rewrites the header comment, and appends the required seed rows
 # (root node, purge job singletons).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_SCHEMA="${V1_SOURCE_SCHEMA_PATH:-$ROOT/docs/schema.sql}"
+SOURCE_SCHEMA="${V1_SOURCE_SCHEMA_PATH:-$ROOT/spec/schema.sql}"
 TARGET_FILE="${V1_TARGET_PATH:-$ROOT/src/main/resources/db/migration/V1__create_schema.sql}"
 TMP_FILE="$(mktemp)"
 
@@ -29,7 +29,7 @@ mkdir -p "$(dirname "$TARGET_FILE")"
 
 {
   printf '%s\n' "-- trawhile — V1: full schema"
-  printf '%s\n' "-- Generated from docs/schema.sql by scripts/generate-schema-v1.sh"
+  printf '%s\n' "-- Generated from spec/schema.sql by scripts/generate-schema-v1.sh"
   printf '\n'
   awk '
     NR == 1 && $0 == "-- trawhile — PostgreSQL schema" {

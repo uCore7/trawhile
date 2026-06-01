@@ -7,7 +7,7 @@ CANONICAL_FILES=(
   "docs/requirements-ur.md"
   "docs/requirements-sr.md"
   "docs/glossary.md"
-  "docs/schema.sql"
+  "spec/schema.sql"
   "docs/architecture.md"
   "CLAUDE.md"
   "AGENTS.md"
@@ -130,8 +130,8 @@ check_no_stale_terms() {
 check_contract_markers() {
   info "Checking key Phase 2 contract markers"
 
-  grep -q "CREATE TABLE time_records" "$ROOT/docs/schema.sql" \
-    || die "docs/schema.sql does not define time_records"
+  grep -q "CREATE TABLE time_records" "$ROOT/spec/schema.sql" \
+    || die "spec/schema.sql does not define time_records"
   grep -q "CREATE TABLE time_records" "$ROOT/src/main/resources/db/migration/V1__create_schema.sql" \
     || die "V1 migration does not define time_records"
 

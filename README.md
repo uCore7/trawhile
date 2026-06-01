@@ -46,7 +46,7 @@ The cut is made downstream of architecture.md and the ADR's. System requirements
 - Straightforward configuration with application.yml and .env - meaningful defaults enable you to start right away and customize later, no access to an SMTP server needs to be provided
 - No manual certs provisioning - let's encrypt certificates are built-in
 - Know when things go awry - comprehensive Prometheus metrics are built-in, and a ready-to-import Grafana dashboard and AlertManager rules are provided
-- GDPR compliant and CRA-ready - right to erasure, configurable retention and automatic purge, SBOM, rate limiting and secure HTTP headers, security audit log with 90-day retention and automatic purge
+- GDPR compliant - right to erasure, configurable retention and automatic purge, SBOM, rate limiting and secure HTTP headers, security audit log with 90-day retention and automatic purge
 - Friendly with neighbors - OpenAPI spec for quick integration with project management tools
 
 ## Stack

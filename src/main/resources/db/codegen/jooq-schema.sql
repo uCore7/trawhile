@@ -1,6 +1,6 @@
 -- Build-only schema subset for jOOQ code generation.
--- Generated from docs/schema.sql by scripts/generate-jooq-schema.sh.
--- Runtime schema remains the canonical docs/schema.sql and derived Flyway migration.
+-- Generated from spec/schema.sql by scripts/generate-jooq-schema.sh.
+-- Runtime schema remains the canonical spec/schema.sql and derived Flyway migration.
 -- Runtime PostgreSQL functions are intentionally omitted here because the OSS jOOQ DDLDatabase parser cannot parse CREATE FUNCTION.
 
 CREATE TABLE nodes (
