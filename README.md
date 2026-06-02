@@ -109,12 +109,35 @@ make development-up
 
 `./scripts/mvn-local.sh test` runs the backend test suite via the repository Maven wrapper settings, including both `*Test` and `*IT` classes.
 
+### Pipeline (Dagger)
+
+The full CI/CD pipeline is a Dagger module under [`./dagger/`](dagger/). The same module runs locally and in GitHub Actions.
+
+```bash
+# Install the Dagger CLI once (https://docs.dagger.io/install)
+# Then run any pipeline stage by name:
+dagger call build --source=.
+dagger call unit-test --source=.
+dagger call traceability --source=.
+dagger call sbom --source=.
+dagger call secrets-scan --source=.
+dagger call verify --source=. --nvd-api-key=env:NVD_API_KEY
+
+# Full pipeline (build → unit tests → traceability → verify → SBOM → secrets):
+dagger call ci --source=. --nvd-api-key=env:NVD_API_KEY
+```
+
+Pipeline stages are defined in TypeScript in [`dagger/src/index.ts`](dagger/src/index.ts). Adding a stage is a code change to that file, not to `.github/workflows/ci.yml`. The GitHub Actions workflow is a thin shim that invokes `dagger call ci` with the same arguments.
+
 ### Traceability
 
 Use the local traceability checker to compare requirements, planned test cases, implemented `@Tag("TE-...")` tests, and executed backend test reports.
 
 ```bash
-# Structural traceability only (good while fixing missing coverage)
+# Phase 5/6 (specs done, tests not yet implemented): structural integrity + planned-impl gap tolerated
+./scripts/check-traceability.py --no-execution --allow-planned-without-impl
+
+# Structural traceability only, strict implementation check (good while fixing missing test coverage)
 ./scripts/check-traceability.py --no-execution
 
 # Full backend traceability, including executed test reports in target/surefire-reports

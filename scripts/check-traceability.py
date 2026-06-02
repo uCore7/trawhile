@@ -133,6 +133,15 @@ def parse_args() -> argparse.Namespace:
         help="Skip execution checks and only validate planned vs implemented coverage.",
     )
     parser.add_argument(
+        "--allow-planned-without-impl",
+        action="store_true",
+        help=(
+            "Report but do not fail on 'Planned TE without implementation'. Use during"
+            " Phase 5/6 (specs written, tests not yet implemented) so the CI pipeline"
+            " is green while the planned-implementation gap is the expected state."
+        ),
+    )
+    parser.add_argument(
         "--json",
         action="store_true",
         help="Emit JSON instead of the human-readable report.",
@@ -488,8 +497,14 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
             category("Planned TE has skipped test methods", te_skipped),
         ]
 
+    tolerated_titles: set[str] = set()
+    if args.allow_planned_without_impl:
+        tolerated_titles.add("Planned TE without implementation")
+
     findings: list[str] = []
     for entry in structural_categories:
+        if entry["title"] in tolerated_titles:
+            continue
         findings.extend(f"{entry['title']}: {item}" for item in entry["items"])
     if not args.no_execution:
         if execution_reports_missing:

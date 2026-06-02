@@ -1,0 +1,11 @@
+{
+  "name": "trawhile-dagger-module",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@dagger.io/dagger": "0.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

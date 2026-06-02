@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OWASP dependency-check suppressions for trawhile.
+
+  Use this file ONLY for confirmed false positives — CVEs that flag a
+  dependency but do not apply to trawhile's usage of it. Every suppression
+  must carry a <notes> block explaining why the CVE does not apply, who
+  triaged it, and the date.
+
+  Genuine vulnerabilities must be fixed by upgrading the dependency, not by
+  suppressing them here.
+
+  Reference: https://jeremylong.github.io/DependencyCheck/general/suppression.html
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+  <!--
+    Example structure for a future suppression:
+
+    <suppress>
+      <notes><![CDATA[
+        CVE-2026-XXXXX is reported against <library> but does not apply because
+        trawhile uses <library> only for <restricted-use-case> which is not
+        affected by this vector. Triaged: 2026-MM-DD by <handle>.
+      ]]></notes>
+      <gav regex="true">^org\.example:library:.*$</gav>
+      <cve>CVE-2026-XXXXX</cve>
+    </suppress>
+  -->
+
+</suppressions>
