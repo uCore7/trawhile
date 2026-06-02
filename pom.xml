@@ -33,7 +33,7 @@
     <node.version>v24.14.1</node.version>
     <npm.version>11.12.1</npm.version>
     <frontend.output.directory>${project.build.outputDirectory}/static</frontend.output.directory>
-    <jooq.codegen.package>com.trawhile.jooq</jooq.codegen.package>
+    <jooq.codegen.package>com.trawhile.adapter.outbound.persistence.jooq</jooq.codegen.package>
     <jooq.codegen.directory>${project.build.directory}/generated-sources/jooq</jooq.codegen.directory>
   </properties>
 
@@ -232,8 +232,8 @@
             <configuration>
               <inputSpec>${project.basedir}/spec/openapi.yaml</inputSpec>
               <generatorName>spring</generatorName>
-              <apiPackage>com.trawhile.web.api</apiPackage>
-              <modelPackage>com.trawhile.web.dto</modelPackage>
+              <apiPackage>com.trawhile.adapter.inbound.web.api</apiPackage>
+              <modelPackage>com.trawhile.adapter.inbound.web.dto</modelPackage>
               <configOptions>
                 <interfaceOnly>true</interfaceOnly>
                 <useSpringBoot4>true</useSpringBoot4>
@@ -301,41 +301,57 @@
         </executions>
       </plugin>
 
-      <!-- Angular build via frontend-maven-plugin -->
-      <plugin>
-        <groupId>com.github.eirslett</groupId>
-        <artifactId>frontend-maven-plugin</artifactId>
-        <version>${frontend-maven-plugin.version}</version>
-        <configuration>
-          <workingDirectory>src/main/frontend</workingDirectory>
-          <installDirectory>target</installDirectory>
-        </configuration>
-        <executions>
-          <execution>
-            <id>install-node-and-npm</id>
-            <goals><goal>install-node-and-npm</goal></goals>
-            <configuration>
-              <nodeVersion>${node.version}</nodeVersion>
-              <npmVersion>${npm.version}</npmVersion>
-            </configuration>
-          </execution>
-          <execution>
-            <id>npm-install</id>
-            <goals><goal>npm</goal></goals>
-            <configuration>
-              <arguments>ci</arguments>
-            </configuration>
-          </execution>
-          <execution>
-            <id>ng-build</id>
-            <goals><goal>npm</goal></goals>
-            <phase>generate-resources</phase>
-            <configuration>
-              <arguments>run build -- --output-path=${frontend.output.directory}</arguments>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Frontend build is gated behind this profile while the Angular project is
+      not yet scaffolded. Activate explicitly:
+        ./scripts/mvn-local.sh -Pfrontend package
+      Once src/main/frontend/ exists and the team is ready to make the frontend
+      part of every build, fold the plugin back into the main build section.
+    -->
+    <profile>
+      <id>frontend</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.eirslett</groupId>
+            <artifactId>frontend-maven-plugin</artifactId>
+            <version>${frontend-maven-plugin.version}</version>
+            <configuration>
+              <workingDirectory>src/main/frontend</workingDirectory>
+              <installDirectory>target</installDirectory>
+            </configuration>
+            <executions>
+              <execution>
+                <id>install-node-and-npm</id>
+                <goals><goal>install-node-and-npm</goal></goals>
+                <configuration>
+                  <nodeVersion>${node.version}</nodeVersion>
+                  <npmVersion>${npm.version}</npmVersion>
+                </configuration>
+              </execution>
+              <execution>
+                <id>npm-install</id>
+                <goals><goal>npm</goal></goals>
+                <configuration>
+                  <arguments>ci</arguments>
+                </configuration>
+              </execution>
+              <execution>
+                <id>ng-build</id>
+                <goals><goal>npm</goal></goals>
+                <phase>generate-resources</phase>
+                <configuration>
+                  <arguments>run build -- --output-path=${frontend.output.directory}</arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

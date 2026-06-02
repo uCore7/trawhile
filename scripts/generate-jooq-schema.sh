@@ -2,6 +2,11 @@
 # Generates the jOOQ DDLDatabase input from spec/schema.sql.
 # This file is a build-only subset of the canonical schema and must not become
 # an independently maintained schema source.
+#
+# Extracts only CREATE TABLE statements and the auth_level ENUM type, in
+# FK-respecting order, so jOOQ's OSS DDLDatabase parser can build the type
+# graph. Runtime PostgreSQL functions, helper CTEs, indexes, and partial
+# unique indexes remain in spec/schema.sql / V1__create_schema.sql.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -51,7 +56,11 @@ mkdir -p "$(dirname "$TARGET_FILE")"
   printf '\n'
   extract_statement "CREATE TABLE users ("
   printf '\n'
+  extract_statement "CREATE TABLE user_oauth_providers ("
+  printf '\n'
   extract_statement "CREATE TABLE user_profile ("
+  printf '\n'
+  extract_statement "CREATE TABLE pending_invitations ("
   printf '\n'
   extract_statement "CREATE TYPE auth_level AS ENUM ('view', 'track', 'admin');"
   printf '\n'
@@ -61,7 +70,13 @@ mkdir -p "$(dirname "$TARGET_FILE")"
   printf '\n'
   extract_statement "CREATE TABLE quick_access ("
   printf '\n'
-  extract_statement "CREATE TABLE requests ("
+  extract_statement "CREATE TABLE api_keys ("
+  printf '\n'
+  extract_statement "CREATE TABLE webhook_subscriptions ("
+  printf '\n'
+  extract_statement "CREATE TABLE webhook_deliveries ("
+  printf '\n'
+  extract_statement "CREATE TABLE purge_jobs ("
 } > "$TMP_FILE"
 
 if [[ -f "$TARGET_FILE" ]] && cmp -s "$TMP_FILE" "$TARGET_FILE"; then

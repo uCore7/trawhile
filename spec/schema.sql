@@ -45,9 +45,9 @@ CREATE INDEX nodes_parent_id_idx ON nodes (parent_id);
 -- ============================================================================
 
 CREATE TABLE users (
-  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  id            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   display_name  TEXT,                                -- NOT NULL on active rows; NULL on anonymised
-  email         TEXT,                                -- NOT NULL on active rows; NULL on anonymised
+  email         VARCHAR(320),                        -- NOT NULL on active rows; NULL on anonymised; RFC 5321 max length
   anonymised_at TIMESTAMPTZ,                         -- non-NULL ⇔ user is anonymised
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CHECK (anonymised_at IS NOT NULL OR display_name IS NOT NULL),
@@ -68,11 +68,11 @@ CREATE UNIQUE INDEX users_active_email_unique
 -- ============================================================================
 
 CREATE TABLE user_oauth_providers (
-  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider  TEXT NOT NULL,                           -- registration id from SR-00-C02.F02
-  subject   TEXT NOT NULL,                           -- OIDC `sub` claim
-  linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  id        UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id   UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider  VARCHAR(255) NOT NULL,                   -- registration id from SR-00-C02.F02
+  subject   VARCHAR(512) NOT NULL,                   -- OIDC `sub` claim
+  linked_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE (provider, subject),
   UNIQUE (user_id, provider)
 );
@@ -97,12 +97,12 @@ CREATE TABLE user_profile (
 -- ============================================================================
 
 CREATE TABLE pending_invitations (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID        NOT NULL UNIQUE REFERENCES users(id),
-  email       TEXT        NOT NULL UNIQUE,
-  invited_by  UUID        REFERENCES users(id) ON DELETE SET NULL,
-  invited_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '90 days'
+  id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID         NOT NULL UNIQUE REFERENCES users(id),
+  email       VARCHAR(320) NOT NULL UNIQUE,                       -- RFC 5321 max length
+  invited_by  UUID         REFERENCES users(id) ON DELETE SET NULL,
+  invited_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  expires_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW() + INTERVAL '90 days'
 );
 
 CREATE INDEX pending_invitations_expires_at_idx ON pending_invitations (expires_at);
@@ -244,14 +244,16 @@ CREATE TABLE api_keys (
   name           TEXT        NOT NULL,
   scope_node_id  UUID        NOT NULL REFERENCES nodes(id),
   scope_level    auth_level  NOT NULL,
-  key_hash       TEXT        NOT NULL UNIQUE,         -- SHA-256 hex of the raw key value
+  key_hash       VARCHAR(64) NOT NULL UNIQUE,         -- SHA-256 hex of the raw key value (exactly 64 hex chars)
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at     TIMESTAMPTZ NOT NULL,
   last_used_at   TIMESTAMPTZ,
   revoked_at     TIMESTAMPTZ,
   CHECK (char_length(name) <= 64),                                          -- SR-08-F01.C01
-  CHECK (expires_at > created_at),
-  CHECK (expires_at <= created_at + INTERVAL '1 year')                      -- SR-08-F01.C02
+  CHECK (expires_at > created_at)
+  -- The 1-year max lifetime (SR-08-F01.C02) is enforced by the application
+  -- service of SR-08-F01.F01 at create time, and the persistence port (SR-08-F03.C02)
+  -- exposes no path that mutates expires_at post-creation; no DB CHECK is needed.
 );
 
 CREATE INDEX api_keys_user_id_idx ON api_keys (user_id);
@@ -312,7 +314,7 @@ CREATE INDEX webhook_deliveries_subscription_idx
 
 CREATE TABLE purge_jobs (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_type        TEXT        NOT NULL UNIQUE,                              -- see comment below for the enum
+  job_type        VARCHAR(64) NOT NULL UNIQUE,                              -- see comment below for the enum
   status          TEXT        NOT NULL DEFAULT 'idle',                      -- 'idle' | 'active'
   cutoff_date     DATE,
   started_at      TIMESTAMPTZ,

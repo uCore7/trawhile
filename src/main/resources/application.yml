@@ -1,4 +1,7 @@
 spring:
+  application:
+    name: trawhile
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/trawhile}
     username: ${SPRING_DATASOURCE_USERNAME:tt}
@@ -8,56 +11,49 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  session:
+    store-type: redis
+    redis:
+      namespace: trawhile:session
+    timeout: 12h   # SR-01-F14.F01: workday-covering inactivity timeout
+
+  # OIDC client registrations are operator-supplied via environment variables.
+  # The deployment must configure at least one registration (SR-00-C02.F01); the
+  # validation in SR-01-F12.F01 fails fast at startup if none is present.
+  # Example (operator sets via env or a mounted application-providers.yml):
+  #
+  #   SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_<id>_CLIENT_ID=...
+  #   SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_<id>_CLIENT_SECRET=...
+  #   SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_<id>_ISSUER_URI=https://...
+  #
+  # Optionally import an operator-mounted registrations file:
+  config:
+    import: optional:file:./config/application-providers.yml
+
 server:
-  port: 8080
-  servlet:
-    session:
-      timeout: 0  # no session timeout
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: native   # trust X-Forwarded-* from Caddy (UR-00-C12)
 
 management:
   server:
-    port: ${MANAGEMENT_PORT:9090}  # SR-F059.F01: management port; not routed through Caddy
+    port: ${MANAGEMENT_PORT:9090}    # SR-00-C19.F01: management port distinct from public 8080
   endpoints:
     web:
       exposure:
         include: prometheus,health
   metrics:
-    export:
-      prometheus:
-        enabled: true
+    tags:
+      application: trawhile
 
-# System configuration (SR-F050.F05). Override in config/application.yml mounted next to docker-compose.yml.
-# Secrets (DB credentials, OAuth client secrets, bootstrap admin email) stay in environment variables.
 trawhile:
-  name: "trawhile"
-  timezone: "UTC"
-  freeze-offset-years: 2        # entries older than this many years become immutable; must be <= retention-years
-  retention-years: 5            # activity purge cutoff in years; minimum 2
-  node-retention-extra-years: 1 # additional years before deactivated nodes are deleted; minimum 0
-  privacy-notice-url: ""        # optional HTTPS URL; leave blank if none
-  oidc:
-    google:
-      client-id: ${GOOGLE_CLIENT_ID:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID:}}
-      client-secret: ${GOOGLE_CLIENT_SECRET:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET:}}
-    apple:
-      # Apple uses OIDC with a JWT client secret (generated from a private key).
-      # client-id: Apple Services ID (e.g. com.example.trawhile)
-      # client-secret: a short-lived JWT signed with the Apple private key.
-      client-id: ${APPLE_CLIENT_ID:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_APPLE_CLIENT_ID:}}
-      client-secret: ${APPLE_CLIENT_SECRET:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_APPLE_CLIENT_SECRET:}}
-    microsoft:
-      # Microsoft Entra ID (Azure AD). Set MICROSOFT_TENANT_ID to your directory tenant ID.
-      # Use 'common' only for multi-tenant apps; for a single company always use the tenant ID.
-      client-id: ${MICROSOFT_CLIENT_ID:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MICROSOFT_CLIENT_ID:}}
-      client-secret: ${MICROSOFT_CLIENT_SECRET:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_MICROSOFT_CLIENT_SECRET:}}
-      tenant-id: ${MICROSOFT_TENANT_ID:common}
-    keycloak:
-      # Keycloak OIDC. Set KEYCLOAK_ISSUER_URI to your realm URL,
-      # e.g. https://keycloak.example.com/realms/company
-      client-id: ${KEYCLOAK_CLIENT_ID:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID:}}
-      client-secret: ${KEYCLOAK_CLIENT_SECRET:${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET:}}
-      issuer-uri: ${KEYCLOAK_ISSUER_URI:}
+  bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}   # SR-01-F01.F01: first-admin bootstrap target
 
 logging:
   level:
     com.trawhile: INFO
+    org.springframework.security: INFO
