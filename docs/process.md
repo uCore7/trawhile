@@ -29,7 +29,7 @@ The process distinguishes between **canonical sources** and **derived artifacts*
 - jOOQ code-generation schema inputs, for example `src/main/resources/db/codegen/jooq-schema.sql`
 - scaffold classes/interfaces and placeholder controllers/services
 - `spec/test-plan.md` baseline rows and ID structure
-- `tasks/tests/*.md`, `tasks/impl/*.md`, and `tasks/cleanup/*.md` scaffolds
+- `.local/tasks/tests/*.md`, `.local/tasks/impl/*.md`, and `.local/tasks/cleanup/*.md` scaffolds
 
 **Rule of preference:** regeneration is preferred over manual patching for derived artifacts. Manual patching is allowed only for small exceptions, generator defects, or deliberate human refinements that are later folded back into generator logic.
 
@@ -309,14 +309,26 @@ This phase creates the executable baseline from the canonical architecture and t
 
 This phase prepares controlled agent execution. The test architect owns test strategy, traceability, and test-task briefs. The tech lead owns implementation-task boundaries, sequencing, and guardrails. The same person may perform both roles, but the responsibilities remain distinct.
 
-**Steps:**
+Each F or Q SR maps to one test task (`.local/tasks/tests/`) and one implementation task (`.local/tasks/impl/`), each run by a single agent. A task typically touches multiple subdirectories — controller, port, service, persistence, frontend feature, translations, tests — across the layers of the hexagonal architecture committed in ADR 0001. The unit of atomicity is the behaviour, not the directory.
 
-1. Create `tasks/00-base-it.md` specifying shared test infrastructure.
-2. Generate baseline `tasks/tests/*.md` files from requirements, test plan, schema, and API contracts; review and refine them in chat mode.
-3. Generate baseline `tasks/impl/*.md` files from requirements, test plan, schema, API contracts, and architecture; review and refine them in chat mode.
-4. Create `tasks/cleanup/*.md` files for implementation alignment work discovered during architecture or requirements review; review and refine them in chat mode.
-5. Add guardrails to every task file.
-6. Add CI boundary checks such as `.github/workflows/agent-guardrails.yml`.
+Parallelism is across tasks, not within one. Each agent runs in its own git worktree, and merges are sequential — the standard PR-based workflow. Conflicts are resolved at merge time, not inside an in-progress run.
+
+The cluster boundary of architecture §5.2.2 (Work / Identity and access / Administration) is the practical axis of parallel-safe partitioning: tasks in disjoint clusters rarely conflict. Cross-cutting tasks (shared test infrastructure, schema migrations consumed by tasks) serialise explicitly.
+
+**Agent pipeline.** Each task runs through a fixed pipeline: a generator agent writes the diff; a verifier agent adversarially reviews it (looking for spec deviation, missed edge cases, contract violations, anti-patterns); a human approves the result. The generator runs a self-correction loop within its own session — execute tests, observe failures, fix, re-execute — until tests pass or the per-task token budget is exhausted; if the budget is hit while still red, the run terminates with a failure summary handed to the human. The verifier is a separate, cheaper agent (lower model tier) whose only deliverable is a structured critique; it does not modify code. Pipelines whose budget exhausts twice in a row escalate to a higher model tier for the third attempt.
+
+**Agent roles and tool restrictions.** Each role is configured at agent-definition level with a model tier, a file scope, and a tool allowlist; CI guardrails verify file-scope adherence at PR time as a backstop.
+
+| Role | Model tier | File scope | Tool allowlist |
+|---|---|---|---|
+| Test writer | Sonnet-class | reads `spec/` and `docs/`; writes `src/test/` only | Read, Edit, Write, Grep, Glob, Bash (test commands only) |
+| Implementation (backend) | Sonnet-class; Opus for tasks flagged as complex | reads `src/test/` and specs; writes `src/main/` only | Read, Edit, Write, Grep, Glob, Bash (build / test / lint) |
+| Implementation (frontend) | Sonnet-class | reads `src/test/` and specs; writes `src/app/` and `src/assets/` only | as backend impl, plus browser-driver tools |
+| Verifier | Haiku-class | reads diff and relevant specs; writes a structured critique only | Read, Grep, Glob; no Edit, Write, or Bash |
+
+**Agent memory and context.** `AGENTS.md` at the project root is the standing context document loaded into every agent's system prompt. It contains: project-wide invariants and anti-patterns, file-location quick map, and pointers to canonical specs. It is maintained alongside the specs themselves and updated when conventions change. Agents read `AGENTS.md` before reading any task brief.
+
+**Test plan structure.** `spec/test-plan.md` rows declare a test type per row: `IT` (integration), `UT` (unit), `SIT` (system integration), and `CT` (contract — runtime verification of OpenAPI conformance for endpoint SRs and PostgreSQL schema match for persistence SRs). Every endpoint SR carries a `CT` row in addition to its `IT` row; `CT` tests pin the spec as the machine-verifiable source of truth and catch silent generator drift from the contract.
 
 **Conventions:**
 
@@ -324,41 +336,48 @@ This phase prepares controlled agent execution. The test architect owns test str
 - Implementation agents read failing tests and canonical docs, but must not modify `src/test/`.
 - Implementation agents must not create or modify Flyway migrations.
 - Backend implementation agents must not modify frontend files unless explicitly assigned a frontend task.
+- Verifier agents must not modify any code; their output is a critique consumed by the human reviewer.
 - Task briefs are derived artifacts; regenerate or update them when SRs, TEs, contracts, schema, architecture decisions, cleanup findings, or epic groupings change, then review before use.
-- Rationale for the two-phase design: when one agent writes both tests and implementation in a single pass, the tests can drift toward the implementation just produced; tests must be derived from specifications, not from production code.
+- Rationale for the generator / verifier split: a separate adversarial reviewer catches spec deviation and missed edge cases at a fraction of generator cost, reducing the burden on human review.
+- Rationale for the test-writer / implementer split: when one agent writes both tests and implementation in a single pass, the tests can drift toward the implementation just produced; tests must be derived from specifications, not from production code.
 
 **Tool:** chat mode. No agents.
 
-**Outputs:** `tasks/00-base-it.md`, `tasks/tests/*.md`, `tasks/impl/*.md`, `tasks/cleanup/*.md`, `.github/workflows/agent-guardrails.yml`
+**Outputs:** `.local/tasks/00-base-it.md`, `.local/tasks/tests/*.md`, `.local/tasks/impl/*.md`, `.local/tasks/cleanup/*.md`, `.github/workflows/agent-guardrails.yml`, agent definitions with role-specific tool allowlists, and an up-to-date `AGENTS.md`.
 
 ---
 
 ## Phase 7 — Implementation Cycles ▶
 
 **Owner:** development team  
-**Contributors:** test agents, implementation agents, lead developer  
+**Contributors:** test agents, implementation agents, verifier agents, lead developer  
 **Reviewers:** tech lead, test architect, software architect as needed
 
-This phase executes the two-phase implementation cycle: tests first, implementation second, with human review between agent runs.
+This phase executes the per-task pipeline defined in Phase 6: a test-writer agent writes failing tests from the specifications, then an implementation agent makes them pass, with a verifier agent critique after each generator run and human approval after the verifier. Tests are written from specifications and never adjusted to match generated implementations.
 
 **Steps, in order:**
 
 | Step | Task | Constraint |
 |---|---|---|
-| 1 | `tasks/00-base-it.md` | Must complete before all others |
-| 2 | `tasks/tests/*.md` | Parallelizable where task dependencies allow |
-| 3 | dependency-critical implementation tasks | Run first when later work depends on their services |
-| 4 | remaining implementation tasks | Parallelizable after prerequisites are merged |
-| 5 | `tasks/cleanup/*.md` | Run when the corresponding ADR/spec cleanup is accepted and prerequisite implementation work is in place |
+| 1 | `.local/tasks/00-base-it.md` | Must complete before all others |
+| 2 | `.local/tasks/tests/*.md` | Parallelisable across disjoint clusters; serialise within a cluster where shared files overlap |
+| 3 | Dependency-critical implementation tasks | Run first when later work depends on their services |
+| 4 | Remaining implementation tasks | Parallelisable after prerequisites are merged; the cluster boundary of architecture §5.2.2 is the practical axis of parallel-safe partitioning |
+| 5 | `.local/tasks/cleanup/*.md` | Run when the corresponding ADR/spec cleanup is accepted and prerequisite implementation work is in place |
 
-**Between each agent run, human responsibility:**
+**Per-task pipeline (per Phase 6):**
 
-- Review the PR diff and verify the agent only touched files within its permitted scope.
-- If a test appears wrong, fix the test task file in chat mode and re-run the test agent; do not let an implementation agent fix tests.
+Each task runs as: generator agent (with a self-correction loop bounded by a per-task token budget — execute tests, observe failures, fix, re-execute, until green or budget exhausted) → verifier agent (adversarial critique, no code modification) → human approval. If the generator's budget exhausts while tests are still red, the run terminates with a failure summary; the human decides whether to re-run, escalate to a higher model tier, or fix the task brief. If the verifier raises substantive concerns, the human decides whether to re-run the generator with the critique as additional context, fix the task brief, or accept the work with caveats.
+
+**Human responsibilities (after the verifier, per task):**
+
+- Review the PR diff alongside the verifier's structured critique.
+- Verify the generator only touched files within its permitted scope (CI guardrails are the backstop).
+- If a test appears wrong, fix the test task brief in chat mode and re-run the test agent; do not let an implementation agent fix tests.
 - After each epic goes green, run the full relevant test suite to catch cross-epic regressions.
 - Schema changes happen in chat mode: update `spec/schema.sql`, regenerate derived schema artifacts, and review the generated diff.
 
-**Tool:** agents for implementation; chat mode for corrections, schema changes, and task changes.
+**Tool:** agents for the generator and verifier roles; chat mode for corrections, schema changes, task brief edits, and final approval.
 
 ---
 
@@ -368,15 +387,15 @@ This phase executes the two-phase implementation cycle: tests first, implementat
 **Contributors:** frontend agents, test architect, software architect  
 **Reviewers:** product owner for user-facing behavior, software architect for architecture consistency
 
-This phase applies the same two-phase agent pattern to frontend work.
+This phase applies the same per-task pipeline (generator + verifier + human, per Phase 6) to frontend work.
 
 **Steps:**
 
-1. Create `tasks/tests/1x-frontend.md` files for frontend epics, covering CT and E2E tests from the test plan.
-2. Create `tasks/impl/1x-frontend.md` files for frontend epics.
-3. Adapt guardrails for `src/main/frontend/` paths.
-4. Run frontend test-agent and implementation-agent cycles.
+1. Create `.local/tasks/tests/1x-frontend.md` files for frontend epics, covering CT and E2E tests from the test plan.
+2. Create `.local/tasks/impl/1x-frontend.md` files for frontend epics, scoped to the frontend implementation agent role from Phase 6 (writes `src/app/` and `src/assets/`).
+3. Adapt CI guardrails for frontend paths.
+4. Run frontend test-agent → verifier and implementation-agent → verifier cycles per Phase 6.
 
 **Note:** TE IDs for frontend tests are reserved in `spec/test-plan.md`. The same traceability rules apply as backend tests.
 
-**Tool:** agents; same two-phase pattern as backend.
+**Tool:** agents; same per-task pipeline as backend.

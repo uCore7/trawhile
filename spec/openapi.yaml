@@ -1,2684 +1,1565 @@
 openapi: 3.1.0
 info:
-  title: Trawhile API
+  title: trawhile API
   version: 0.1.0
   description: |
-    REST API for the self-hosted time tracking application.
-    One instance = one company.
+    REST API surface for trawhile. Authoritative source: this document.
 
-    **Authentication**: Spring Security session cookie (`JSESSIONID`, HttpOnly, SameSite=Strict).
-    All endpoints require an authenticated session unless `security: []` is noted.
-    OIDC login flows (Google, Apple, Microsoft Entra ID, Keycloak) are handled by Spring Security at
-    `/oauth2/authorization/{provider}` and `/login/oauth2/code/{provider}` — not documented here.
+    Two authentication modes:
+      - OIDC-authenticated browser session (cookie-based).
+      - API key (Bearer token in the `Authorization` header). API keys carry a scope
+        (single `(node, level)` pair) and an expiry; see SR-08-F01.
 
-    **Authorization**: Recursive. A grant on node N is effective on N and all descendants.
-    Levels: `view` ⊂ `track` ⊂ `admin`. Only Node Admins (effective `admin`) may grant or
-    revoke authorizations.
+    Endpoint classification (per UR-00-C08):
+      - Session-only endpoints: `/api/account/me/**` and other Account Holder operations.
+      - Mixed endpoints (session OR API key): `/api/nodes/**`, `/api/tracking/**`,
+        `/api/reports/**`, `/api/about`, `/api/about/openapi`.
+      - Admin endpoints: session-only, require effective `admin` on the root node.
 
-    **Errors**: All error responses use `{ code, message }`. Rate-limited requests return 429.
+    All timestamps are ISO 8601 UTC instants (UR-00-C10). User-local time-window
+    semantics are the frontend's responsibility per ADR 0019; report endpoints
+    accept a caller-supplied IANA TZ parameter for bucket alignment.
 
-    **SSE**: Live state is pushed via `GET /api/v1/events`. See that endpoint for event types.
+    Error responses follow RFC 7807 Problem Details (SR-00-C18.C01). The backend
+    emits no localised text; the frontend maps stable error codes to user-facing
+    strings in the active dialect.
+
 servers:
-  - url: /api/v1
+  - url: /
+    description: Same origin as the SPA.
+
 security:
-  - sessionCookie: []
+  - oidcSession: []
+  - apiKey: []
+
 tags:
-  - name: auth
-  - name: settings
-  - name: users
-  - name: invitations
-  - name: nodes
-  - name: authorizations
-  - name: requests
-  - name: tracking
-  - name: time-records
-  - name: quick-access
-  - name: reports
   - name: account
-  - name: mcp
-    description: MCP access token management
-  - name: security-events
-    description: System Admin only
+    description: Account Holder operations on the caller's own data (session-only).
+  - name: nodes
+    description: Node tree read and administration.
+  - name: tracking
+    description: Time-record tracking and history.
+  - name: reports
+    description: Aggregate reports.
+  - name: admin
+    description: System Admin operations (effective admin on root).
   - name: about
+    description: Authenticated transparency surface.
   - name: events
-    description: SSE live sync
+    description: Server-Sent Events live-update channel.
+
+paths:
+
+  ## Account
+
+  /api/account/me:
+    get:
+      tags: [account]
+      summary: Get the authenticated user's own profile (SR-05-F01.F01).
+      security:
+        - oidcSession: []
+      responses:
+        '200': { $ref: '#/components/responses/OwnProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/account/me/authorizations:
+    get:
+      tags: [account]
+      summary: Get the authenticated user's explicit node-authorization assignments (SR-05-F04.F01).
+      security:
+        - oidcSession: []
+      responses:
+        '200': { $ref: '#/components/responses/AuthorizationsList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/account/me/anonymise:
+    post:
+      tags: [account]
+      summary: Self-anonymise the authenticated user (SR-05-F05.F01).
+      description: |
+        Requires a fresh OIDC step-up event in the session within the last 5 minutes
+        (SR-05-F05.F02). On success the user-termination cleanup of SR-07-F01.F01
+        runs in a single transaction; the operation is irreversible.
+      security:
+        - oidcSession: []
+      responses:
+        '204':
+          description: Anonymisation complete; session terminated.
+        '401':
+          description: No fresh step-up event in session; redirect the user through SR-05-F05.F02 step 2.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/account/oidc-providers/link/{provider}:
+    post:
+      tags: [account]
+      summary: Initiate OIDC provider linking flow (SR-05-F02.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderRegistrationId'
+      responses:
+        '302':
+          description: Redirect to the OIDC provider's authorization endpoint.
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/account/oidc-providers/{provider}:
+    delete:
+      tags: [account]
+      summary: Unlink an OIDC provider from the authenticated user (SR-05-F03.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderRegistrationId'
+      responses:
+        '204': { description: Provider unlinked. }
+        '409':
+          description: Unlinking would leave the user with zero linked providers.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/account/me/quick-access:
+    get:
+      tags: [account]
+      summary: List the caller's quick-access entries (SR-03-F07.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Quick-access entries in `sort_order`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/QuickAccessEntry' }
+    post:
+      tags: [account]
+      summary: Add a node to the caller's quick-access list (SR-03-F07.F02).
+      security:
+        - oidcSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeId]
+              properties:
+                nodeId: { type: string, format: uuid }
+      responses:
+        '201': { description: Entry added. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/account/me/quick-access/{nodeId}:
+    delete:
+      tags: [account]
+      summary: Remove a node from the caller's quick-access list (SR-03-F07.F02).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/NodeIdPath'
+      responses:
+        '204': { description: Entry removed. }
+
+  /api/account/me/quick-access/order:
+    put:
+      tags: [account]
+      summary: Reorder the caller's quick-access entries (SR-03-F07.F02).
+      security:
+        - oidcSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderedNodeIds]
+              properties:
+                orderedNodeIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '204': { description: Order updated. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/account/me/api-keys:
+    get:
+      tags: [account]
+      summary: List the caller's API keys (SR-08-F02.F01).
+      security:
+        - oidcSession: []
+      responses:
+        '200':
+          description: Array of API key descriptors. Raw key value is never returned here.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApiKey' }
+    post:
+      tags: [account]
+      summary: Create a new API key (SR-08-F01.F01).
+      description: |
+        Returns the raw key value exactly once in the response body alongside the new
+        key UUID. The raw key is never recoverable afterward; only its SHA-256 hash
+        is persisted.
+      security:
+        - oidcSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApiKeyCreateRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ApiKeyCreated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/account/me/api-keys/{id}/revoke:
+    post:
+      tags: [account]
+      summary: Revoke one of the caller's API keys (SR-08-F03.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Key revoked (or already revoked — no-op success). }
+
+  /api/account/me/webhook-subscriptions:
+    get:
+      tags: [account]
+      summary: List the caller's webhook subscriptions (SR-03-F12.F03).
+      security:
+        - oidcSession: []
+      responses:
+        '200':
+          description: Array of subscription descriptors.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WebhookSubscription' }
+    post:
+      tags: [account]
+      summary: Create a webhook subscription (SR-03-F12.F03).
+      description: |
+        Returns the raw signing secret exactly once in the response body. The raw
+        secret is never recoverable afterward; only its hash is persisted.
+      security:
+        - oidcSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookSubscriptionCreateRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/WebhookSubscriptionCreated' }
+
+  /api/account/me/webhook-subscriptions/{id}:
+    patch:
+      tags: [account]
+      summary: Update a webhook subscription (SR-03-F12.F03).
+      description: |
+        Supported updates: `endpointUrl`, `status`, and signing-secret rotation
+        (`rotateSecret: true`). When `rotateSecret` is true the response carries
+        the new raw secret exactly once.
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookSubscriptionPatchRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/WebhookSubscriptionUpdated' }
+    delete:
+      tags: [account]
+      summary: Revoke a webhook subscription (SR-03-F12.F03).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Subscription revoked. }
+
+  /api/account/me/report-filters:
+    get:
+      tags: [account]
+      summary: Get the caller's last saved report-filter state (SR-04-F07.F01).
+      security:
+        - oidcSession: []
+      responses:
+        '200':
+          description: The saved filter document, or `null` if none has been saved.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/ReportFilters' }
+                  - { type: 'null' }
+    put:
+      tags: [account]
+      summary: Upsert the caller's report-filter state (SR-04-F07.F02).
+      security:
+        - oidcSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportFilters' }
+      responses:
+        '204': { description: Filters saved. }
+
+  ## Nodes
+
+  /api/nodes/tree:
+    get:
+      tags: [nodes]
+      summary: Return the caller's full visible node tree (SR-02-F01.F01).
+      description: |
+        Each node carries full attributes including the caller's effective
+        authorization level. The same shape is the payload of the `NodeTreeChanged`
+        snapshot SSE event (ADR 0017).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Nested tree of visible nodes.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NodeTree' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/nodes/{parentId}/children:
+    post:
+      tags: [nodes]
+      summary: Create a child node (SR-02-F02.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName]
+              properties:
+                displayName: { type: string }
+                description: { type: [string, "null"] }
+                color: { type: [string, "null"] }
+                icon: { type: [string, "null"] }
+      responses:
+        '201':
+          description: The created node.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Node' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/nodes/{id}:
+    patch:
+      tags: [nodes]
+      summary: Edit a node's attributes (SR-02-F03.F01).
+      description: |
+        Field omission means "no change"; explicit `null` clears the field on the
+        node row. The `logo` field carries base64-encoded image bytes plus declared
+        MIME type; size and MIME checks of SR-02-F03.F02 fire before persistence.
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NodePatchRequest' }
+      responses:
+        '200':
+          description: Updated node.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Node' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+
+  /api/nodes/{id}/children/order:
+    put:
+      tags: [nodes]
+      summary: Reorder the direct children of a node (SR-02-F04.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderedChildIds]
+              properties:
+                orderedChildIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        '204': { description: Order updated. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/nodes/{id}/deactivate:
+    post:
+      tags: [nodes]
+      summary: Deactivate a node (SR-02-F05.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Node deactivated. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/nodes/{id}/reactivate:
+    post:
+      tags: [nodes]
+      summary: Reactivate a node (SR-02-F05.F02).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Node reactivated. }
+
+  /api/nodes/{id}/move:
+    post:
+      tags: [nodes]
+      summary: Move a node to a new parent (SR-02-F06.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destinationParentId]
+              properties:
+                destinationParentId: { type: string, format: uuid }
+      responses:
+        '204': { description: Node moved. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/nodes/{nodeId}/authorizations:
+    get:
+      tags: [nodes]
+      summary: List effective authorization grants on a node (SR-02-F09.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/NodeIdPath'
+      responses:
+        '200':
+          description: Effective authorization rows on the node.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/NodeAuthorizationEntry' }
+    post:
+      tags: [nodes]
+      summary: Grant a node-authorization to a user (SR-02-F07.F01).
+      description: |
+        Upserts the `(user_id, node_id)` direct grant to the requested level
+        (raise, lower, or keep). Inherited grants from ancestors are not affected.
+        Granting to self is forbidden by the no-self-CRUD key invariant.
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/NodeIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, level]
+              properties:
+                userId: { type: string, format: uuid }
+                level: { $ref: '#/components/schemas/AuthLevel' }
+      responses:
+        '204': { description: Grant applied. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/nodes/{nodeId}/authorizations/{userId}:
+    delete:
+      tags: [nodes]
+      summary: Revoke a node-authorization grant (SR-02-F08.F01).
+      description: |
+        Cannot revoke the caller's own grant (no-self-CRUD key invariant).
+        Cannot leave the node without an effective admin (combining direct +
+        inherited grants).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/NodeIdPath'
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Grant revoked. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  ## Tracking
+
+  /api/tracking/current:
+    get:
+      tags: [tracking]
+      summary: Get the caller's currently-open time record (SR-03-F01.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Current open record, or `null` if no open record exists.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/OpenTimeRecord' }
+                  - { type: 'null' }
+
+  /api/tracking/history:
+    get:
+      tags: [tracking]
+      summary: List the caller's closed time records in descending startedAt (SR-03-F02.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Array of closed time records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ClosedTimeRecord' }
+
+  /api/tracking/start:
+    post:
+      tags: [tracking]
+      summary: Start tracking time on a node (SR-03-F03.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartTrackingRequest' }
+      responses:
+        '201':
+          description: New open record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpenTimeRecord' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tracking/switch:
+    post:
+      tags: [tracking]
+      summary: Atomically stop the current record and start a new one on another node (SR-03-F05.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartTrackingRequest' }
+      responses:
+        '201':
+          description: New open record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpenTimeRecord' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tracking/stop:
+    post:
+      tags: [tracking]
+      summary: Stop the caller's open time record (SR-03-F06.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '204': { description: Open record closed. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tracking/records:
+    post:
+      tags: [tracking]
+      summary: Create a closed (retroactive) time record (SR-03-F08.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateClosedRecordRequest' }
+      responses:
+        '201':
+          description: Created closed record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClosedTimeRecord' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/tracking/records/{id}:
+    patch:
+      tags: [tracking]
+      summary: Edit a time record owned by the caller (SR-03-F09.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeRecordPatchRequest' }
+      responses:
+        '200':
+          description: Updated record.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/OpenTimeRecord' }
+                  - { $ref: '#/components/schemas/ClosedTimeRecord' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [tracking]
+      summary: Delete a time record owned by the caller (SR-03-F10.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Record deleted. }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/tracking/records/{id}/duplicate:
+    post:
+      tags: [tracking]
+      summary: Duplicate a time record with new timestamps (SR-03-F11.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [startedAt, endedAt]
+              properties:
+                startedAt: { type: string, format: date-time }
+                endedAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Duplicated record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClosedTimeRecord' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  ## Reports
+
+  /api/reports/aggregate:
+    get:
+      tags: [reports]
+      summary: Aggregate time-tracking report for the caller (SR-04-F01.F01).
+      description: |
+        Caller-supplied `tz` is used by the backend for bucket alignment per ADR 0019.
+        Period selectors (YTD, MTD, etc.) are resolved by the frontend into `from`/`to`.
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportBucketSize'
+        - $ref: '#/components/parameters/ReportTz'
+        - name: nodeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: mode
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [summary, detailed]
+      responses:
+        '200':
+          description: Aggregate report rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AggregateRow' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/reports/member-summaries:
+    get:
+      tags: [reports]
+      summary: Member time-summary report across visible peers (SR-04-F04.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/ReportBucketSize'
+        - $ref: '#/components/parameters/ReportTz'
+        - name: nodeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Member-summary rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MemberSummaryRow' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  ## Admin (effective admin on root, session-only)
+
+  /api/admin/users:
+    get:
+      tags: [admin]
+      summary: List all registered users (SR-01-F02.F01).
+      security:
+        - oidcSession: []
+      responses:
+        '200':
+          description: Complete user list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminUserRow' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/users/{id}/remove:
+    post:
+      tags: [admin]
+      summary: Remove (anonymise) a user (SR-01-F06.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: User removed (cleanup executed). }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/users/{id}/authorizations:
+    get:
+      tags: [admin]
+      summary: List a user's explicit node-authorization assignments (SR-01-F07.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200': { $ref: '#/components/responses/AuthorizationsList' }
+    post:
+      tags: [admin]
+      summary: Grant a node-authorization on behalf of the target user (SR-01-F07.F02).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nodeId, level]
+              properties:
+                nodeId: { type: string, format: uuid }
+                level: { $ref: '#/components/schemas/AuthLevel' }
+      responses:
+        '204': { description: Grant applied. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/users/{id}/authorizations/{nodeId}:
+    delete:
+      tags: [admin]
+      summary: Revoke a node-authorization grant on behalf of the target user (SR-01-F07.F02).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Grant revoked. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/users/lookup:
+    get:
+      tags: [admin]
+      summary: Look up a user by UUID, OIDC subject, or email (SR-06-F05.F01/F02/F03).
+      security:
+        - oidcSession: []
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: provider
+          in: query
+          required: false
+          schema: { type: string }
+        - name: subject
+          in: query
+          required: false
+          schema: { type: string }
+        - name: email
+          in: query
+          required: false
+          schema: { type: string, format: email }
+      responses:
+        '200':
+          description: Lookup result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminLookupResponse' }
+        '404':
+          description: No matching user or pending invitation.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/admin/invitations:
+    get:
+      tags: [admin]
+      summary: List pending invitations (SR-01-F03.F01).
+      security:
+        - oidcSession: []
+      responses:
+        '200':
+          description: Pending invitations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Invitation' }
+    post:
+      tags: [admin]
+      summary: Create an invitation (SR-01-F04.F01).
+      security:
+        - oidcSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '201': { $ref: '#/components/responses/InvitationCreated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/invitations/{id}:
+    delete:
+      tags: [admin]
+      summary: Withdraw a pending invitation (SR-01-F05.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Invitation withdrawn. }
+
+  /api/admin/invitations/{id}/resend:
+    post:
+      tags: [admin]
+      summary: Resend a pending invitation, refreshing its expiry (SR-01-F08.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200': { $ref: '#/components/responses/InvitationCreated' }
+
+  /api/admin/api-keys:
+    get:
+      tags: [admin]
+      summary: List all API keys across all users (SR-08-F05.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - name: nameFilter
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Admin API-key view.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminApiKeyRow' }
+
+  /api/admin/api-keys/{id}/revoke:
+    post:
+      tags: [admin]
+      summary: Revoke any API key as admin (SR-08-F06.F01).
+      security:
+        - oidcSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204': { description: Key revoked. }
+
+  ## About (transparency surface)
+
+  /api/about:
+    get:
+      tags: [about]
+      summary: About-page transparency document (SR-05-F06.F01).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Transparency document.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AboutDocument' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/about/openapi:
+    get:
+      tags: [about]
+      summary: Download the running application's OpenAPI specification (SR-05-F06.F02).
+      security:
+        - oidcSession: []
+        - apiKey: []
+      responses:
+        '200':
+          description: OpenAPI YAML.
+          content:
+            application/yaml:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  ## Live updates (SSE)
+
+  /api/events:
+    get:
+      tags: [events]
+      summary: Subscribe to the caller's live-update stream (architecture §6.3).
+      description: |
+        Standard SSE response (`text/event-stream`). Snapshot events carry the same
+        payload shape as the corresponding REST query for the recipient's visible
+        slice; command events describe an action whose effect cannot be derived
+        from current state (ADR 0017).
+      security:
+        - oidcSession: []
+      responses:
+        '200':
+          description: SSE stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+
 components:
+
   securitySchemes:
-    sessionCookie:
+    oidcSession:
       type: apiKey
       in: cookie
-      name: JSESSIONID
+      name: SESSION
+      description: Spring Session cookie (Redis-backed) issued by the OIDC callback flow.
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: API_KEY
+      description: API key issued via SR-08-F01.F01. Scope and expiry are pinned at creation.
+
+  parameters:
+
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    NodeIdPath:
+      name: nodeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    ProviderRegistrationId:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string }
+      description: Spring Security OAuth2 client registration id, as configured per SR-00-C02.F02.
+
+    ReportFrom:
+      name: from
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+      description: UTC instant for the report period start (frontend-computed from the user-local period; ADR 0019).
+
+    ReportTo:
+      name: to
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+      description: UTC instant for the report period end.
+
+    ReportBucketSize:
+      name: bucketSize
+      in: query
+      required: true
+      schema: { $ref: '#/components/schemas/BucketSize' }
+
+    ReportTz:
+      name: tz
+      in: query
+      required: true
+      schema: { type: string }
+      description: IANA time-zone identifier used by the backend for bucket alignment (`date_trunc(bucketSize AT TIME ZONE tz)`). Validated against `pg_timezone_names`.
+
+  responses:
+
+    OwnProfile:
+      description: The authenticated user's profile.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OwnProfile' }
+
+    AuthorizationsList:
+      description: Explicit node-authorization assignments.
+      content:
+        application/json:
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ExplicitAuthorization' }
+
+    ApiKeyCreated:
+      description: |
+        New API key. The raw key value is returned exactly once here and never
+        recoverable afterward.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/ApiKey' }
+              - type: object
+                required: [rawKey]
+                properties:
+                  rawKey: { type: string, description: Opaque raw key value. }
+
+    WebhookSubscriptionCreated:
+      description: |
+        New webhook subscription. The signing secret is returned exactly once.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/WebhookSubscription' }
+              - type: object
+                required: [signingSecret]
+                properties:
+                  signingSecret: { type: string }
+
+    WebhookSubscriptionUpdated:
+      description: |
+        Updated webhook subscription. When the request included `rotateSecret: true`
+        the response carries the new signing secret.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/WebhookSubscription' }
+              - type: object
+                properties:
+                  signingSecret: { type: string, description: Present only when the secret was rotated. }
+
+    InvitationCreated:
+      description: Created invitation + mailto link.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [invitation, mailtoUrl]
+            properties:
+              invitation: { $ref: '#/components/schemas/Invitation' }
+              mailtoUrl: { type: string, format: uri }
+
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+    Unauthorized:
+      description: Authentication required.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+    Forbidden:
+      description: Caller lacks required authorization on the affected resource.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+    Conflict:
+      description: Business rule violated (HTTP 409 with stable error code).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+    PayloadTooLarge:
+      description: Logo or other binary payload exceeds the documented size cap.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+    UnsupportedMediaType:
+      description: Declared MIME type is not one of the allowed image types.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
   schemas:
-    Problem:
-      type: object
-      required:
-        - code
-        - message
-      properties:
-        code:
-          type: string
-          example: LAST_ADMIN
-        message:
-          type: string
-          example: Cannot revoke the last admin authorization on this node
+
     AuthLevel:
       type: string
-      enum:
-        - view
-        - track
-        - admin
-    NodePathEntry:
+      enum: [view, track, admin]
+
+    BucketSize:
+      type: string
+      enum: [hour, day, week, month, year]
+
+    Problem:
       type: object
-      required:
-        - id
-        - name
+      description: RFC 7807 Problem Details. Backend returns stable locale-neutral error codes; the frontend renders the user-facing string.
       properties:
-        id:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code:
           type: string
-          format: uuid
-        name:
-          type: string
-    NodeSummary:
+          description: Stable locale-neutral error code consumed by the frontend.
+
+    UserReference:
       type: object
-      required:
-        - id
-        - name
-        - isActive
-        - sortOrder
-        - hasActiveChildren
+      description: A user reference suitable for embedding in other responses. `displayName` and `email` are `null` for anonymised users (SR-00-C11.F02).
+      required: [id]
       properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type:
-            - string
-            - 'null'
-        isActive:
-          type: boolean
-        sortOrder:
-          type: integer
-        hasActiveChildren:
-          type: boolean
-        effectiveAuthorization:
-          oneOf:
-            - $ref: '#/components/schemas/AuthLevel'
-            - type: 'null'
-          description: Null if user has no grant on this node or any ancestor
-        color:
-          type:
-            - string
-            - 'null'
-          description: CSS hex color e.g. '#4A90D9'
-        icon:
-          type:
-            - string
-            - 'null'
-          description: PrimeIcons identifier e.g. 'pi-briefcase'
-        logoUrl:
-          type:
-            - string
-            - 'null'
-          description: URL to GET /nodes/{nodeId}/logo; null if no logo uploaded
-    Node:
+        id: { type: string, format: uuid }
+        displayName: { type: [string, "null"] }
+        email: { type: [string, "null"], format: email }
+
+    OwnProfile:
       type: object
-      required:
-        - id
-        - name
-        - isActive
-        - sortOrder
-        - createdAt
-        - ancestorPath
-        - children
+      required: [id, displayName, email, linkedProviders, status]
       properties:
-        id:
-          type: string
-          format: uuid
-        parentId:
-          type:
-            - string
-            - 'null'
-          format: uuid
-        name:
-          type: string
-        description:
-          type:
-            - string
-            - 'null'
-        isActive:
-          type: boolean
-        sortOrder:
-          type: integer
-        createdAt:
-          type: string
-          format: date-time
-        deactivatedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        effectiveAuthorization:
-          oneOf:
-            - $ref: '#/components/schemas/AuthLevel'
-            - type: 'null'
-        color:
-          type:
-            - string
-            - 'null'
-          description: CSS hex color e.g. '#4A90D9'
-        icon:
-          type:
-            - string
-            - 'null'
-          description: PrimeIcons identifier e.g. 'pi-briefcase'
-        logoUrl:
-          type:
-            - string
-            - 'null'
-          description: URL to GET /nodes/{nodeId}/logo; null if no logo uploaded
-        ancestorPath:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        email: { type: string, format: email }
+        linkedProviders:
           type: array
-          description: |
-            Path entries from root to parent (inclusive). Included for navigation context even
-            if the user cannot see some ancestors. Those are rendered as non-interactive crumbs.
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        children:
-          type: array
-          description: Direct children visible to the requesting user
-          items:
-            $ref: '#/components/schemas/NodeSummary'
-    NodeAuthorization:
-      type: object
-      required:
-        - userId
-        - userName
-        - authorization
-        - inherited
-      properties:
-        userId:
-          type: string
-          format: uuid
-        userName:
-          type: string
-          description: Fixed placeholder string if user is anonymised
-        authorization:
-          $ref: '#/components/schemas/AuthLevel'
-        inherited:
-          type: boolean
-          description: True if the grant originates on an ancestor node, not this node directly
-        inheritedFromNodeId:
-          type:
-            - string
-            - 'null'
-          format: uuid
-          description: The ancestor node where the grant originates; null if direct
-    UserSummary:
-      type: object
-      required:
-        - id
-        - status
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type:
-            - string
-            - 'null'
-          description: Profile name if active; invitation email if pending; fixed placeholder if anonymised
+          items: { type: string }
         status:
           type: string
-          enum:
-            - pending
-            - active
-            - anonymised
-    PendingInvitation:
+          enum: [active]
+
+    AdminUserRow:
       type: object
-      required:
-        - id
-        - userId
-        - email
-        - invitedBy
-        - invitedAt
-        - expiresAt
+      required: [id, displayName, status, providerCount, grantCount, createdAt]
       properties:
-        id:
-          type: string
-          format: uuid
-          description: Pending invitation record ID
-        userId:
-          type: string
-          format: uuid
-          description: The invitee's user record ID; use this to grant node authorizations before first login
-        email:
-          type: string
-          format: email
-        invitedBy:
-          $ref: '#/components/schemas/UserSummary'
-        invitedAt:
-          type: string
-          format: date-time
-        expiresAt:
-          type: string
-          format: date-time
-          description: Invitation automatically expires at this time (90 days after creation)
-    SystemSettings:
-      type: object
-      required:
-        - name
-        - timezone
-        - freezeOffsetYears
-        - effectiveFreezeCutoff
-        - retentionYears
-        - nodeRetentionExtraYears
-      properties:
-        name:
-          type: string
-          description: Instance name displayed in the UI
-        timezone:
-          type: string
-          description: IANA timezone identifier; reference for date boundaries in reports and purge cutoff evaluation
-          example: Europe/Zurich
-        freezeOffsetYears:
-          type: integer
-          minimum: 0
-          description: Entries older than this many years are immutable (cannot be edited or deleted)
-        effectiveFreezeCutoff:
-          type: string
-          format: date-time
-          description: Computed as NOW() minus freezeOffsetYears; returned for display convenience
-        retentionYears:
-          type: integer
-          minimum: 2
-          description: Activity records and requests older than this are permanently deleted on the next purge
-        nodeRetentionExtraYears:
-          type: integer
-          minimum: 0
-          description: Deactivated nodes are kept for this many additional years beyond retentionYears before deletion
-        privacyNoticeUrl:
-          type:
-            - string
-            - 'null'
-          description: HTTPS URL to the company Privacy Notice; shown to authenticated users with at least one effective node authorization
-    TimeRecord:
-      type: object
-      required:
-        - id
-        - userId
-        - nodeId
-        - nodePath
-        - startedAt
-        - timezone
-        - createdAt
-        - overlapping
-        - hasGapBefore
-      properties:
-        id:
-          type: string
-          format: uuid
-        userId:
-          type: string
-          format: uuid
-        nodeId:
-          type: string
-          format: uuid
-        nodePath:
-          type: array
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        startedAt:
-          type: string
-          format: date-time
-        endedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-          description: Null if this is the currently active record
-        timezone:
-          type: string
-          description: IANA timezone captured from browser at tracking start
-        description:
-          type:
-            - string
-            - 'null'
-          description: Optional short note written by the member
-        createdAt:
-          type: string
-          format: date-time
-        overlapping:
-          type: boolean
-        hasGapBefore:
-          type: boolean
-          description: True if there is untracked time between the previous record's endedAt and this record's startedAt
-    TrackingStatus:
-      type: object
-      required:
-        - active
-      properties:
-        active:
-          type: boolean
-        recordId:
-          type:
-            - string
-            - 'null'
-          format: uuid
-        nodeId:
-          type:
-            - string
-            - 'null'
-          format: uuid
-        nodePath:
-          type:
-            - array
-            - 'null'
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        startedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        timezone:
-          type:
-            - string
-            - 'null'
-        elapsedSeconds:
-          type:
-            - integer
-            - 'null'
-          description: Computed server-side as NOW() - startedAt in seconds
-    QuickAccessEntry:
-      type: object
-      required:
-        - nodeId
-        - nodePath
-        - sortOrder
-        - nonTrackable
-      properties:
-        nodeId:
-          type: string
-          format: uuid
-        nodePath:
-          type: array
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        sortOrder:
-          type: integer
-        nonTrackable:
-          type: boolean
-          description: True if node is deactivated or has active children
-        color:
-          type:
-            - string
-            - 'null'
-          description: Company-wide color set by Node Admin (CSS hex e.g. '#4A90D9')
-        icon:
-          type:
-            - string
-            - 'null'
-          description: PrimeIcons identifier e.g. 'pi-briefcase'
-        logoUrl:
-          type:
-            - string
-            - 'null'
-          description: URL to GET /nodes/{nodeId}/logo; null if no logo uploaded
-    ReportSummaryEntry:
-      type: object
-      required:
-        - nodeId
-        - nodePath
-        - totalSeconds
-      properties:
-        nodeId:
-          type: string
-          format: uuid
-        nodePath:
-          type: array
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        totalSeconds:
-          type: integer
-    ReportDetailEntry:
-      type: object
-      required:
-        - id
-        - userId
-        - userName
-        - nodeId
-        - nodePath
-        - startedAt
-        - timezone
-        - overlapping
-        - hasGapBefore
-      properties:
-        id:
-          type: string
-          format: uuid
-        userId:
-          type: string
-          format: uuid
-        userName:
-          type:
-            - string
-            - 'null'
-          description: Null if user is anonymised
-        nodeId:
-          type: string
-          format: uuid
-        nodePath:
-          type: array
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        startedAt:
-          type: string
-          format: date-time
-        endedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        timezone:
-          type: string
-        description:
-          type:
-            - string
-            - 'null'
-          description: Optional short note written by the member
-        overlapping:
-          type: boolean
-        hasGapBefore:
-          type: boolean
-          description: True if there is untracked time between the previous record's endedAt and this record's startedAt
-    Report:
-      type: object
-      required:
-        - mode
-      properties:
-        mode:
-          type: string
-          enum:
-            - summary
-            - detailed
-        summary:
-          type:
-            - array
-            - 'null'
-          items:
-            $ref: '#/components/schemas/ReportSummaryEntry'
-        detailed:
-          type:
-            - array
-            - 'null'
-          items:
-            $ref: '#/components/schemas/ReportDetailEntry'
-    MemberSummaryBucket:
-      type: object
-      required:
-        - periodStart
-        - periodEnd
-        - totalSeconds
-        - hasDataQualityIssues
-      properties:
-        periodStart:
-          type: string
-          format: date
-          description: Inclusive start of the period in company timezone
-        periodEnd:
-          type: string
-          format: date
-          description: Inclusive end of the period in company timezone
-        totalSeconds:
-          type: integer
-        hasDataQualityIssues:
-          type: boolean
-          description: True if the member's records for this period contain overlaps or gaps
-    MemberSummary:
-      type: object
-      required:
-        - userId
-        - userName
-        - buckets
-      properties:
-        userId:
-          type: string
-          format: uuid
-        userName:
-          type:
-            - string
-            - 'null'
-          description: Null if user is anonymised
-        buckets:
-          type: array
-          items:
-            $ref: '#/components/schemas/MemberSummaryBucket'
-    RequestRecord:
-      type: object
-      required:
-        - id
-        - requesterId
-        - requesterName
-        - nodeId
-        - template
-        - status
-        - createdAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        requesterId:
-          type: string
-          format: uuid
-        requesterName:
-          type:
-            - string
-            - 'null'
-        nodeId:
-          type: string
-          format: uuid
-        template:
-          type: string
-          enum:
-            - grant_authorization
-            - create_child_node
-            - free_text
-        body:
-          type:
-            - string
-            - 'null'
+        id: { type: string, format: uuid }
+        displayName: { type: [string, "null"] }
+        email: { type: [string, "null"], format: email }
         status:
           type: string
-          enum:
-            - open
-            - closed
-        createdAt:
-          type: string
-          format: date-time
-        resolvedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        resolvedBy:
-          type:
-            - string
-            - 'null'
-          format: uuid
-        resolvedByName:
-          type:
-            - string
-            - 'null'
-    UserAuthorization:
+          enum: [pending, active, anonymised]
+        providerCount: { type: integer }
+        grantCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        lastActiveAt: { type: [string, "null"], format: date-time }
+
+    AdminLookupResponse:
       type: object
-      required:
-        - nodeId
-        - nodePath
-        - authorization
+      required: [id, status]
       properties:
-        nodeId:
+        id: { type: string, format: uuid }
+        displayName: { type: [string, "null"] }
+        email: { type: [string, "null"], format: email }
+        status:
           type: string
-          format: uuid
-        nodePath:
-          type: array
-          items:
-            $ref: '#/components/schemas/NodePathEntry'
-        authorization:
-          $ref: '#/components/schemas/AuthLevel'
-    SecurityEvent:
-      type: object
-      required:
-        - id
-        - eventType
-        - occurredAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        userId:
-          type:
-            - string
-            - 'null'
-          format: uuid
-        userName:
-          type:
-            - string
-            - 'null'
-        eventType:
-          type: string
-          enum:
-            - OAUTH_LOGIN_SUCCESS
-            - OAUTH_LOGIN_FAILED
-            - NODE_ADMIN_GRANTED
-            - NODE_ADMIN_REVOKED
-            - ACCOUNT_ANONYMISED
-            - USER_REMOVED
-            - AUTHORIZATION_FAILURE
-            - ACTIVITY_PURGE_COMPLETED
-            - NODE_DELETION_COMPLETED
-            - MCP_TOKEN_GENERATED
-            - MCP_TOKEN_USED
-            - MCP_TOKEN_REVOKED
-        details:
-          type:
-            - object
-            - 'null'
-          additionalProperties: true
-        ipAddress:
-          type:
-            - string
-            - 'null'
-        occurredAt:
-          type: string
-          format: date-time
-    McpToken:
-      type: object
-      required:
-        - id
-        - label
-        - createdAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        label:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        lastUsedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        expiresAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-          description: Null means the token does not expire
-    McpTokenWithOwner:
-      type: object
-      required:
-        - id
-        - userId
-        - userName
-        - label
-        - createdAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        userId:
-          type: string
-          format: uuid
-        userName:
-          type:
-            - string
-            - 'null'
-        label:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        lastUsedAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-        expiresAt:
-          type:
-            - string
-            - 'null'
-          format: date-time
-    AboutInfo:
-      type: object
-      required:
-        - version
-        - licenses
-        - sbomUrl
-        - openApiUrl
-        - gdprSummary
-      properties:
-        version:
-          type: string
-        licenses:
+          enum: [pending, active, anonymised]
+        oidcProviders:
           type: array
           items:
             type: object
-            required:
-              - component
-              - license
+            required: [provider, subject]
             properties:
-              component:
-                type: string
-              license:
-                type: string
-        sbomUrl:
-          type: string
-          description: URL to download the CycloneDX SBOM
-        openApiUrl:
-          type: string
-          description: URL to download the OpenAPI specification
-        gdprSummary:
-          type: object
-          required:
-            - storedData
-            - retentionPeriod
-            - rightToErasure
-          description: Built-in summary of personal data handling, always public, translated by Accept-Language
+              provider: { type: string }
+              subject: { type: string }
+        authorizations:
+          type: array
+          items: { $ref: '#/components/schemas/ExplicitAuthorization' }
+
+    Invitation:
+      type: object
+      required: [id, email, invitedAt, expiresAt, userId]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        invitedBy:
+          oneOf:
+            - { $ref: '#/components/schemas/UserReference' }
+            - { type: "null" }
+        invitedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        userId: { type: string, format: uuid, description: Pre-created users row UUID. }
+        preAssignedGrantCount: { type: integer }
+
+    Node:
+      type: object
+      required: [id, displayName, isActive, sortOrder, effectiveAuth]
+      properties:
+        id: { type: string, format: uuid }
+        parentId: { type: [string, "null"], format: uuid }
+        displayName: { type: string }
+        description: { type: [string, "null"] }
+        color: { type: [string, "null"] }
+        icon: { type: [string, "null"] }
+        logoUrl: { type: [string, "null"], description: Internal URL serving the stored logo bytes. }
+        isActive: { type: boolean }
+        sortOrder: { type: integer }
+        deactivatedAt: { type: [string, "null"], format: date-time }
+        effectiveAuth: { $ref: '#/components/schemas/AuthLevel' }
+
+    NodeTree:
+      allOf:
+        - { $ref: '#/components/schemas/Node' }
+        - type: object
+          required: [children]
           properties:
-            storedData:
-              type: string
-              description: Human-readable description of what personal data is stored
-            retentionPeriod:
-              type: string
-              description: Human-readable description of how long data is retained
-            rightToErasure:
-              type: string
-              description: Human-readable description of how to exercise the right to erasure
-        privacyNoticeUrl:
-          type:
-            - string
-            - 'null'
-          description: Company Privacy Notice URL; included only for authenticated users with at least one effective node authorization
-  responses:
-    Unauthorized:
-      description: Not authenticated
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    Forbidden:
-      description: Authenticated but not authorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    Conflict:
-      description: Business rule violation (e.g. last admin, frozen record, full quick-access)
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    UnprocessableEntity:
-      description: Validation error (e.g. startedAt >= endedAt, invalid timezone)
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    TooManyRequests:
-      description: Rate limit exceeded
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-paths:
-  /auth/providers:
-    get:
-      tags:
-        - auth
-      summary: List configured OIDC providers
-      operationId: getProviders
-      security: []
-      description: |
-        Returns the registration IDs of all OIDC providers that have a non-empty client-id
-        configured at startup. Used by the login page to render only the active sign-in buttons.
-        Accessible without authentication. SR-F067.F02.
-      responses:
-        '200':
-          description: Active providers
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - providers
-                properties:
-                  providers:
-                    type: array
-                    items:
-                      type: string
-                      enum:
-                        - google
-                        - apple
-                        - microsoft
-                        - keycloak
-                    example:
-                      - google
-                      - microsoft
-  /auth/logout:
-    post:
-      tags:
-        - auth
-      summary: Log out
-      operationId: logout
-      description: Invalidates the current Spring Security session.
-      responses:
-        '204':
-          description: Logged out
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /auth/gdpr-notice:
-    post:
-      tags:
-        - auth
-      summary: Acknowledge GDPR notice and complete registration
-      operationId: acknowledgeGdprNotice
-      description: |
-        Called after the user reads the GDPR notice on first login. Reads pending registration
-        data from the HTTP session (stored during OIDC callback per SR-F060.F01) and executes the
-        account creation transaction: inserts user_profile, user_oauth_providers, deletes
-        pending_invitations. Establishes an authenticated session. Returns privacyNoticeUrl only
-        if configured and the user has at least one effective node authorization after registration;
-        otherwise returns null. Returns 400 if no pending registration data is in the session.
-        SR-F060.F02.
-      responses:
-        '200':
-          description: Registration complete
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  privacyNoticeUrl:
-                    type:
-                      - string
-                      - 'null'
-                    format: uri
-        '400':
-          description: No pending registration data in session
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /settings:
-    get:
-      tags:
-        - settings
-      summary: Get system settings
-      operationId: getSettings
-      description: |
-        Returns the resolved system configuration to any authenticated user. Values are read from
-        the config file at startup and cannot be changed via the API. SR-F010.F01.
-      responses:
-        '200':
-          description: System settings
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SystemSettings'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /users:
-    get:
-      tags:
-        - users
-      summary: List all users
-      operationId: listUsers
-      description: Requires System Admin. SR-F004.F01.
-      responses:
-        '200':
-          description: All users (pending, active, and anonymised)
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/UserSummary'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /users/{userId}:
-    delete:
-      tags:
-        - users
-      summary: Remove user
-      operationId: removeUser
-      description: |
-        Requires System Admin. In one transaction: stops active tracking, revokes active MCP
-        tokens, deletes all node authorizations, deletes user_profile (cascades to OIDC
-        providers, quick_access). If the user has time records or requests, retains the users row
-        as an anonymous stub; otherwise deletes it. SR-F008.F01.
-      parameters:
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: User removed
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /users/{userId}/authorizations:
-    get:
-      tags:
-        - users
-      summary: List user's node authorizations
-      operationId: getUserAuthorizations
-      description: Requires System Admin. SR-F009.F01.
-      parameters:
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Authorization assignments with full node paths
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/UserAuthorization'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /invitations:
-    get:
-      tags:
-        - invitations
-      summary: List pending invitations
-      operationId: listInvitations
-      description: Requires System Admin. SR-F005.F01.
-      responses:
-        '200':
-          description: Pending memberships
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PendingInvitation'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-    post:
-      tags:
-        - invitations
-      summary: Invite user by email
-      operationId: createInvitation
-      description: |
-        Requires System Admin. Creates users row and pending_invitations row. Rejects if email already in pending_invitations or
-        already linked to an existing user. SR-F006.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-              properties:
-                email:
-                  type: string
-                  format: email
-      responses:
-        '201':
-          description: Invitation created
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - mailtoLink
-                  - invitation
-                properties:
-                  mailtoLink:
-                    type: string
-                    description: 'Pre-filled mailto: URI for the admin to send to the invitee'
-                  invitation:
-                    $ref: '#/components/schemas/PendingInvitation'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /invitations/{invitationId}:
-    delete:
-      tags:
-        - invitations
-      summary: Withdraw invitation
-      operationId: withdrawInvitation
-      description: Requires System Admin. SR-F007.F01.
-      parameters:
-        - name: invitationId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Withdrawn
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /invitations/{invitationId}/resend:
-    post:
-      tags:
-        - invitations
-      summary: Resend invitation
-      operationId: resendInvitation
-      description: |
-        Requires System Admin. Resets the invitation expiry to 90 days from now and returns a
-        fresh mailto: link. No new records are created; the existing user UUID and any assigned
-        node authorizations are preserved. SR-F011.F01.
-      parameters:
-        - name: invitationId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Expiry reset; fresh mailto link returned
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - mailtoLink
-                  - invitation
-                properties:
-                  mailtoLink:
-                    type: string
-                    description: 'Pre-filled mailto: URI for the admin to send'
-                  invitation:
-                    $ref: '#/components/schemas/PendingInvitation'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /nodes/root:
-    get:
-      tags:
-        - nodes
-      summary: Get root node
-      operationId: getRootNode
-      description: |
-        Returns the root node with its visible direct children. No authorization check beyond
-        authentication — the root node is always accessible; children are filtered by visibility.
-        SR-F014.F01.
-      responses:
-        '200':
-          description: Root node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /nodes/{nodeId}:
-    get:
-      tags:
-        - nodes
-      summary: Get node
-      operationId: getNode
-      description: |
-        Returns node with visible direct children. Requires at least view on node (direct or
-        inherited). SR-F014.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Node with children
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    patch:
-      tags:
-        - nodes
-      summary: Update node
-      operationId: updateNode
-      description: |
-        Requires effective admin on node or ancestor. All fields optional; omitted fields unchanged.
-        Color must be a valid CSS hex color string (e.g. '#4A90D9'). Icon must be a valid
-        PrimeIcons identifier. SR-F016.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                description:
-                  type:
-                    - string
-                    - 'null'
-                color:
-                  type:
-                    - string
-                    - 'null'
-                  description: CSS hex color e.g. '#4A90D9'; null to clear
-                icon:
-                  type:
-                    - string
-                    - 'null'
-                  description: PrimeIcons identifier e.g. 'pi-briefcase'; null to clear
-      responses:
-        '200':
-          description: Updated node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /nodes/{nodeId}/children:
-    post:
-      tags:
-        - nodes
-      summary: Create child node
-      operationId: createChildNode
-      description: |
-        Requires effective admin on the parent node or ancestor. New node is active, appended
-        after existing siblings. SR-F015.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - name
-              properties:
-                name:
-                  type: string
-                description:
-                  type: string
-      responses:
-        '201':
-          description: Created child node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /nodes/{nodeId}/children/order:
-    put:
-      tags:
-        - nodes
-      summary: Reorder children
-      operationId: reorderChildren
-      description: |
-        Submit the complete ordered list of direct child IDs. Requires effective admin on node or
-        ancestor. Rejects if the list does not match the current set of direct children. SR-F017.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - childIds
-              properties:
-                childIds:
-                  type: array
-                  description: Complete ordered list of direct child node IDs
-                  items:
-                    type: string
-                    format: uuid
-      responses:
-        '204':
-          description: Reordered
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /nodes/{nodeId}/logo:
-    get:
-      tags:
-        - nodes
-      summary: Get node logo
-      operationId: getNodeLogo
-      description: |
-        Returns the uploaded logo image. Requires at least view on node. Returns 404 if no logo
-        is set. SR-F016.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Logo image
-          content:
-            image/png:
-              schema:
-                type: string
-                format: binary
-            image/jpeg:
-              schema:
-                type: string
-                format: binary
-            image/svg+xml:
-              schema:
-                type: string
-                format: binary
-            image/webp:
-              schema:
-                type: string
-                format: binary
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags:
-        - nodes
-      summary: Upload node logo
-      operationId: uploadNodeLogo
-      description: |
-        Requires effective admin on node or ancestor. Accepts image/png, image/jpeg, image/svg+xml,
-        image/webp. Maximum 256 KB. Replaces any existing logo. SR-F016.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - logo
-              properties:
-                logo:
-                  type: string
-                  format: binary
-      responses:
-        '200':
-          description: Updated node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-    delete:
-      tags:
-        - nodes
-      summary: Remove node logo
-      operationId: deleteNodeLogo
-      description: Requires effective admin on node or ancestor. Clears logo and logo_mime_type. SR-F016.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Updated node (logo cleared)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /nodes/{nodeId}/deactivate:
-    post:
-      tags:
-        - nodes
-      summary: Deactivate node
-      operationId: deactivateNode
-      description: |
-        Requires effective admin on node or ancestor. Blocked if active children exist. An active
-        time record on the node itself does not block deactivation — the running record may complete
-        normally. Sets deactivated_at = NOW(). SR-F018.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Deactivated node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /nodes/{nodeId}/reactivate:
-    post:
-      tags:
-        - nodes
-      summary: Reactivate node
-      operationId: reactivateNode
-      description: Requires effective admin on node or ancestor. Clears deactivated_at. SR-F019.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Reactivated node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /nodes/{nodeId}/move:
-    post:
-      tags:
-        - nodes
-      summary: Move node to different parent
-      operationId: moveNode
-      description: |
-        Requires effective admin on the moved node AND on the destination parent. Destination must
-        not be the node itself or any descendant. Sort order set to append at destination. SR-F020.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - destinationParentId
-              properties:
-                destinationParentId:
-                  type: string
-                  format: uuid
-      responses:
-        '200':
-          description: Moved node
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Node'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /nodes/{nodeId}/authorizations:
-    get:
-      tags:
-        - authorizations
-      summary: List node authorization assignments
-      operationId: listNodeAuthorizations
-      description: |
-        Requires effective admin on node or ancestor. Returns both direct assignments and those
-        inherited from ancestor nodes, distinguished by the inherited flag. SR-F023.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Authorization assignments
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/NodeAuthorization'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /nodes/{nodeId}/authorizations/{userId}:
-    put:
-      tags:
-        - authorizations
-      summary: Grant or update authorization
-      operationId: grantAuthorization
-      description: |
-        Upserts a node_authorizations row. Requires the requesting user to have effective admin on
-        this node. SR-F021.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - authorization
-              properties:
-                authorization:
-                  $ref: '#/components/schemas/AuthLevel'
-      responses:
-        '204':
-          description: Authorization granted or updated
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      tags:
-        - authorizations
-      summary: Revoke authorization
-      operationId: revokeAuthorization
-      description: |
-        Deletes a node_authorizations row. Requires effective admin on node or ancestor. Blocked
-        if the row is the last admin-level authorization on this node. SR-F022.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: userId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Revoked
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /nodes/{nodeId}/requests:
-    get:
-      tags:
-        - requests
-      summary: List requests on a node
-      operationId: listNodeRequests
-      description: |
-        Requires at least view on node. Returns all requests (open and closed). SR-F041.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Requests
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RequestRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    post:
-      tags:
-        - requests
-      summary: Submit a request
-      operationId: createRequest
-      description: Requires at least view on node. SR-F039.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - template
-              properties:
-                template:
-                  type: string
-                  enum:
-                    - grant_authorization
-                    - create_child_node
-                    - free_text
-                body:
-                  type:
-                    - string
-                    - 'null'
-      responses:
-        '201':
-          description: Request submitted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /nodes/{nodeId}/requests/{requestId}/close:
-    post:
-      tags:
-        - requests
-      summary: Close a request
-      operationId: closeRequest
-      description: Requires effective admin on node or ancestor. Blocked if already closed. SR-F042.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: requestId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Closed request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /tracking:
-    get:
-      tags:
-        - tracking
-      summary: Get current tracking status
-      operationId: getTrackingStatus
-      description: Returns the active time record with elapsed seconds, or an empty state. SR-F024.F01.
-      responses:
-        '200':
-          description: Tracking status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TrackingStatus'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /tracking/history:
-    get:
-      tags:
-        - tracking
-      summary: Recent time record history
-      operationId: getTrackingHistory
-      description: |
-        Returns recent time records for the authenticated user, descending startedAt, with overlap
-        and gap flags. SR-F025.F01.
-      parameters:
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 20
-            maximum: 100
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
-      responses:
-        '200':
-          description: Paginated time records
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - items
-                  - total
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TimeRecord'
-                  total:
-                    type: integer
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /tracking/start:
-    post:
-      tags:
-        - tracking
-      summary: Start or switch tracking
-      operationId: startTracking
-      description: |
-        Starts tracking on the target node. If already tracking, atomically stops the current record
-        and starts new one (switch). Node must be active, have no active children, and user must
-        have at least track authorization. Client must supply IANA timezone. SR-F026.F01/SR-F028.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - nodeId
-                - timezone
-              properties:
-                nodeId:
-                  type: string
-                  format: uuid
-                timezone:
-                  type: string
-                  description: IANA timezone from browser
-                  example: Europe/Berlin
-      responses:
-        '200':
-          description: New tracking status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TrackingStatus'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /tracking/stop:
-    post:
-      tags:
-        - tracking
-      summary: Stop tracking
-      operationId: stopTracking
-      description: Stops the active session. Returns empty tracking state. SR-F029.F01.
-      responses:
-        '200':
-          description: Empty tracking status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TrackingStatus'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /time-records:
-    post:
-      tags:
-        - time-records
-      summary: Create retroactive time record
-      operationId: createTimeRecord
-      description: |
-        Node must be active, have no active children, and user must have at least track
-        authorization. startedAt must be before endedAt. SR-F031.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - nodeId
-                - startedAt
-                - endedAt
-                - timezone
-              properties:
-                nodeId:
-                  type: string
-                  format: uuid
-                startedAt:
-                  type: string
-                  format: date-time
-                endedAt:
-                  type: string
-                  format: date-time
-                timezone:
-                  type: string
-                description:
-                  type:
-                    - string
-                    - 'null'
-                  description: Optional short note
-      responses:
-        '201':
-          description: Created time record
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TimeRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /time-records/{recordId}:
-    put:
-      tags:
-        - time-records
-      summary: Edit time record
-      operationId: updateTimeRecord
-      description: |
-        All fields optional; omitted fields unchanged. Blocked if the effective updated startedAt is before
-        the effective freeze cutoff, or if the effective updated endedAt is non-null and startedAt is not
-        earlier than endedAt. If nodeId changes, the new node must be active, must not have any active
-        child, and the caller must have track authorization on it.
-        SR-F032.F01.
-      parameters:
-        - name: recordId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nodeId:
-                  type: string
-                  format: uuid
-                startedAt:
-                  type: string
-                  format: date-time
-                endedAt:
-                  type: string
-                  format: date-time
-                description:
-                  type:
-                    - string
-                    - 'null'
-                  description: Optional short note; null to clear
-      responses:
-        '200':
-          description: Updated time record
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TimeRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-    delete:
-      tags:
-        - time-records
-      summary: Delete time record
-      operationId: deleteTimeRecord
-      description: Blocked if startedAt is before the effective freeze cutoff. SR-F033.F01.
-      parameters:
-        - name: recordId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Deleted
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /time-records/{recordId}/duplicate:
-    post:
-      tags:
-        - time-records
-      summary: Duplicate time record
-      operationId: duplicateTimeRecord
-      description: |
-        Creates a new record from an existing one with a new time range. Description is copied
-        from the original. SR-F034.F01.
-      parameters:
-        - name: recordId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - startedAt
-                - endedAt
-              properties:
-                startedAt:
-                  type: string
-                  format: date-time
-                endedAt:
-                  type: string
-                  format: date-time
-      responses:
-        '201':
-          description: Duplicated time record
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TimeRecord'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /quick-access:
-    get:
-      tags:
-        - quick-access
-      summary: Get quick-access list
-      operationId: getQuickAccess
-      description: |
-        Returns personal quick-access list. Non-trackable entries (deactivated or has active
-        children) are annotated with nonTrackable = true and not auto-removed. Node color, icon,
-        and logoUrl are included from the node record. SR-F027.F01.
-      responses:
-        '200':
-          description: Quick-access entries in sort order
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/QuickAccessEntry'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      tags:
-        - quick-access
-      summary: Add node to quick-access list
-      operationId: addQuickAccess
-      description: Blocked if list already has 9 entries. SR-F030.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - nodeId
-              properties:
-                nodeId:
-                  type: string
-                  format: uuid
-      responses:
-        '204':
-          description: Added
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /quick-access/{nodeId}:
-    delete:
-      tags:
-        - quick-access
-      summary: Remove node from quick-access list
-      operationId: removeQuickAccess
-      description: SR-F030.F01.
-      parameters:
-        - name: nodeId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Removed
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /quick-access/order:
-    put:
-      tags:
-        - quick-access
-      summary: Reorder quick-access list
-      operationId: reorderQuickAccess
-      description: Submit the complete ordered list of node IDs. SR-F030.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - nodeIds
-              properties:
-                nodeIds:
-                  type: array
-                  items:
-                    type: string
-                    format: uuid
-      responses:
-        '204':
-          description: Reordered
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /reports:
-    get:
-      tags:
-        - reports
-      summary: Get time report
-      operationId: getReport
-      description: |
-        Filtered to nodes visible to requesting user. When nodeId is supplied, includes all
-        records for the node and its visible subtree. All timestamps in company timezone. SR-F036.F01/
-        SR-F036.F02.
-      parameters:
-        - name: mode
-          in: query
-          required: true
-          schema:
-            type: string
-            enum:
-              - summary
-              - detailed
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date
-            description: Inclusive start date in company timezone
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date
-            description: Inclusive end date in company timezone
-        - name: userId
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: nodeId
-          in: query
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Report
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Report'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /reports/export:
-    get:
-      tags:
-        - reports
-      summary: Export report as CSV
-      operationId: exportReport
-      description: Same filters as GET /reports. SR-F038.F01.
-      parameters:
-        - name: mode
-          in: query
-          required: true
-          schema:
-            type: string
-            enum:
-              - summary
-              - detailed
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: userId
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: nodeId
-          in: query
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: CSV download
-          content:
-            text/csv:
-              schema:
-                type: string
-                format: binary
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /reports/members:
-    get:
-      tags:
-        - reports
-      summary: Get member time summaries
-      operationId: getMemberSummaries
-      description: |
-        Returns per-member aggregated totals on nodes visible to the requesting user. Individual
-        time record details are never exposed — only the total per bucket. Each bucket carries a
-        hasDataQualityIssues flag (true if the member's records for that bucket contain overlaps
-        or gaps). Filterable by that flag. SR-F052.F01.
-      parameters:
-        - name: interval
-          in: query
-          required: true
-          schema:
-            type: string
-            enum:
-              - day
-              - week
-              - month
-              - year
-              - year_to_date
-              - month_to_date
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date
-            description: Inclusive start date in company timezone (required for day/week/month/year)
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date
-            description: Inclusive end date in company timezone (required for day/week/month/year)
-        - name: nodeId
-          in: query
-          schema:
-            type: string
-            format: uuid
-            description: Restrict to the node's visible subtree; omit for all visible nodes
-        - name: hasDataQualityIssues
-          in: query
-          schema:
-            type: boolean
-            description: Filter returned bucket rows by their data-quality flag; omit for all
-      responses:
-        '200':
-          description: Member summaries
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MemberSummary'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /account:
-    get:
-      tags:
-        - account
-      summary: Get own profile
-      operationId: getProfile
-      description: Returns stored name and linked OIDC providers. SR-F043.F01.
-      responses:
-        '200':
-          description: Profile
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - userId
-                  - name
-                  - providers
-                properties:
-                  userId:
-                    type: string
-                    format: uuid
-                  name:
-                    type: string
-                  providers:
-                    type: array
-                    items:
-                      type: string
-                      enum:
-                        - google
-                        - apple
-                        - microsoft
-                        - keycloak
-                  lastReportSettings:
-                    type:
-                      - object
-                      - 'null'
-                    additionalProperties: true
-                    description: Last saved report filter state; null if not yet set. SR-F066.F01.
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /account/report-settings:
-    put:
-      tags:
-        - account
-      summary: Save last report filter state
-      operationId: saveReportSettings
-      description: |
-        Persists the user's last report filter state for multi-device consistency. The body is
-        stored as-is in last_report_settings (JSONB). SR-F066.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              description: Arbitrary report filter state; opaque to the server
-              additionalProperties: true
-      responses:
-        '204':
-          description: Saved
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /account/authorizations:
-    get:
-      tags:
-        - account
-      summary: Get own node authorization assignments
-      operationId: getOwnAuthorizations
-      description: Returns all node_authorizations rows for the authenticated user with full node paths. SR-F043.F01.
-      responses:
-        '200':
-          description: Authorization assignments
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/UserAuthorization'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /account/providers:
-    post:
-      tags:
-        - account
-      summary: Link additional OIDC provider
-      operationId: linkProvider
-      description: |
-        Initiates OIDC linking flow for an additional provider. In practice, the client
-        redirects to /oauth2/authorization/{provider} with a linking flag. This endpoint
-        records the completed link after the OIDC callback. SR-F044.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - provider
-              properties:
-                provider:
-                  type: string
-                  enum:
-                    - google
-                    - apple
-                    - microsoft
-                    - keycloak
-      responses:
-        '204':
-          description: Provider linked
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /account/providers/{provider}:
-    delete:
-      tags:
-        - account
-      summary: Unlink OIDC provider
-      operationId: unlinkProvider
-      description: Blocked if only one provider remains linked. SR-F045.F01.
-      parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-            enum:
-              - google
-              - apple
-              - microsoft
-              - keycloak
-      responses:
-        '204':
-          description: Unlinked
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /account/anonymize:
-    post:
-      tags:
-        - account
-      summary: Anonymise own account
-      operationId: anonymizeAccount
-      description: |
-        Irreversible. Stops active tracking, revokes all MCP tokens, removes all node
-        authorizations, and deletes personal data. Time records and requests may be retained
-        anonymously until the purge lifecycle removes them. Session is invalidated. Re-registration
-        requires a new invitation and creates a new identity.
-        SR-F047.F01.
-      responses:
-        '204':
-          description: Anonymised; session invalidated
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /account/mcp-tokens:
-    get:
-      tags:
-        - mcp
-      summary: List own MCP tokens
-      operationId: listOwnMcpTokens
-      description: Returns all active (non-revoked) MCP tokens for the authenticated user. SR-F054.F01.
-      responses:
-        '200':
-          description: Active MCP tokens
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/McpToken'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-    post:
-      tags:
-        - mcp
-      summary: Generate MCP token
-      operationId: generateMcpToken
-      description: |
-        Generates a new MCP access token. The raw token value is returned exactly once in this
-        response and is never stored — only its SHA-256 hash is retained. SR-F053.F01.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - label
-              properties:
-                label:
-                  type: string
-                  description: Human-readable label for the token
-                expiresAt:
-                  type:
-                    - string
-                    - 'null'
-                  format: date-time
-                  description: Optional expiry; null or omitted means non-expiring
-      responses:
-        '201':
-          description: Token created — raw value shown once
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - token
-                  - mcpToken
-                properties:
-                  token:
-                    type: string
-                    description: Raw token value — shown once, never stored
-                  mcpToken:
-                    $ref: '#/components/schemas/McpToken'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-  /account/mcp-tokens/{tokenId}:
-    delete:
-      tags:
-        - mcp
-      summary: Revoke own MCP token
-      operationId: revokeMcpToken
-      description: Soft-revokes the token. The token hash is retained for audit. SR-F055.F01.
-      parameters:
-        - name: tokenId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Revoked
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /admin/mcp-tokens:
-    get:
-      tags:
-        - mcp
-      summary: List all active MCP tokens (System Admin)
-      operationId: listAllMcpTokens
-      description: Requires System Admin. Returns all non-revoked tokens across all users. SR-F056.F01.
-      responses:
-        '200':
-          description: All active MCP tokens with owner information
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/McpTokenWithOwner'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /admin/mcp-tokens/{tokenId}:
-    delete:
-      tags:
-        - mcp
-      summary: Revoke any MCP token (System Admin)
-      operationId: adminRevokeMcpToken
-      description: Requires System Admin. Soft-revokes any token; revocation is logged to the security event log. SR-F057.F01.
-      parameters:
-        - name: tokenId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Revoked
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /security-events:
-    get:
-      tags:
-        - security-events
-      summary: List security events
-      operationId: listSecurityEvents
-      description: Requires System Admin. SR-F049.F02.
-      parameters:
-        - name: eventType
-          in: query
-          schema:
-            type: string
-        - name: userId
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date-time
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date-time
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 50
-            maximum: 200
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
-      responses:
-        '200':
-          description: Security events
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - items
-                  - total
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/SecurityEvent'
-                  total:
-                    type: integer
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /about:
-    get:
-      tags:
-        - about
-      summary: About page
-      operationId: getAbout
-      description: |
-        Application version, third-party licenses, SBOM download link, OpenAPI spec download
-        link, and built-in GDPR data summary. No authentication required. If the requesting user
-        is authenticated and has at least one effective node authorization, the company Privacy
-        Notice URL is also included (if configured). SR-F048.F01.
-      security: []
-      responses:
-        '200':
-          description: About information
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AboutInfo'
-  /events:
-    get:
-      tags:
-        - events
-      summary: Server-Sent Events stream
-      operationId: getEventStream
-      description: |
-        Persistent SSE connection for live state synchronisation. SR-F068.F01.
+            children:
+              type: array
+              items: { $ref: '#/components/schemas/NodeTree' }
 
-        **Event types and recipients:**
+    NodePatchRequest:
+      type: object
+      description: Field omission means "no change"; explicit `null` clears the field (for nullable fields).
+      properties:
+        displayName: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+        color: { type: [string, "null"] }
+        icon: { type: [string, "null"] }
+        logo:
+          oneOf:
+            - type: object
+              required: [data, mimeType]
+              properties:
+                data: { type: string, format: byte, description: Base64-encoded image bytes; decoded length ≤ 256 KB. }
+                mimeType:
+                  type: string
+                  enum: [image/png, image/jpeg, image/svg+xml, image/webp]
+            - { type: "null" }
 
-        `tracking` — Tracking state changed.
-        Data: `TrackingStatus`.
-        Recipients: all sessions of the same user.
+    NodeAuthorizationEntry:
+      type: object
+      required: [user, level, source]
+      properties:
+        user: { $ref: '#/components/schemas/UserReference' }
+        level: { $ref: '#/components/schemas/AuthLevel' }
+        source:
+          type: string
+          enum: [direct, inherited]
+        inheritedFromNodeId: { type: [string, "null"], format: uuid }
+        inheritedFromPath:
+          type: [array, "null"]
+          items: { type: string }
 
-        `node` — Node tree changed (create, update, reorder, deactivate, reactivate, move).
-        Data: `{ nodeId, parentId, changeType: "created"|"updated"|"reordered"|"deactivated"|"reactivated"|"moved" }`.
-        Recipients: all sessions of users with at least view on the affected node.
+    ExplicitAuthorization:
+      type: object
+      required: [nodeId, displayName, ancestorPath, level]
+      properties:
+        nodeId: { type: string, format: uuid }
+        displayName: { type: string }
+        ancestorPath:
+          type: array
+          items: { type: string }
+        level: { $ref: '#/components/schemas/AuthLevel' }
 
-        `authorization` — Authorization assignment changed for the authenticated user.
-        Data: `UserAuthorization | { nodeId, revoked: true }`.
-        Recipients: all sessions of the affected user.
+    OpenTimeRecord:
+      type: object
+      required: [id, nodeId, ancestorPath, startedAt, elapsedSeconds]
+      properties:
+        id: { type: string, format: uuid }
+        nodeId: { type: string, format: uuid }
+        ancestorPath:
+          type: array
+          items: { type: string }
+        startedAt: { type: string, format: date-time }
+        elapsedSeconds: { type: integer }
+        description: { type: [string, "null"] }
 
-        `request` — Request created or closed.
-        Data: `RequestRecord`.
-        Recipients: all sessions of Node Admins of the relevant node and all ancestors.
+    ClosedTimeRecord:
+      type: object
+      required: [id, nodeId, ancestorPath, startedAt, endedAt, durationSeconds]
+      properties:
+        id: { type: string, format: uuid }
+        nodeId: { type: string, format: uuid }
+        ancestorPath:
+          type: array
+          items: { type: string }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        durationSeconds: { type: integer }
+        description: { type: [string, "null"] }
 
-        `quick-access` — A node in the user's quick-access list has been updated (color, icon,
-        logo, name, or trackability changed).
-        Data: `QuickAccessEntry`.
-        Recipients: all sessions of users who have the affected node in their quick-access list.
+    StartTrackingRequest:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId: { type: string, format: uuid }
+        description: { type: [string, "null"] }
 
-        `mcp-token-revoked` — One of the user's MCP tokens was revoked (e.g. by System Admin).
-        Data: `{ tokenId: string (uuid) }`.
-        Recipients: all sessions of the token owner.
-      responses:
-        '200':
-          description: SSE stream (text/event-stream)
-          content:
-            text/event-stream:
-              schema:
-                type: string
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+    CreateClosedRecordRequest:
+      type: object
+      required: [nodeId, startedAt, endedAt]
+      properties:
+        nodeId: { type: string, format: uuid }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        description: { type: [string, "null"] }
+
+    TimeRecordPatchRequest:
+      type: object
+      properties:
+        nodeId: { type: string, format: uuid }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        description: { type: [string, "null"] }
+
+    QuickAccessEntry:
+      type: object
+      required: [nodeId, displayName, ancestorPath, sortOrder, nonTrackable]
+      properties:
+        nodeId: { type: string, format: uuid }
+        displayName: { type: string }
+        ancestorPath:
+          type: array
+          items: { type: string }
+        sortOrder: { type: integer }
+        nonTrackable: { type: boolean }
+
+    AggregateRow:
+      type: object
+      required: [nodeId, bucketStart, bucketEnd, durationSeconds]
+      properties:
+        nodeId: { type: string, format: uuid }
+        nodeDisplayName: { type: [string, "null"] }
+        bucketStart: { type: string, format: date-time }
+        bucketEnd: { type: string, format: date-time }
+        durationSeconds: { type: integer }
+        description: { type: [string, "null"], description: Present only for `mode=detailed` rows. }
+
+    MemberSummaryRow:
+      type: object
+      required: [user, nodeId, bucketStart, bucketEnd, durationSeconds]
+      properties:
+        user: { $ref: '#/components/schemas/UserReference' }
+        nodeId: { type: string, format: uuid }
+        nodeDisplayName: { type: string }
+        ancestorPath:
+          type: array
+          items: { type: string }
+        bucketStart: { type: string, format: date-time }
+        bucketEnd: { type: string, format: date-time }
+        durationSeconds: { type: integer }
+
+    ReportFilters:
+      type: object
+      required: [from, to, bucketSize, tz, mode]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        bucketSize: { $ref: '#/components/schemas/BucketSize' }
+        tz: { type: string }
+        nodeId: { type: [string, "null"], format: uuid }
+        userId: { type: [string, "null"], format: uuid }
+        mode:
+          type: string
+          enum: [summary, detailed]
+
+    ApiKey:
+      type: object
+      description: API key descriptor. Raw key never appears in this shape.
+      required: [id, name, scope, createdAt, expiresAt, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        scope:
+          type: object
+          required: [nodeId, level]
+          properties:
+            nodeId: { type: string, format: uuid }
+            nodeDisplayName: { type: string }
+            ancestorPath:
+              type: array
+              items: { type: string }
+            level: { $ref: '#/components/schemas/AuthLevel' }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, "null"], format: date-time }
+        expiresAt: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [active, expired, revoked]
+
+    ApiKeyCreateRequest:
+      type: object
+      required: [name, expiresAt, scope]
+      properties:
+        name: { type: string, maxLength: 64 }
+        expiresAt: { type: string, format: date-time, description: Must be in the future and ≤ 1 year from now (SR-08-F01.C02). }
+        scope:
+          type: object
+          required: [nodeId, level]
+          properties:
+            nodeId: { type: string, format: uuid }
+            level: { $ref: '#/components/schemas/AuthLevel' }
+
+    AdminApiKeyRow:
+      allOf:
+        - { $ref: '#/components/schemas/ApiKey' }
+        - type: object
+          required: [owner]
+          properties:
+            owner: { $ref: '#/components/schemas/UserReference' }
+
+    WebhookSubscription:
+      type: object
+      required: [id, endpointUrl, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        endpointUrl: { type: string, format: uri }
+        status:
+          type: string
+          enum: [active, paused, revoked]
+        createdAt: { type: string, format: date-time }
+        rotatedAt: { type: [string, "null"], format: date-time }
+
+    WebhookSubscriptionCreateRequest:
+      type: object
+      required: [endpointUrl]
+      properties:
+        endpointUrl: { type: string, format: uri }
+
+    WebhookSubscriptionPatchRequest:
+      type: object
+      properties:
+        endpointUrl: { type: string, format: uri }
+        status:
+          type: string
+          enum: [active, paused]
+        rotateSecret: { type: boolean }
+
+    AboutDocument:
+      type: object
+      required: [applicationVersion, thirdPartyLicenses, personalDataSummary, outboundConnections, disclosureChannelUrl, advisoryChannelUrl, openApiDownloadUrl]
+      properties:
+        applicationVersion: { type: string }
+        thirdPartyLicenses:
+          type: array
+          items:
+            type: object
+            required: [name, version, license]
+            properties:
+              name: { type: string }
+              version: { type: string }
+              license: { type: string }
+        personalDataSummary:
+          type: object
+          description: Structured GDPR transparency summary; shape stable across operator deployments (SR-05-F06.C02).
+        outboundConnections:
+          type: array
+          items:
+            type: object
+            required: [destination, purpose, conditional]
+            properties:
+              destination: { type: string }
+              purpose: { type: string }
+              conditional: { type: string }
+        disclosureChannelUrl: { type: string, format: uri }
+        advisoryChannelUrl: { type: string, format: uri }
+        openApiDownloadUrl: { type: string }
