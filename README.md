@@ -18,7 +18,7 @@ In the process, some user requirements are revised as well, reflecting changed p
 - MCP and other actors accessing trawhile via API key are now given more responsibility.
 - No longer provide intra-team communication channel(s) and so remove the "requests" feature. The exception remaining is the invitation email to new users. 
 
-The cut is made downstream of architecture.md and the ADR's. System requirements, specs and code still belong to the previous product increment and are currently out of sync.
+The cut is made downstream of the system requirements. Specs and code still belong to the previous product increment and are currently out of sync.
 
 
 ## Why trawhile
@@ -29,7 +29,7 @@ The cut is made downstream of architecture.md and the ADR's. System requirements
 - Does not waste your time - quickly find and fix overlapping time records or gaps between them
 - Lets you know your work - See your activity at a glance or in detail, with powerful filters, and export in a variety of ways
 - Gives you ownership of your data - informs you of your rights, and no one except you can create or alter your time records. Know when old time records will be deleted automatically
-- Protects your data - others can see your aggregated totals but not your individual time records, your email address is not stored in the database, use the name you like, anonymize your time records and purge your personal data when leaving company or team
+- Protects your data - others can see your aggregated totals but not your individual time records, anonymize your time records and purge your personal data when leaving company or team
 
 ### Work item admins - project managers, work package managers, scrum masters
 

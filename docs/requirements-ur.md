@@ -141,7 +141,7 @@ Operator --> BackupStorage : provision / access
 
 #### OSS security flow context
 
-trawhile is a non-commercial OSS project; it therefore does not require a CRA manufacturer flow. This view shows the public security and release-evidence flows the project maintains as good OSS practice and for transparency. GitHub is the public project and release-evidence surface: source, releases, SBOMs, OpenAPI specifications, vulnerability intake, and Security Advisories. The deployed instance has no anonymous content surface: SBOM is published only as a GitHub release artifact, and the OpenAPI specification, running version, and About-page content are reachable only by authenticated users. ST-6 reports vulnerabilities via GitHub's private vulnerability reporting channel rather than through the deployed instance. The advisory relationship between GitHub and ST-5 (Operator) is pull-based: ST-5 subscribes their incident-response tooling to the per-repo Atom feed (or watches the repo for security alerts) to receive advisories. The deployed trawhile instance additionally queries GitHub for advisories affecting its running version and surfaces them in the admin UI as a defence-in-depth complement to the deployer's own subscription. If trawhile is later placed on the EU market in a commercial activity, CRA technical-file and ENISA reporting flows must be added.
+trawhile is a non-commercial OSS project; it therefore does not require a CRA manufacturer flow. This view shows the public security and release-evidence flows the project maintains as good OSS practice and for transparency. GitHub is the public project and release-evidence surface: source, releases, SBOMs, OpenAPI specifications, vulnerability intake, and Security Advisories. The deployed instance has no anonymous content surface: SBOM is published only as a GitHub release artifact, and the OpenAPI specification, running version, and About-page content are reachable only by authenticated users. ST-6 reports vulnerabilities via GitHub's private vulnerability reporting channel rather than through the deployed instance. The advisory relationship between GitHub and ST-5 (Operator) is pull-based: ST-5 subscribes their incident-response tooling to the per-repo Atom feed (or watches the repo for security alerts) to receive advisories. The deployed trawhile instance does not query GitHub for advisories; the admin UI provides a guided subscription page that walks ST-5 through GitHub's native subscription mechanisms (UR-06-F03). If trawhile is later placed on the EU market in a commercial activity, CRA technical-file and ENISA reporting flows must be added.
 
 ```plantuml
 @startuml
@@ -178,7 +178,6 @@ GHReports --> Maintainer : vulnerability report
 Maintainer --> GHReleaseEvidence : publish source,\nreleases, SBOM, OpenAPI
 Maintainer --> GHAdvisories : publish advisory
 GHAdvisories --> Operator : advisory notifications\n(Atom feed / watch)
-Trawhile --> GHAdvisories : advisory check\n(opt-out)
 Trawhile .. Maintainer : manufactured by
 @enduml
 ```
@@ -196,7 +195,7 @@ Neighboring systems, infrastructure, and external actors interact with trawhile 
 | Backup storage | Stores backup artifacts written by the trawhile-provided backup tooling; ST-5 provisions, protects, and grants access to the storage target |
 | Container orchestration (Docker Compose) | Deployment orchestration; the trawhile project provides the reference Compose file including application-log capture, log retention, and backup tooling services, and ST-5 operates it |
 | Deployment platform (VPS) | Provides compute, storage, and network; the system runs on a single VPS; operated by ST-5 |
-| GitHub | Hosts the trawhile project; provides public source, releases, SBOMs, OpenAPI specifications, release evidence, the private vulnerability reporting channel, GitHub Security Advisories, operator advisory subscription mechanisms, and advisory data queried by trawhile |
+| GitHub | Hosts the trawhile project; provides public source, releases, SBOMs, OpenAPI specifications, release evidence, the private vulnerability reporting channel, GitHub Security Advisories, and operator advisory subscription mechanisms |
 
 ## Use case overview
 
@@ -275,21 +274,20 @@ Constraints are design-time conditions satisfied by construction and verified by
 - UR-00-C03: No email server is required; invitation emails are generated as mailto: links only. [Rationale: G-6; reduces attack surface]
 - UR-00-C04: The planned frontend delivery channel is a responsive browser-based application; no separate native mobile application is planned at this time. [Rationale: operational simplicity and a single frontend codebase]
 - UR-00-C05: The trawhile project is hosted on GitHub. GitHub's private vulnerability reporting is used as the inbound disclosure channel (UR-05-F06); GitHub Security Advisories are used as the outbound advisory channel (UR-06-F02). [Rationale: G-5; organizational constraint — project hosting and security-process platform; mature CVE-integrated workflows]
-- UR-00-C06: The advisory-availability check from the deployed trawhile instance to GitHub shall be opt-out by the operator with a default-enabled value; the system shall continue to operate normally with the check disabled. [Rationale: G-5; supports air-gapped or network-restricted deployments while maintaining secure-by-default behavior]
 - UR-00-C07: The reference Docker Compose deployment provided by the trawhile project shall include application-log capture, application-log retention enforcement, and backup-creation tooling; the operator remains responsible for provisioning the deployment platform and backup storage target, and for performing restore following project-provided documentation (UR-07-F02). [Rationale: G-5; keeps self-hosted operation simple for ST-5 while preserving operator control over infrastructure, storage custody, and restore execution]
 - UR-00-C08: Operations available to a Viewer, Tracker, or Node Admin via an OIDC-authenticated session shall also be available through API keys issued for that account with equivalent semantics, except for operations reachable only through an OIDC-authenticated session: (a) mutating Account Holder operations and reads of the Account Holder's own profile data; (b) System Admin operations; (c) operations requiring OIDC interaction. API key access therefore covers delegated Viewer (ST-2), Tracker (ST-3), and Node Admin (ST-4) operations, plus explicitly API-key-enabled authenticated transparency reads. [Rationale: G-1, G-5; predictable delegation of user capabilities to API and MCP clients, with sensitive irreversible actions kept under interactive control to reduce the impact of a leaked or misused API key]
 - UR-00-C09: The trawhile project shall include automated tests of the backup-creation tooling that verify produced artifacts are valid and sufficient to support restore via the documented procedure. [Rationale: G-5; since restore is performed by the operator from documented instructions rather than project-provided tooling (UR-07-F02), the documented procedure must be grounded in a tested, known-good backup-artifact format.]
 
 **Domain constraints**:
-- UR-00-C10: All timestamps are stored and exchanged in UTC. [Rationale: unambiguous time representation; GDPR audit trail integrity]
-- UR-00-C11: No email addresses are stored for registered users. [Rationale: G-4; GDPR Art. 5(1)(c) data minimisation]
+- UR-00-C10: Timestamps are stored in the database and exchanged on the API wire format in UTC. User-facing time-window semantics — period selectors (such as year-to-date and month-to-date) and the alignment of day, week, month, and year bucket boundaries in reports — are interpreted in the user's local time zone. The frontend is responsible for converting user-local boundaries to UTC instants for transmission to the backend and, where backend bucketing depends on time-zone alignment, for supplying the user's time-zone identifier in the request; the backend operates purely in UTC and holds no per-user time-zone state. [Rationale: unambiguous time representation in storage and on the wire; GDPR audit trail integrity; presentation in the user's local time matches user expectation without requiring per-user time-zone persistence]
+- UR-00-C11: For registered users, the system shall store the email address as supplied by the OIDC `email` claim and refresh it on each successful sign-in. The email is cleared during anonymisation along with the other identifying account data. Email is exposed to any authenticated user in every context that already shows the user's display name (own profile, peer-facing lists and report-target labels, admin user-list, admin lookup, invitation handling), so that name collisions can be disambiguated by augmenting the display name with the email. Application log entries continue to redact email per UR-00-C14; pseudonymous identifiers are the audit-trail surface and the System Admin resolves them via the lookup function of UR-06-F05. [Rationale: G-1, G-4; operational utility outweighs the data-minimisation benefit of withholding storage, since the email is already known to the OIDC IdP, the operator's invitation workflow, and the user themselves; consistent visibility avoids context-dependent disclosure rules; non-admin (peer) display contexts use email primarily to disambiguate identical display names]
 - UR-00-C12: The system must be deployable via Docker Compose on a single VPS without a container orchestration platform. [Rationale: G-5; operational simplicity for self-hosting companies]
 - UR-00-C13: Pending invitations shall expire automatically after 90 days; they shall not be stored indefinitely. [Rationale: G-4; GDPR Art. 5(1)(e) storage limitation]
 - UR-00-C14: trawhile application logs (operational, diagnostic, and audit log stream captured by the trawhile-provided logging infrastructure) shall not contain personal data. Identifiers in these logs shall be excluded, masked, or pseudonymised at emission, and request/response payloads shall not be logged in full. [Rationale: G-4, G-5; GDPR Art. 5(1)(c) data minimisation, Art. 25 data protection by design; secure-by-default operation]
 - UR-00-C15: trawhile application logs shall be retained by the trawhile-provided logging infrastructure for exactly 3 years; the retention period is fixed and not operator-configurable. Retention shall be enforced by the log pipeline configuration, not by manual deletion. [Rationale: G-4, G-5; GDPR Art. 5(1)(e) storage limitation; aligned with the data retention period so audit and operational evidence remain available for the same window as the underlying records; fixing the value removes operator misconfiguration risk and inadvertent retention drift.]
 - UR-00-C16: trawhile application logs shall include correlation identifiers (request ID, trace ID, session ID, pseudonymised user ID where an actor is known) on every entry, sufficient to associate related events across components and time. [Rationale: G-5; complements UR-00-C14 by ensuring ST-5 can investigate incidents without payload reconstruction; the no-full-payload rule is workable only if entries can still be correlated across services and request boundaries.]
 - UR-00-C17: The data retention period is fixed at 3 years, measured to the second from the current moment. Time records past the retention boundary are permanently deleted by the next purge; the boundary is evaluated against the end of each record's counted duration. Nodes are deleted by the purge operation once their subtree holds no remaining time records and the node itself is older than the retention boundary. The retention period is not operator-configurable. [Rationale: G-4; GDPR Art. 5(1)(e) storage limitation. 3 years compromises between 2 years (insufficient retrospective view) and 5 years (excessive); accounting needs are served by aggregated reports, not long-term record retention. Fixing the value prevents accidental data loss from operator error and avoids re-notifying users on policy changes.]
-- UR-00-C18: All UI text, including GDPR-sensitive screens, shall be rendered in the language derived from the user's browser locale (best match against English, German, French, Spanish; default English). [Rationale: G-4; user accessibility and informed consent on GDPR-relevant screens; the bounded language set keeps translation effort manageable.]
+- UR-00-C18: All UI text, including GDPR-sensitive screens, shall be rendered in the language and regional dialect derived from the user's browser locale (best match against en-GB, de-DE, fr-FR, es-ES; default en-GB). The choice of European dialects reflects trawhile's primary deployment market. Additional regional dialects (such as en-US, de-CH, fr-CA, es-MX) may be added later without changing the locale-resolution mechanism or the SRs that depend on it. [Rationale: G-4; user accessibility and informed consent on GDPR-relevant screens; the bounded language set keeps translation effort manageable.]
 
 **Security constraints**:
 - UR-00-C19: Request rates shall be limited on all OAuth2 and API endpoints to prevent abuse and brute-force attacks. [Rationale: G-5; OWASP]
@@ -430,14 +428,14 @@ end note
 @enduml
 ```
 
-- UR-02-F01: The Viewer shall be able to view the details and direct children of any node on which they hold at least `view` authorization (effective, per the recursive grant rule). [Goal: G-1]
+- UR-02-F01: The Viewer shall be able to view their visible node tree — every node on which they hold at least `view` authorization (effective, per the recursive grant rule) and the attributes of each node, including the caller's effective authorization level on each — to navigate the company's work hierarchy at any point in it. [Goal: G-1]
 - UR-02-F02: The Node Admin shall be able to create a child node under any node within their scope. [Goal: G-1]
 - UR-02-F03: The Node Admin shall be able to edit the name, description, color, icon, and logo of any node within their scope. Logo uploads are limited to 256 KB and common image formats. [Goal: G-1]
 - UR-02-F04: The Node Admin shall be able to reorder the child nodes of any node within their scope. [Goal: G-1]
 - UR-02-F05: The Node Admin shall be able to deactivate or reactivate any node within their scope. [Goal: G-1]
 - UR-02-F06: The Node Admin shall be able to move a node to a different parent, provided they have admin rights on both the node and the destination parent, and the destination is not within the node's own subtree. [Goal: G-1]
-- UR-02-F07: The Node Admin shall be able to grant `view`, `track`, or `admin` authorization on any node within their scope to any existing user; this operation is accessible both from the node view and from the user view (UR-01-F07). Granting `admin` on the root node makes the user a System Admin. [Goal: G-2]
-- UR-02-F08: The Node Admin shall be able to revoke a user's authorization on any node within their scope, provided the user is not the last `admin` of that node; this operation is accessible both from the node view and from the user view (UR-01-F07). Revoking `admin` on the root node removes System Admin rights. [Goal: G-2]
+- UR-02-F07: The Node Admin shall be able to grant `view`, `track`, or `admin` authorization on any node within their scope to any non-anonymised user other than themselves. The grant is recorded as a single direct authorization row per (user, node) pair; submitting a new grant for the same (user, node) overwrites the previous direct level (raise, lower, or keep). Inherited grants from ancestors are not affected. Effective rights on the node are the maximum of the user's direct grant on this node, if any, and any grants inherited from ancestors. This operation is accessible both from the node view and from the user view (UR-01-F07). Granting `admin` on the root node makes the user a System Admin. [Goal: G-2]
+- UR-02-F08: The Node Admin shall be able to revoke a user's direct authorization grant on any node within their scope, provided the user is not themselves and the revoke would not leave the node without any user holding effective `admin` (combining all remaining direct grants on the node and admin grants inherited from ancestors). This operation is accessible both from the node view and from the user view (UR-01-F07). Revoking `admin` on the root node removes System Admin rights from the affected user. [Goal: G-2]
 - UR-02-F09: The Viewer shall be able to view all authorization assignments on any node on which they hold at least `view` authorization, distinguishing direct assignments from those inherited from ancestors. [Goal: G-2]
 
 ## Epic E-03 — Time tracking
@@ -547,11 +545,11 @@ end note
 @enduml
 ```
 
-- UR-04-F01: The Viewer shall be able to view a time report aggregated over a user-selected date interval (daily, weekly, monthly, yearly, year-to-date, month-to-date) with a minimum granularity of one day, filtered by date range, user, and node, and limited to nodes visible to them. Individual time records are not exposed via reports; the per-record-detail surface is the tracking history (UR-03-F02). [Goal: G-3]
+- UR-04-F01: The Viewer shall be able to view a time report aggregated by a user-selected bucket size (hourly, daily, weekly, monthly, yearly) over a user-selected date range, filtered by user and node, and limited to nodes visible to them. Period selectors such as year-to-date or month-to-date are computed by the frontend into the underlying date range. Individual time records are not exposed via reports; the per-record-detail surface is the tracking history (UR-03-F02). [Goal: G-3]
 - UR-04-F02: The Viewer shall be able to toggle a time report between summary view (per-node totals per time bucket), detailed view (further split by record description), and chart view (per UR-04-F05). [Goal: G-3]
 - UR-04-F03: The Viewer shall be able to export the current report view to CSV. [Goal: G-3]
-- UR-04-F04: The Viewer shall be able to view the total time tracked by other members on nodes visible to them, aggregated over any full-day interval (daily, weekly, monthly, yearly, year-to-date, month-to-date); individual time record details shall not be visible. [Goal: G-1, G-4]
-- UR-04-F05: The Viewer shall be able to view the following chart types in chart view, all respecting the active report filters: (1) time per node (bar or pie); (2) time over period (bar or line, bucketed by time interval); (3) per-member breakdown (stacked bar per time bucket, limited to members visible to the requesting user). [Goal: G-3]
+- UR-04-F04: The Viewer shall be able to view the total time tracked by other members on nodes visible to them, aggregated by the same bucket sizes as UR-04-F01 (hourly, daily, weekly, monthly, yearly); individual time record details shall not be visible. User-local bucket alignment per UR-00-C10 produces a side channel: a caller who deliberately issues the same report query with multiple distinct IANA time-zone identifiers can infer individual record start times to a granularity bounded by the smallest IANA time-zone offset increment (currently 15 minutes). This bounded inference is accepted policy; it is preferred over the alternatives (no user-local alignment, or per-user persisted time zones with administrative tooling) because user-local report buckets matter more for everyday use than perfect privacy against an attacker willing to fire dozens of multi-time-zone queries. [Goal: G-1, G-4]
+- UR-04-F05: The Viewer shall be able to view the active report as a bar chart with time on the X axis (bucketed at the user-selected granularity from UR-04-F01) and total time spent on the Y axis. The chart respects the active report filters, which are composable across date range, node, and user. The frontend is responsible for offering bucket granularities meaningful for the selected date range; the backend accepts any supported granularity without further enforcement. [Goal: G-3]
 - UR-04-F06: The Viewer shall be able to export the current report view — whether a table or a chart — to PDF. [Goal: G-3]
 - UR-04-F07: The Viewer shall be able to have their report filter settings automatically persisted and restored across sessions and devices. [Goal: G-1]
 
@@ -595,7 +593,7 @@ AccountHolder --> UC_About
 - UR-05-F03: The Account Holder shall be able to unlink an OIDC provider from their account, provided at least one other provider remains linked. [Goal: G-1]
 - UR-05-F04: The Account Holder shall be able to view all their node authorization assignments across the tree. [Goal: G-2]
 - UR-05-F05: The Account Holder shall be able to anonymise their own account via a guided confirmation wizard, irreversibly removing the link between their person and any retained trawhile activity history while preserving that history until the retention period removes it. [Goal: G-4]
-- UR-05-F06: Any authenticated Account Holder (via OIDC session or API key) shall be able to view the About page, including the running application version, third-party licenses, a downloadable OpenAPI specification, a permanent summary of what personal data is stored and how long it is retained, the outbound network connections the instance makes (including the security-advisory check, when enabled), a link to trawhile's security vulnerability disclosure channel, and a link to the security advisory channel where the trawhile project publishes vulnerability and incident notifications. The About page is not reachable without authentication. SBOM is not served by the instance; it is published as a GitHub release artifact. [Goal: G-4, G-5]
+- UR-05-F06: Any authenticated Account Holder (via OIDC session or API key) shall be able to view the About page, including the running application version, third-party licenses, a downloadable OpenAPI specification, a permanent summary of what personal data is stored and how long it is retained, the outbound network connections the instance makes, a link to trawhile's security vulnerability disclosure channel, and a link to the security advisory channel where the trawhile project publishes vulnerability and incident notifications. The About page is not reachable without authentication. SBOM is not served by the instance; it is published as a GitHub release artifact. [Goal: G-4, G-5]
 
 ## Epic E-06 — Security & audit
 
@@ -614,7 +612,6 @@ rectangle "Security & Audit" {
   package "Vulnerability Advisories" {
     usecase "Receive vulnerability advisories\nvia trawhile project channel\n(UR-06-F02)"  as UC_Advisories
     usecase "Guided in-app subscription\nto advisory channel\n(UR-06-F03)"                 as UC_AdvSubscribe
-    usecase "See unresolved advisories\naffecting running version"            as UC_AdvUnresolved
   }
 }
 
@@ -622,7 +619,6 @@ System   --> UC_EmitAudit
 SysAdmin --> UC_LookupUser
 SysAdmin --> UC_Advisories
 SysAdmin --> UC_AdvSubscribe
-SysAdmin --> UC_AdvUnresolved
 
 note bottom of UC_EmitAudit
   Audit events are emitted into the unified
@@ -634,11 +630,10 @@ end note
 @enduml
 ```
 
-- UR-06-F01: The system shall emit audit-relevant events (authentication outcomes, authorization changes, user lifecycle changes, anonymisation) as structured records into the trawhile application log stream, each carrying event type, actor identifier, target identifier, timestamp, and the correlation identifiers per UR-00-C16 so audit events can be linked with related operational entries during investigation. Records comply with UR-00-C14; the System Admin investigates via the trawhile-provided logging infrastructure (UR-01-F11), resolving pseudonymous identifiers per UR-06-F05. [Goal: G-5]
+- UR-06-F01: The system shall emit audit-relevant events (authentication outcomes, authorization changes, user lifecycle changes, anonymisation, node-tree mutations, delegated-access lifecycle, and lifecycle-job outcomes) as structured records into the trawhile application log stream, each carrying event type, actor identifier, target identifier, timestamp, and the correlation identifiers per UR-00-C16 so audit events can be linked with related operational entries during investigation. Node-tree mutations are included because moves change which users can see and track on the moved subtree via inheritance, and the other node lifecycle operations (create, update, deactivate, reactivate, retention purge) keep the vocabulary consistent for investigations. Records comply with UR-00-C14; the System Admin investigates via the trawhile-provided logging infrastructure (UR-01-F11), resolving pseudonymous identifiers per UR-06-F05. [Goal: G-5]
 - UR-06-F02: The System Admin shall be informed of vulnerabilities and security incidents affecting trawhile through an advisory channel published by the trawhile project, so that patches and mitigations can be applied in a timely manner; this channel shall be discoverable via the About page (per UR-05-F06). [Goal: G-5]
 - UR-06-F03: The System Admin shall be guided within the application on how to subscribe to trawhile's security advisory channel, so that no external documentation is required. [Goal: G-5]
-- UR-06-F04: The System Admin shall see, in the admin UI, any unresolved security advisories affecting the running version of trawhile, so that the operator is made aware that a redeployment with the patched version is required. [Goal: G-5]
-- UR-06-F05: The System Admin shall be able to look up a user account by pseudonymised identifier (internal user UUID or OIDC subject), so that audit-relevant events found in the application log stream can be associated with the corresponding user without external mapping. [Goal: G-5]
+- UR-06-F05: The System Admin shall be able to look up a user account by pseudonymised identifier (internal user UUID or OIDC subject) or by email address, so that audit-relevant events found in the application log stream can be associated with the corresponding user, and users reported by name only (e.g., "John from support has issues") can be located. [Goal: G-5]
 
 ## Epic E-07 — Data lifecycle
 
@@ -683,7 +678,7 @@ end note
 ```
 
 - UR-07-F01: When a user's access is terminated by any means, the system shall atomically clean up associated active state, anonymise identifying account data, and invalidate active delegated access; activity records associated with the user remain subject to the data retention period. [Goal: G-4]
-- UR-07-F02: The operator shall be able to use trawhile-provided backup-creation tooling to create backups of trawhile-managed persistent data and write them to an operator-provisioned backup storage target. Restore is performed by the operator following project-provided documentation; trawhile does not provide restore automation, so responsibility for restore correctness rests with the documented procedure and the operator's execution of it. [Goal: G-5]
+- UR-07-F02: The operator shall be able to use trawhile-provided backup-creation tooling to create backups of trawhile-managed persistent data and write them to an operator-provisioned backup storage target. Restore is performed by the operator following project-provided documentation; trawhile does not provide restore automation, so responsibility for restore correctness rests with the documented procedure and the operator's execution of it. At-rest encryption of the backup artifact is the operator's responsibility (filesystem, disk, cloud-provider, or backup-target encryption), consistent with the operator-provisioned storage framing; the trawhile-provided tool produces a plain `pg_dump` artifact and does not perform encryption itself. [Goal: G-4, G-5]
 
 ## Epic E-08 — API access
 
@@ -699,7 +694,6 @@ rectangle "API access" {
     usecase "Generate named API key\n(scoped, with expiry)\n(UR-08-F01)"   as UC_GenKey
     usecase "View own API keys\n(UR-08-F02)"                               as UC_ViewKeys
     usecase "Revoke own API key\n(UR-08-F03)"                              as UC_RevokeKey
-    usecase "Update active API key\n(rename, extend expiry)\n(UR-08-F04)"  as UC_UpdateKey
   }
   package "API key oversight (System Admin)" {
     usecase "View all API keys\nacross all users\n(UR-08-F05)"             as UC_AdminViewKeys
@@ -713,7 +707,6 @@ rectangle "API access" {
 AccountHolder --> UC_GenKey
 AccountHolder --> UC_ViewKeys
 AccountHolder --> UC_RevokeKey
-AccountHolder --> UC_UpdateKey
 SysAdmin      --> UC_AdminViewKeys
 SysAdmin      --> UC_AdminRevokeKey
 AccountHolder --> UC_ApiAccess
@@ -724,7 +717,6 @@ AccountHolder --> UC_ApiAccess
 - UR-08-F01: The Account Holder shall be able to generate a named API key, specifying an authorization scope that is a subset of their own effective authorization (node scope and permission level) and a required expiry date; the raw key value is returned exactly once. [Goal: G-1]
 - UR-08-F02: The Account Holder shall be able to view their own API keys, including name, scope, creation date, last-used date, expiry date, and active-vs-expired status. [Goal: G-1]
 - UR-08-F03: The Account Holder shall be able to revoke any of their own API keys. [Goal: G-1]
-- UR-08-F04: The Account Holder shall be able to update an active (non-expired, non-revoked) API key by renaming it or extending its expiry date; expired or revoked keys cannot be updated and must be replaced by generating a new key. [Goal: G-1]
 - UR-08-F05: The System Admin shall be able to view all API keys across all users, including the owning user, name, scope, creation date, last-used date, expiry date, and status. [Goal: G-5]
 - UR-08-F06: The System Admin shall be able to revoke any API key regardless of owner. [Goal: G-5]
 
@@ -739,9 +731,10 @@ Business rules that hold unconditionally across all epics. An agent reviewing or
 - Open time records are excluded from reports and exports; only closed time records contribute to aggregates, detail rows, and charts.
 - Starting a live tracking record requires the target node to be trackable for the user and active. Retroactive create and edit operations require the relevant node to be trackable for the user; the node need not be active.
 - Time records of the same user shall not overlap in time; create, edit, and duplicate operations reject values that would overlap with another existing record of the same user.
-- Cannot revoke the last `admin` authorization on any node.
+- Cannot leave any node without an effective `admin`: a revoke of a direct admin grant is rejected when the resulting state has no remaining user with effective `admin` on the node (combining direct grants on the node and admin grants inherited from ancestors).
+- A user cannot create, update, or delete a direct node-authorization grant on themselves; changes to one's own node-authorization grants require the action of another admin or self-anonymisation (UR-05-F05). API keys (UR-08) are a separate delegated-access mechanism and are unaffected by this invariant.
 - Cannot move a node into its own subtree.
-- All timestamps are stored and exchanged in UTC.
+- Timestamps are stored in the database and exchanged on the API wire format in UTC; user-facing time-window semantics are interpreted in the user's local time zone, with the frontend handling the conversion (UR-00-C10).
 - A user must exist before receiving any node authorization.
 - Authorization is derived recursively upward: a grant on an ancestor is effective on all descendants.
 - Only users with `admin` on a node may grant or revoke authorizations on that node or any descendant.

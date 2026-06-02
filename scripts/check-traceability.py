@@ -37,8 +37,8 @@ from xml.etree import ElementTree
 BACKEND_TEST_TYPES = {"IT", "UT", "SIT"}
 FRONTEND_TEST_TYPES = {"CT", "E2E"}
 
-UR_LINE_RE = re.compile(r"^- (UR-[FQC]\d{3}):\s*(.+)$")
-SR_LINE_RE = re.compile(r"^\*\*(SR-[FQC]\d{3}\.[FQC]\d{2}) \(type ([FQC])\):\*\*")
+UR_LINE_RE = re.compile(r"^- (UR-\d{2}-([FQC])\d{2}):\s*(.+)$")
+SR_LINE_RE = re.compile(r"^- \*\*(SR-\d{2}-[FQC]\d{2}\.[FQC]\d{2})\*\* \(type ([FQC])\):")
 PACKAGE_RE = re.compile(r"^\s*package\s+([a-zA-Z_][\w.]*)\s*;")
 CLASS_RE = re.compile(r"^\s*(?:public\s+)?(?:abstract\s+)?(?:final\s+)?class\s+([A-Za-z_]\w*)\b")
 TAG_RE = re.compile(r'@Tag\("((?:TE|UR|SR)-[^"]+)"\)')
@@ -171,8 +171,7 @@ def parse_urs(path: Path) -> dict[str, UrEntry]:
         match = UR_LINE_RE.match(raw_line)
         if not match:
             continue
-        ur_id, description = match.groups()
-        ur_type = ur_id[3]
+        ur_id, ur_type, description = match.groups()
         retired = "retired" in description.lower()
         entries[ur_id] = UrEntry(id=ur_id, type=ur_type, retired=retired)
     return entries

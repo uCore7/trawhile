@@ -35,7 +35,7 @@ The constraints most relevant for the architecture are grouped below. Architectu
 |---|---|---|
 | Organizational / deployment | One deployed instance serves exactly one company. | Data isolation and GDPR data-controller boundary; see UR-00-C01. |
 | Technical / backend platform | The backend uses Java 25, Spring Boot 4.x, and the Spring servlet stack. | Fixed backend application platform. |
-| Technical / frontend platform | The frontend uses Angular 21.x with PrimeNG 21.x widgets, Tailwind CSS 4.x, TypeScript 5.x, and ngx-translate 16.x. | Fixed frontend stack for SPA structure, UI widgets, styling, type safety, and runtime translation. |
+| Technical / frontend platform | The frontend uses Angular 21.x with PrimeNG 21.x widgets (including the Chart.js-backed chart components), Tailwind CSS 4.x, TypeScript 5.x, and ngx-translate 16.x. Client-side PDF generation uses `jsPDF` with the `jsPDF-AutoTable` plugin for vector-rendered tables (SR-04-F06.F01). | Fixed frontend stack for SPA structure, UI widgets, styling, type safety, runtime translation, and client-side report export. |
 | UX / frontend | The browser UI must be responsive across desktop and mobile browser contexts and reactive to user interaction and server-visible state changes. No separate native mobile application is planned at this time. | High-frequency tracking workflows, mobile node selection, live-update requirements, and the planned browser-based delivery channel; see UR-03-F12 and UR-00-C04. |
 | Technical / edge infrastructure | Caddy is used as the reverse proxy and TLS endpoint. | Fixed deployment infrastructure for HTTPS termination in front of the Spring Boot application. |
 | Technical / data infrastructure | PostgreSQL 18 is the persistence engine. | Fixed database infrastructure for the deployment environment. |
@@ -176,19 +176,16 @@ component "Lifecycle trigger\nadapter" as LifecycleInbound
 
 component "Events\nport" as EventPort
 component "Service-specific\npersistence ports" as PersistencePorts
-component "Advisories\nport" as AdvisoryPort
 
 rectangle "Services (core)" as Services {
   component "Work services" as Work
   component "Identity and access" as IdAccess
   component "Administration services" as Admin
-  component "Advisories" as Advisories
 }
 
 WebInbound --> Work
 WebInbound --> IdAccess
 WebInbound --> Admin
-WebInbound --> Advisories
 McpInbound --> Work
 AuthFlowInbound --> IdAccess
 LifecycleInbound --> Admin
@@ -196,7 +193,6 @@ LifecycleInbound --> Admin
 Work --> PersistencePorts
 IdAccess --> PersistencePorts
 Admin --> PersistencePorts
-Advisories --> AdvisoryPort
 
 Work --> EventPort
 IdAccess --> EventPort
@@ -204,7 +200,7 @@ Admin --> EventPort
 @enduml
 ```
 
-`Services (core)` opens into four clusters by concern: **Work services** (productive use cases on the node tree), **Identity and access** (user identity and delegated-access constructs), **Administration services** (operator- and system-driven concerns), and **Advisories** (project security-advisory visibility). Inbound adapters fan into these clusters: the Web adapter reaches all four; the MCP inbound adapter reaches Work services only (per UR-00-C08); the Auth flow adapter feeds Identity and access; the Lifecycle trigger adapter feeds Administration services. Per-cluster persistence ports and the Advisories port are shown grouped here; each is named explicitly inside the corresponding Level 3 view in §5.2.3.
+`Services (core)` opens into three clusters by concern: **Work services** (productive use cases on the node tree), **Identity and access** (user identity and delegated-access constructs), and **Administration services** (operator- and system-driven concerns). Inbound adapters fan into these clusters: the Web adapter reaches all three; the MCP inbound adapter reaches Work services only (per UR-00-C08); the Auth flow adapter feeds Identity and access; the Lifecycle trigger adapter feeds Administration services. Per-cluster persistence ports are shown grouped here; each is named explicitly inside the corresponding Level 3 view in §5.2.3.
 
 Each adapter→cluster edge in the diagram is realised through an **inbound port interface** declared in `port/inbound/<cluster>/<service>/` and implemented by the corresponding service class in `service/<cluster>/<service>/`. Adapters depend on the interface, not on the service class. See §5.2.4 for the port-package structure.
 
@@ -430,30 +426,9 @@ LifecycleService --> EventPort
 
 Operator- and system-driven concerns (Admin, Lifecycle).
 
-Advisories:
+Audit-event emission to the application log stream per UR-06-F01 is a cross-cutting concern handled via the logging framework (§8.5), not represented as a service.
 
-```plantuml
-@startuml
-left to right direction
-skinparam componentStyle rectangle
-skinparam nodesep 20
-skinparam ranksep 25
-
-component "Web adapter" as WebInbound
-component "Advisories\nport" as AdvisoryPort
-
-rectangle "Advisories" {
-  component "Advisory service" as AdvisoryService
-}
-
-WebInbound --> AdvisoryService : admin views
-AdvisoryService --> AdvisoryPort
-@enduml
-```
-
-Admin views over project security advisories affecting the running version (Advisory service). Audit-event emission to the application log stream per UR-06-F01 is a cross-cutting concern handled via the logging framework (§8.5), not represented as a service.
-
-**Note.** Two kinds of edge are omitted from the four diagrams above to keep them readable: runtime authorization-entry checks (the `AuthorizationService` call at method entry described in §6.2 — owned by the Authorization service and called by every peer that processes external-actor requests) and `Config` injection (per the §5.2.1 note).
+**Note.** Two kinds of edge are omitted from the three diagrams above to keep them readable: runtime authorization-entry checks (the `AuthorizationService` call at method entry described in §6.2 — owned by the Authorization service and called by every peer that processes external-actor requests) and `Config` injection (per the §5.2.1 note).
 
 Black boxes (level 3):
 
@@ -461,8 +436,6 @@ Black boxes (level 3):
 |---|---|
 | Account service | Owns account/profile, OIDC provider linking, first-login completion, and account anonymisation use cases; carries account-specific business rules and transaction boundaries. |
 | Admin service | Owns operator-side user-lifecycle management (deactivation, removal) and administrative overview actions. Node-scoped authorization grants, invitations, and API keys are owned by the Authorization service. |
-| Advisory port | Provides access to security advisory information affecting the running version. |
-| Advisory service | Owns security advisory visibility for the running version and interprets advisory data for admin-facing use cases. |
 | Auth flow adapter | Handles OIDC callback and login-flow entry points, classifies first-callback outcomes (bootstrap, invitation match, provider linking, known-identity login, rejected login per §6.1), and dispatches to the Account service (provider linking, activation of the pre-created user on invitation match) and to the Authorization service (root `admin` grant on bootstrap). Invitations link to pre-created users; the activation step does not produce new grants. |
 | Authorization service | Owns the delegated-access constructs: node-scoped authorization grants (direct user grants and invitations as pending grants), API keys that scope a subset of the holder's effective authorization (issuance, listing, revocation, update, and System Admin oversight), and per-user live-update delivery configuration for API consumers (UR-03-F12). Implements `AuthorizationService` runtime entry checks called from peer application services for external-actor operations, by querying the same authorization model. |
 | Lifecycle service | Owns scheduled and startup lifecycle work such as purge jobs, invitation expiry, user cleanup, and configuration validation. |
@@ -500,7 +473,6 @@ com.trawhile
   port/
     inbound/
       administration/   [Administration cluster use-case interfaces]
-      advisories/       [Advisories cluster use-case interface]
       identity/         [Identity and access cluster use-case interfaces]
       work/             [Work cluster use-case interfaces]
     model/              [shared port model types]
@@ -512,7 +484,6 @@ com.trawhile
     administration/   [Administration services cluster]
       admin/
       lifecycle/
-    advisories/       [Advisories cluster]
     identity/         [Identity and access cluster]
       account/
       authorization/
@@ -525,7 +496,7 @@ com.trawhile
 
 The tree above is a structural index only. Each package's responsibilities are described in the table below; the table is the source of truth.
 
-**Note on the inbound asymmetry.** `adapter/inbound/` is organised by **protocol** (`web`, `mcp`, `sse`, `security`, `lifecycle`) while `port/inbound/` is organised by **use-case cluster** (`work`, `identity`, `administration`, `advisories`). These axes are independent and the relationship between adapters and ports is n:m — one Web adapter calls into ports across multiple clusters; one Work cluster is called from both Web and MCP inbound adapters (see §5.2.2 Services (core) view). Forcing both sides onto a single axis would either group unrelated use cases by protocol or fragment a single protocol across clusters; the dual axis is canonical hexagonal architecture.
+**Note on the inbound asymmetry.** `adapter/inbound/` is organised by **protocol** (`web`, `mcp`, `sse`, `security`, `lifecycle`) while `port/inbound/` is organised by **use-case cluster** (`work`, `identity`, `administration`). These axes are independent and the relationship between adapters and ports is n:m — one Web adapter calls into ports across multiple clusters; one Work cluster is called from both Web and MCP inbound adapters (see §5.2.2 Services (core) view). Forcing both sides onto a single axis would either group unrelated use cases by protocol or fragment a single protocol across clusters; the dual axis is canonical hexagonal architecture.
 
 Main responsibilities:
 
@@ -542,7 +513,7 @@ Main responsibilities:
 | `config/` | Spring configuration: typed application properties (`application.yml` + env vars); Spring Security framework wiring (`SecurityFilterChain`, `AuthenticationManager`, CSRF/CORS/header config) consumed by `adapter/inbound/security/`; and Spring Session → Redis wiring (`config/session/`) consumed by Spring Security for HTTP-session storage. Injected by Spring into every other backend element: `WebSurface`, the inbound adapters (`Web/MCP/SSE adapters`, `Security/OIDC adapter`, `Lifecycle trigger adapter`), the application `Services`, and the `Outbound adapters`. Note: there is no `SessionPort` in the core — sessions are entirely a Spring Security / Spring Session concern; `config/session/` is configuration, not an adapter, and therefore lives here rather than under `adapter/outbound/`. |
 | `MeterRegistry` (in-process Spring bean) | Singleton Micrometer registry; the in-process state store written by `adapter/outbound/metrics/` and read by `websurface/`'s `/actuator/prometheus` management endpoint to serve scrape requests from the external Monitoring stack. Not a source package — listed here because it appears as a distinct element in the §5.2.1 diagram, parallel to the external `PostgreSQL` and `Redis` stores. |
 | `port/` | use-case-shaped ports owned by the application core, split by direction. `port/inbound/<cluster>/` declares the use-case interfaces (one per service, grouped by service cluster from §5.2.2 / §5.2.3) that inbound adapters depend on; service classes in `service/<cluster>/<svc>/` implement them. `port/outbound/` declares the contracts the core needs from outside (persistence, events, metrics); outbound adapters in `adapter/outbound/` implement them. `port/model/` holds shared model types referenced by both directions. The inbound interface layer documents the core's driver-facing API independently of the service implementation and lets adapter tests substitute interface mocks. |
-| `service/` | application core: use-case flow, business rules, authorization entry checks, transaction boundaries. Organised into the four service clusters from §5.2.2 (`work/`, `identity/`, `administration/`, `advisories/`); each cluster sub-package contains its constituent services as documented in §5.2.3. Each service class implements the corresponding inbound port interface in `port/inbound/<cluster>/`; inbound adapters depend on those interfaces rather than on service classes. Cross-cluster calls (notably the `AuthorizationService` entry check from every external-actor service into `identity/authorization/`) are explicit cross-package imports, surfacing inter-cluster coupling at PR review time. |
+| `service/` | application core: use-case flow, business rules, authorization entry checks, transaction boundaries. Organised into the three service clusters from §5.2.2 (`work/`, `identity/`, `administration/`); each cluster sub-package contains its constituent services as documented in §5.2.3. Each service class implements the corresponding inbound port interface in `port/inbound/<cluster>/`; inbound adapters depend on those interfaces rather than on service classes. Cross-cluster calls (notably the `AuthorizationService` entry check from every external-actor service into `identity/authorization/`) are explicit cross-package imports, surfacing inter-cluster coupling at PR review time. |
 | `TaskScheduler` (Spring Boot auto-configured bean) | Spring's scheduler that fires `@Scheduled` methods on `adapter/inbound/lifecycle/` at architecture-defined fixed intervals (UR-00-C17, §6.4). The sole trigger source for the Lifecycle trigger adapter — there is no external (HTTP, MCP, user) entry path to that adapter. Not a source package — listed here because it appears as a distinct element in the §5.2.1 diagram. |
 | `websurface/` | Spring HTTP entry surface that receives proxied requests, applies shared routing/error/management behavior, and dispatches to inbound adapters |
 
@@ -777,7 +748,7 @@ The diagram shows the **Tracking** slice as a representative example; the other 
 | Nodes | Node tree, node CRUD, quick-access, authorization listings | `loadNodeTree`, `createNode`, `editNode`, `moveNode`, `(de)activateNode`, `grantAuthorization`, `revokeAuthorization`, `nodeTreeChanged` (from SSE) | Node CRUD API calls; authorization CRUD; `NodeTreeChanged` and `AuthorizationChanged` SSE handlers |
 | Reports | Report filter, aggregated read models, charts, export | `applyFilter`, `loadReport`, `requestCsvExport`, `requestPdfExport` | Report query API call; CSV/PDF export downloads |
 | Account | Profile, OIDC provider linking, API-key lifecycle, anonymisation | `loadProfile`, `linkProvider`, `unlinkProvider`, `anonymiseAccount`, `generateApiKey`, `revokeApiKey`, `updateApiKey` | Profile read; OIDC link/unlink; API-key CRUD; anonymise call |
-| Admin | User list, invitations, admin-side authorization view, advisories, log access | `loadUsers`, `createInvitation`, `resendInvitation`, `withdrawInvitation`, `removeUser`, `loadAdvisories` | User-management API calls; advisory query |
+| Admin | User list, invitations, admin-side authorization view, log access | `loadUsers`, `createInvitation`, `resendInvitation`, `withdrawInvitation`, `removeUser` | User-management API calls |
 
 **Cross-slice coordination.** Slices are largely independent, but a few read each other's selectors via the central store:
 
@@ -803,7 +774,6 @@ rectangle "API services" as ApiServices {
   component "ReportsApiService" as RApi
   component "AccountApiService" as AcApi
   component "AdminApiService" as AdApi
-  component "AdvisoriesApiService" as AvApi
 }
 
 rectangle "SSE event dispatcher" as Dispatcher {
@@ -821,7 +791,6 @@ Effects --> NApi
 Effects --> RApi
 Effects --> AcApi
 Effects --> AdApi
-Effects --> AvApi
 
 ApiServices --> Interceptors
 Interceptors --> Backend : HTTPS
@@ -844,7 +813,6 @@ Dispatcher --> Effects : typed events
 | `AccountChanged` | snapshot | The recipient's profile snapshot — same shape as `GET /api/account/me` | Account slice |
 | `InvitationWithdrawn` | command | The withdrawn invitation's id and the inviter's pseudonymous id | Account slice |
 | `AccountAnonymisedByAdmin` | command | The action timestamp; no state remains for the recipient to read | Account slice (sign-out flow) |
-| `AdvisoryPublished` | command | The advisory id, severity, and affected versions | Admin slice |
 
 The dispatcher is the single ingress point for SSE events into NgRx; the raw `EventSource` is encapsulated by the SSE wrapper from §5.3.2 and never leaks into slice code. Effects handling snapshot events dispatch the relevant slice's `*Loaded` action with the payload, so the reducer path is identical to a REST-driven load and the slice is correct regardless of whether intermediate events were missed.
 
@@ -888,7 +856,7 @@ Spring Security owns the OIDC callback path. The OIDC user service and success h
 
 Transparency about retained personal data is reachable from the About page after sign-in (UR-05-F06).
 
-Email addresses returned by OIDC are used transiently for bootstrap and invitation matching and are not persisted on the user record (UR-00-C11).
+Email addresses returned by the OIDC `email` claim are persisted on the user record (`users.email`) on every successful authenticated callback, supporting admin user-list display, invitation handling, and audit investigation (UR-00-C11). Application log entries continue to redact email per UR-00-C14; the admin lookup function of UR-06-F05 is the surface where the System Admin resolves identifiers to identities.
 
 ### 6.2 Authorized Business Operation
 
@@ -918,7 +886,7 @@ Live-update emission is uniform: application services call the Event port after 
 
 ### 6.4 Lifecycle Jobs
 
-The application runs a small set of scheduled jobs that enforce time-bounded rules and the data retention policy (UR-00-C17). All jobs run on architecture-defined fixed intervals (not operator-configurable), are idempotent on restart, and process long-running work in chunks; each chunk runs in its own RDBMS transaction and updates `purge_jobs` progress so startup recovery can resume from the stored cutoff date.
+The application runs a small set of scheduled jobs that enforce time-bounded rules and the data retention policy (UR-00-C17). All jobs run on architecture-defined fixed intervals (not operator-configurable), are idempotent on restart, and process long-running work in chunks; each chunk runs in its own RDBMS transaction and updates `purge_jobs` progress so startup recovery can resume from the stored cutoff date. Scheduling is single-process: the Spring `TaskScheduler` bean in the one running `app` container fires each `@Scheduled` method without leader election, distributed locks, or any other coordination primitive — this is consistent with the single-VPS deployment model of UR-00-C12 and is part of why the architecture does not require a broker or consensus service.
 
 | Job | What it does | Source |
 |---|---|---|
@@ -943,14 +911,16 @@ state Active {
 }
 
 Pending --> AccessTerminationCleanup : invitation expires (90 days, UR-00-C13)\nor withdrawn (UR-01-F05)
-Active  --> AccessTerminationCleanup : Account Holder anonymises (UR-05-F05)\nor System Admin removes (UR-01-F06)
+Active  --> AccessTerminationCleanup : Account Holder anonymises (UR-05-F05)\nafter fresh OIDC step-up\nor System Admin removes (UR-01-F06)
 
 state "Access Termination Cleanup" as AccessTerminationCleanup {
-  AccessTerminationCleanup : entry / stop active tracking session (if any)
+  AccessTerminationCleanup : entry / close open time record (if any)
   AccessTerminationCleanup : entry / delete node authorizations
   AccessTerminationCleanup : entry / delete pending invitation (if any)
-  AccessTerminationCleanup : entry / anonymise identifying account data
-  AccessTerminationCleanup : entry / invalidate active delegated access
+  AccessTerminationCleanup : entry / set anonymisation marker and clear identifying fields
+  AccessTerminationCleanup : entry / delete OIDC provider links
+  AccessTerminationCleanup : entry / revoke API keys
+  AccessTerminationCleanup : entry / invalidate browser sessions
 }
 
 AccessTerminationCleanup --> [*]  : pending user — record deleted\nwith the invitation
@@ -1008,7 +978,7 @@ Docker Compose services:
 | `app` | Spring Boot backend and static Angular SPA; emits structured application log entries, including audit records per §8.5 |
 | `redis` | Spring Session backing store for interactive user sessions |
 | `db` | PostgreSQL database |
-| `log-pipeline` | Captures application log entries from `app` (and supporting services), enforces fixed 3-year retention per UR-00-C15 at the pipeline boundary, preserves correlation identifiers per UR-00-C16, and is the surface through which ST-5 reads logs per UR-01-F11. Log payload constraints are owned by emitters (UR-00-C14) |
+| `log-pipeline` | Captures application log entries from `app` (and supporting services), enforces fixed 3-year retention per UR-00-C15 at the pipeline boundary, preserves correlation identifiers per UR-00-C16, and is the surface through which ST-5 reads logs per UR-01-F11. Realised as Grafana Loki (storage and LogQL query API) plus Promtail (per-host log tailer) per ADR 0018; the LogQL query surface is exposed to operators through the Monitoring stack's Grafana via Explore. Log payload constraints are owned by emitters (UR-00-C14) |
 | `backup` | Periodic backup-creation tooling for trawhile-managed persistent data; writes artifacts to an operator-provisioned external storage target. Provides no restore command — the operator follows project-provided restore documentation (UR-07-F02). Artifact validity and restorability are covered by automated tests per UR-00-C09 |
 
 Configuration is supplied through environment variables and mounted `application.yml`. There is no database settings table. Log retention is enforced by `log-pipeline` configuration, not by application code or manual deletion.
@@ -1083,7 +1053,7 @@ Application log entries, metrics, and audit records must not contain raw API key
 
 ### 8.6 Privacy and Data Minimisation
 
-Registered users are identified by provider and subject id, not email. Email addresses returned by OIDC providers are used transiently for invitation or bootstrap matching and are not persisted for registered users.
+Registered users are identified by provider and subject id (the (provider, subject) pair on `user_oauth_providers`); the email address (`users.email`) is persisted alongside per UR-00-C11 for admin user-list display, invitation handling, and audit investigation, and is refreshed from the OIDC `email` claim on each successful sign-in. Email is cleared during anonymisation.
 
 Temporary login-flow state for bootstrap, invitation registration, and provider linking is session state, not durable business data. OIDC profile pictures are not stored.
 
@@ -1111,11 +1081,9 @@ The deployed instance and the trawhile project interact with GitHub for the OSS 
 
 **Inbound disclosure.** The deployed instance exposes no inbound disclosure surface. ST-6 (Security Researcher) reports vulnerabilities directly to the project through GitHub's private vulnerability reporting channel. The maintainer triages reports and publishes GitHub Security Advisories (GHSA) where warranted.
 
-**Outbound advisory ingress.** The deployed instance queries GitHub for advisories affecting its running version through the Advisory port and surfaces unresolved findings to the System Admin per UR-06-F04. The check is opt-out by the operator with a default-enabled value (UR-00-C06); when disabled, the system continues to operate normally and no outbound advisory traffic is generated.
+**Outbound advisory delivery.** The deployed instance does not query GitHub for advisories. The About page links to the project's GHSA index (UR-06-F02) and a guided admin-UI page walks the System Admin through subscribing to advisory notifications via GitHub's native mechanisms (watching the repository for security alerts, or subscribing incident-response tooling to the per-repo GHSA Atom feed) per UR-06-F03. Advisory awareness is therefore operator-driven through GitHub; the deployed instance carries no in-app advisory list, no periodic poll, and no advisory cache.
 
-**Operator-side subscription.** Independent of the in-instance check, the admin UI guides the System Admin through subscribing their own incident-response tooling to the per-repo GHSA Atom feed (UR-06-F03), so advisory notifications do not depend on the deployed instance staying available.
-
-**Transparency surface.** The About page (UR-05-F06) is the single authenticated transparency surface: running application version, third-party licenses, downloadable OpenAPI specification, permanent personal-data summary, outbound network connections (including the advisory check when enabled), and links to the disclosure and advisory channels. It is not reachable without authentication; SBOM is published only as a GitHub release artifact, never served by the deployed instance.
+**Transparency surface.** The About page (UR-05-F06) is the single authenticated transparency surface: running application version, third-party licenses, downloadable OpenAPI specification, permanent personal-data summary, outbound network connections (currently OIDC token-exchange and user-configured webhook deliveries — no advisory traffic), and links to the disclosure and advisory channels. It is not reachable without authentication; SBOM is published only as a GitHub release artifact, never served by the deployed instance.
 
 ### 8.11 Localization
 
