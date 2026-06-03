@@ -19,6 +19,7 @@ import { dag, object, func, Directory, Container, Secret } from "@dagger.io/dagg
 // Bumping these is a deliberate change reviewed in the same PR as any
 // behaviour relying on the new version.
 const JAVA_IMAGE = "maven:3.9-eclipse-temurin-25";
+const NODE_IMAGE = "node:24-alpine";
 const PYTHON_IMAGE = "python:3.12-alpine";
 const GITLEAKS_IMAGE = "zricethezav/gitleaks:latest";
 
@@ -117,6 +118,28 @@ class Trawhile {
   }
 
   /**
+   * Build the Angular frontend: `npm ci` against the committed package-lock.json,
+   * then a production `ng build`. The npm cache directory is mounted so
+   * subsequent runs reuse downloaded packages.
+   *
+   * Output artifacts land in `src/main/frontend/dist/` inside the container;
+   * the Maven build wires them into the Spring Boot jar's `static/` resources
+   * when invoked with `-Pfrontend`. Local validation here just confirms the
+   * frontend compiles.
+   */
+  @func()
+  frontendBuild(source: Directory): Container {
+    const npmCache = dag.cacheVolume("trawhile-npm-cache");
+    return dag.container()
+      .from(NODE_IMAGE)
+      .withMountedCache("/root/.npm", npmCache)
+      .withDirectory("/src", source)
+      .withWorkdir("/src/src/main/frontend")
+      .withExec(["npm", "ci", "--no-audit", "--no-fund"])
+      .withExec(["npm", "run", "build"]);
+  }
+
+  /**
    * Scan the working tree for committed secrets using gitleaks.
    * Exits non-zero if any finding is reported.
    */
@@ -147,6 +170,7 @@ class Trawhile {
     await this.traceability(source);
     await this.verify(source, nvdApiKey);
     await this.sbom(source).sync();
+    await this.frontendBuild(source).sync();
     await this.secretsScan(source);
     return "trawhile CI pipeline succeeded";
   }

@@ -18,9 +18,6 @@ In the process, some user requirements are revised as well, reflecting changed p
 - MCP and other actors accessing trawhile via API key are now given more responsibility.
 - No longer provide intra-team communication channel(s) and so remove the "requests" feature. The exception remaining is the invitation email to new users. 
 
-The cut is made downstream of the system requirements. Specs and code still belong to the previous product increment and are currently out of sync.
-
-
 ## Why trawhile
 
 ### Members
@@ -120,6 +117,7 @@ dagger call build --source=.
 dagger call unit-test --source=.
 dagger call traceability --source=.
 dagger call sbom --source=.
+dagger call frontend-build --source=.
 dagger call secrets-scan --source=.
 dagger call verify --source=. --nvd-api-key=env:NVD_API_KEY
 

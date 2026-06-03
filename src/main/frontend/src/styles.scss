@@ -1,0 +1,9 @@
+// Global stylesheet.
+// Tailwind CSS 4.x is included via the CSS-first import below; no
+// tailwind.config.js is required for the baseline.
+@import "tailwindcss";
+
+// Project-wide CSS variables and resets go here as the app grows.
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
