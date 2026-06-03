@@ -1,8 +1,9 @@
 {
   "name": "trawhile",
-  "engineVersion": "v0.18.0",
+  "engineVersion": "v0.21.3",
   "sdk": {
     "source": "typescript"
   },
-  "source": "./dagger"
+  "source": "dagger",
+  "disableDefaultFunctionCaching": true
 }
