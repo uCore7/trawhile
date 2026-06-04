@@ -40,7 +40,7 @@ For C-type SRs: TEs are optional; included only when the constraint is observabl
 | TE-00-C08.F01-01 | SR-00-C08.F01 | UR-00-C08 | IT | `AuthAdapterIT` | API-key bearer on `/api/account/me` is rejected (session-only endpoint per SR-05-F01.C01) |
 | TE-00-C08.F01-02 | SR-00-C08.F01 | UR-00-C08 | IT | `AuthAdapterIT` | OIDC session on a tracking endpoint succeeds; API-key bearer on same endpoint succeeds; MCP-server endpoint accepts API-key only |
 | TE-00-C09.F01-01 | SR-00-C09.F01 | UR-00-C09 | IT | `BackupArtifactIT` | Backup tool produces `pg_dump -Fc` artifact + manifest; restore via documented procedure yields a structurally equivalent database |
-| TE-00-C10.F01-01 | SR-00-C10.F01 | UR-00-C10 | UT | `TimeFormatTest` | All Java timestamp types in port DTOs and event payloads serialise as `Instant` (UTC) — never `LocalDateTime` |
+| TE-00-C10.C01-01 | SR-00-C10.C01 | UR-00-C10 | UT | `TimeFormatTest` | All Java timestamp types in port DTOs and event payloads are `java.time.Instant` (UTC by construction) — never `LocalDateTime`, `ZonedDateTime`, or `OffsetDateTime` |
 | TE-00-C10.F02-01 | SR-00-C10.F02 | UR-00-C10 | IT | `ReportTzIT` | Report endpoints accept a caller-supplied IANA TZ; backend uses `AT TIME ZONE` for bucket grouping; invalid IANA name returns HTTP 400 |
 | TE-00-C11.F01-01 | SR-00-C11.F01 | UR-00-C11 | IT | `AccountEmailIT` | OIDC callback persists `users.email` from the `email` claim on bootstrap, invitation-match, and known-identity-login paths; subsequent login refreshes the column |
 | TE-00-C11.F02-01 | SR-00-C11.F02 | UR-00-C11 | IT | `AccountEmailIT` | Backend returns `null` for `displayName` and `email` on user references where `users.anonymised_at IS NOT NULL` |
