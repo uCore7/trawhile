@@ -6,13 +6,21 @@
 # produced by the generator, hands it to the verifier, prints the verifier's
 # structured critique, and exits with a recommendation-mapped exit code.
 #
+# Run artefacts (diff + critique) are persisted under .local/runs/<brief-basename>/<timestamp>/
+# so you can reference them in a follow-up guided rerun without scraping
+# terminal scrollback.
+#
 # Usage:
-#   scripts/run-pipeline.sh .local/tasks/tests/E-00-C10-time-format.md
-#   scripts/run-pipeline.sh .local/tasks/impl/E-00-C10-time-format.md
+#   scripts/run-pipeline.sh <task-file>
+#       Fresh run: generator → verifier.
+#
+#   scripts/run-pipeline.sh <task-file> --with-guidance <critique-file>
+#       Guided rerun: generator receives <critique-file> as additional context
+#       (typically the previous run's critique). Then verifier runs again.
 #
 # Exit codes:
 #   0 — generator completed AND verifier returned ACCEPT
-#   1 — generator failed
+#   1 — generator failed or produced no diff
 #   2 — verifier returned RERUN WITH GUIDANCE
 #   3 — verifier returned RERUN WITH ESCALATION
 #   4 — verifier returned HUMAN REVIEW REQUIRED
@@ -21,24 +29,42 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <task-file>" >&2
+  echo "Usage: $0 <task-file> [--with-guidance <critique-file>]" >&2
   exit 1
 fi
 
 TASK_FILE="$1"
+shift
 
 if [[ ! -f "$TASK_FILE" ]]; then
   echo "Error: task file not found: $TASK_FILE" >&2
   exit 1
 fi
 
+GUIDANCE_FILE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --with-guidance)
+      GUIDANCE_FILE="${2:-}"
+      if [[ -z "$GUIDANCE_FILE" || ! -f "$GUIDANCE_FILE" ]]; then
+        echo "Error: --with-guidance requires an existing critique file path" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    *)
+      echo "Error: unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
 ROLE=$(grep -m1 '^\*\*Role:\*\*' "$TASK_FILE" | sed -E 's/^\*\*Role:\*\* +//; s/ +$//' || true)
 if [[ -z "$ROLE" ]]; then
   echo "Error: task brief $TASK_FILE has no '**Role:**' line" >&2
   exit 1
 fi
-# Brief may list multiple choices like "impl-backend | impl-frontend"; take the first.
-ROLE=$(echo "$ROLE" | awk '{print $1}')
+ROLE=$(echo "$ROLE" | awk '{print $1}')   # take first if multi-choice
 
 case "$ROLE" in
   test-writer)
@@ -58,41 +84,68 @@ esac
 
 VERIFIER_ALLOWED_TOOLS='Read(**),Grep(**),Glob(**)'
 
-DIFF_FILE="$(mktemp -t pipeline-diff.XXXXXX.patch)"
-CRITIQUE_FILE="$(mktemp -t pipeline-critique.XXXXXX.md)"
-trap 'rm -f "$DIFF_FILE" "$CRITIQUE_FILE"' EXIT
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TASK_BASENAME="$(basename "$TASK_FILE" .md)"
+TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_DIR="$REPO_ROOT/.local/runs/$TASK_BASENAME/$TIMESTAMP"
+mkdir -p "$RUN_DIR"
+DIFF_FILE="$RUN_DIR/diff.patch"
+CRITIQUE_FILE="$RUN_DIR/critique.md"
 
 echo "=============================================="
-echo " trawhile pipeline: $TASK_FILE"
-echo " role: $ROLE"
+echo " trawhile pipeline"
+echo " brief:        $TASK_FILE"
+echo " role:         $ROLE"
+echo " run dir:      $RUN_DIR"
+if [[ -n "$GUIDANCE_FILE" ]]; then
+  echo " guidance:     $GUIDANCE_FILE"
+fi
 echo "=============================================="
 echo
 
-# Capture pre-run state so we can diff just this generator's changes.
 PRE_RUN_REF=$(git rev-parse HEAD)
 PRE_RUN_DIRTY=$(git status --porcelain)
 if [[ -n "$PRE_RUN_DIRTY" ]]; then
   echo "Warning: working tree is dirty before run; diff will include uncommitted changes." >&2
 fi
 
-# Stage 1: generator
+# Build the generator prompt; optionally prepend the prior critique as guidance.
+if [[ -n "$GUIDANCE_FILE" ]]; then
+  GENERATOR_PROMPT=$(cat <<EOF
+Run the $ROLE subagent against the task brief at $TASK_FILE.
+
+A prior run of this task was reviewed by the verifier and received the following critique. Address every VIOLATION in the critique before producing your output. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md.
+
+--- VERIFIER CRITIQUE ---
+
+$(cat "$GUIDANCE_FILE")
+
+--- END OF CRITIQUE ---
+EOF
+)
+else
+  GENERATOR_PROMPT="Run the $ROLE subagent against the task brief at $TASK_FILE. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md."
+fi
+
 echo "[1/3] running generator subagent ($ROLE)..."
-claude -p "Run the $ROLE subagent against the task brief at $TASK_FILE. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md." \
+claude -p "$GENERATOR_PROMPT" \
   --allowedTools "$ALLOWED_TOOLS" \
   --permission-mode acceptEdits
 
 echo
-echo "[2/3] capturing generator diff..."
-# Diff includes both staged and unstaged changes since PRE_RUN_REF, plus any new untracked files.
+echo "[2/3] capturing generator diff to $DIFF_FILE..."
 git diff "$PRE_RUN_REF" -- > "$DIFF_FILE"
-git ls-files --others --exclude-standard >> "$DIFF_FILE" 2>/dev/null || true
+{
+  echo
+  echo "--- untracked files added by generator ---"
+  git ls-files --others --exclude-standard
+} >> "$DIFF_FILE"
 
-if [[ ! -s "$DIFF_FILE" ]]; then
-  echo "Error: generator produced no diff. Aborting before verifier." >&2
+if ! grep -q '^diff --git' "$DIFF_FILE" && ! grep -q '^[^-]' "$DIFF_FILE"; then
+  echo "Error: generator produced no diff. Inspect $RUN_DIR for context." >&2
   exit 1
 fi
 
-# Stage 2: verifier
 echo "[3/3] running verifier subagent..."
 claude -p "Run the verifier subagent. The task brief is at $TASK_FILE. The diff produced by the generator is at $DIFF_FILE. Output the structured critique in the exact format defined in .claude/agents/verifier.md. End your output with a single line of the form 'Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>' so this script can capture the recommendation." \
   --allowedTools "$VERIFIER_ALLOWED_TOOLS" \
@@ -101,7 +154,8 @@ claude -p "Run the verifier subagent. The task brief is at $TASK_FILE. The diff 
 
 echo
 echo "=============================================="
-echo " verifier critique saved to $CRITIQUE_FILE"
+echo " verifier critique saved to: $CRITIQUE_FILE"
+echo " full run artefacts:        $RUN_DIR"
 echo "=============================================="
 
 RECOMMENDATION=$(grep -i '^Recommended action:' "$CRITIQUE_FILE" | tail -n1 | sed -E 's/^Recommended action: *//I; s/ *$//')
@@ -112,7 +166,10 @@ case "$RECOMMENDATION" in
     exit 0
     ;;
   "RERUN WITH GUIDANCE")
-    echo " result: RERUN WITH GUIDANCE — feed the critique back to the generator and re-run"
+    echo " result: RERUN WITH GUIDANCE — feed the critique back to the generator:"
+    echo
+    echo "   ./scripts/run-pipeline.sh $TASK_FILE --with-guidance $CRITIQUE_FILE"
+    echo
     exit 2
     ;;
   "RERUN WITH ESCALATION")
