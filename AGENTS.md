@@ -66,6 +66,8 @@ trawhile is a small-company self-hosted time-tracking system.
 - **Logging.** Loki + Promtail via the `log-pipeline` service (ADR 0018). No PII in logs per UR-00-C14 — redact at emit. Correlation identifiers per UR-00-C16.
 - **Live updates.** SSE for browser sessions; outbound webhook + PostgreSQL outbox for API consumers (ADR 0017). Payload shape is hybrid: snapshot for state-shaped events, command for action-shaped.
 - **Configuration.** Externalised under the `trawhile:` namespace; no database settings table.
+- **Test assertions.** Use AssertJ (`org.assertj.core.api.Assertions.assertThat`) for every assertion. Never JUnit's `Assertions.assertEquals` / `assertTrue` / `assertNotNull`, never Hamcrest.
+- **JSON in tests.** Use Jackson (`com.fasterxml.jackson.databind.ObjectMapper`) for parsing JSON test inputs, deserialising responses to typed records/classes, and navigating response trees (`readTree(...).path("foo")`). Combine with AssertJ for structural assertions.
 
 ## Anti-Patterns / Footguns
 

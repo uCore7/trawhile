@@ -7,8 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.trawhile.BaseIT;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Validates the {@link BaseIT} infrastructure end to end:
@@ -27,7 +26,9 @@ class SmokeIT extends BaseIT {
      */
     @Test
     void springContextProvidesTheContainerBackedDataSource() {
-        assertNotNull(dataSource, "DataSource must be autowired by the Spring context");
+        assertThat(dataSource)
+            .as("DataSource must be autowired by the Spring context")
+            .isNotNull();
     }
 
     /**
@@ -39,7 +40,9 @@ class SmokeIT extends BaseIT {
             "SELECT COUNT(*) FROM nodes WHERE parent_id IS NULL",
             Integer.class
         );
-        assertEquals(1, rootCount, "Exactly one root node (parent_id IS NULL) must be seeded by V1");
+        assertThat(rootCount)
+            .as("Exactly one root node (parent_id IS NULL) must be seeded by V1")
+            .isEqualTo(1);
     }
 
     /**
@@ -51,8 +54,9 @@ class SmokeIT extends BaseIT {
             "SELECT COUNT(*) FROM purge_jobs",
             Integer.class
         );
-        assertEquals(4, purgeJobCount,
-            "All four purge_jobs singletons (time_record_retention, node_retention, "
-            + "invitation_expiry, open_record_auto_close) must be seeded by V1");
+        assertThat(purgeJobCount)
+            .as("All four purge_jobs singletons (time_record_retention, node_retention, "
+                + "invitation_expiry, open_record_auto_close) must be seeded by V1")
+            .isEqualTo(4);
     }
 }

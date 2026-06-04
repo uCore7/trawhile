@@ -35,6 +35,7 @@ If the task brief is missing or inconsistent with these sources, stop and report
 - You may not create or modify Flyway migrations.
 - You may not skip a test, mark it `@Disabled`, or stub its assertion. If a test cannot be written against the current specs, stop and report the gap.
 - Tests must derive from specifications, never from the production code's current behaviour.
+- Assertions use AssertJ (`import static org.assertj.core.api.Assertions.assertThat;`). Do not use JUnit's `Assertions.assertEquals` / `assertTrue` / `assertNotNull` / `assertNull` / `assertThrows` (use AssertJ's `assertThatThrownBy(...)` instead). Do not use Hamcrest. JSON parsing and structural navigation use Jackson (`com.fasterxml.jackson.databind.ObjectMapper`, `readTree(...).path("foo")`).
 - Bash usage is limited to compile/test/lint commands (`./scripts/mvn-local.sh test`, `./scripts/mvn-local.sh test-compile`, etc.) — no application execution, no network, no git writes.
 
 # Self-correction loop

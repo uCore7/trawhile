@@ -16,7 +16,7 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Unit test enforcing SR-00-C10.C01: all in-memory timestamp values in backend
@@ -86,10 +86,11 @@ class TimeFormatTest {
             }
         }
 
-        assertTrue(violations.isEmpty(),
-                () -> "SR-00-C10.C01 violation — the following backend members use a forbidden timestamp type"
-                        + " (must be java.time.Instant):\n"
-                        + String.join("\n", violations));
+        assertThat(violations)
+                .as("SR-00-C10.C01 violation — the following backend members use a forbidden"
+                        + " timestamp type (must be java.time.Instant):\n"
+                        + String.join("\n", violations))
+                .isEmpty();
     }
 
     // ----- helpers -----
