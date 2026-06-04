@@ -252,6 +252,20 @@
                 <skipDefaultInterface>false</skipDefaultInterface>
                 <openApiNullable>false</openApiNullable>
               </configOptions>
+              <!--
+                Map every OpenAPI date-time to java.time.Instant per SR-00-C10.C01.
+                The generator's default is OffsetDateTime; we override here so the
+                produced DTOs and API interfaces use Instant directly and the
+                TimeFormatTest scan passes.
+              -->
+              <typeMappings>
+                <typeMapping>DateTime=java.time.Instant</typeMapping>
+                <typeMapping>OffsetDateTime=java.time.Instant</typeMapping>
+              </typeMappings>
+              <importMappings>
+                <importMapping>OffsetDateTime=java.time.Instant</importMapping>
+                <importMapping>java.time.OffsetDateTime=java.time.Instant</importMapping>
+              </importMappings>
             </configuration>
           </execution>
         </executions>
