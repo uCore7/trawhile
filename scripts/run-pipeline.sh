@@ -71,7 +71,7 @@ case "$ROLE" in
     ALLOWED_TOOLS='Read(**),Grep(**),Glob(**),Edit(src/test/**),Write(src/test/**),Bash(./scripts/mvn-local.sh test:*),Bash(./scripts/mvn-local.sh test-compile)'
     ;;
   impl-backend)
-    ALLOWED_TOOLS='Read(**),Grep(**),Glob(**),Edit(src/main/java/**),Write(src/main/java/**),Bash(./scripts/mvn-local.sh:*)'
+    ALLOWED_TOOLS='Read(**),Grep(**),Glob(**),Edit(src/main/java/**),Write(src/main/java/**),Edit(pom.xml),Write(pom.xml),Bash(./scripts/mvn-local.sh:*)'
     ;;
   impl-frontend)
     ALLOWED_TOOLS='Read(**),Grep(**),Glob(**),Edit(src/main/frontend/src/**),Write(src/main/frontend/src/**),Bash(npm:*),Bash(npx:*)'

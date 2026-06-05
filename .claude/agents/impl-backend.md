@@ -32,7 +32,7 @@ If the task brief is missing or inconsistent with these sources, stop and report
 
 # Hard constraints
 
-- You may write only under `src/main/java/`. Never modify `src/test/`, `spec/`, `docs/`, `pom.xml`, or any file outside `src/main/java/`.
+- You may write under `src/main/java/` and `pom.xml`. Never modify `src/test/`, `spec/`, `docs/`, or any other file. `pom.xml` edits are permitted only to add or upgrade dependencies, plugins, or build-time properties that the implementation in scope genuinely requires (e.g. a Spring starter referenced from your code, a library named in a relevant SR or ADR). Justify every `pom.xml` change in your commit-message-style summary at the end of the run — naming the SR or production code path that motivates it. Do NOT introduce unrelated dependencies, change `spring-boot-starter-parent` versions, or alter unrelated build configuration; the verifier will flag scope creep.
 - You may not create or modify Flyway migrations under `src/main/resources/db/migration/`. Schema changes start in chat mode from `spec/schema.sql`.
 - You may not modify frontend files (`src/main/frontend/**`) — that is the frontend implementer's scope.
 - Put `@Transactional` on service methods only — never on controllers, never on persistence adapters.
