@@ -146,8 +146,44 @@ if ! grep -q '^diff --git' "$DIFF_FILE" && ! grep -q '^[^-]' "$DIFF_FILE"; then
   exit 1
 fi
 
+# Capture mvn output for test-writer / impl-backend so the verifier (which has
+# no Bash tool) can read empirical compile/test results from a file artefact.
+# Test classes are extracted from the brief's referenced src/test/java/**/*.java
+# paths; if none are referenced, the mvn step is skipped.
+MVN_LOG=""
+if [[ "$ROLE" == "test-writer" || "$ROLE" == "impl-backend" ]]; then
+  TEST_CLASSES=$(grep -oE 'src/test/java/[^[:space:]`)]+\.java' "$TASK_FILE" \
+    | sed -E 's|.*/||; s|\.java$||' \
+    | sort -u \
+    | tr '\n' ',' \
+    | sed 's/,$//')
+  if [[ -n "$TEST_CLASSES" ]]; then
+    MVN_LOG="$RUN_DIR/mvn.log"
+    echo "      capturing mvn test output to $MVN_LOG (classes: $TEST_CLASSES)..."
+    set +e
+    "$REPO_ROOT/scripts/mvn-local.sh" test -Dtest="$TEST_CLASSES" > "$MVN_LOG" 2>&1
+    MVN_EXIT=$?
+    set -e
+    echo "      mvn exit code: $MVN_EXIT (recorded as artefact; not propagated)"
+  else
+    echo "      no test classes referenced in brief; skipping mvn capture"
+  fi
+fi
+
 echo "[3/3] running verifier subagent..."
-claude -p "Run the verifier subagent. The task brief is at $TASK_FILE. The diff produced by the generator is at $DIFF_FILE. Output the structured critique in the exact format defined in .claude/agents/verifier.md. End your output with a single line of the form 'Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>' so this script can capture the recommendation." \
+VERIFIER_PROMPT="Run the verifier subagent. The task brief is at $TASK_FILE. The diff produced by the generator is at $DIFF_FILE."
+if [[ -n "$MVN_LOG" && -f "$MVN_LOG" ]]; then
+  VERIFIER_PROMPT="$VERIFIER_PROMPT The captured mvn stdout+stderr from running the touched test classes is at $MVN_LOG; Read it for empirical compile-and-test evidence (compile errors, test failures, exception stacks). The mvn exit code is included as the last line of $MVN_LOG."
+fi
+VERIFIER_PROMPT="$VERIFIER_PROMPT Output the structured critique in the exact format defined in .claude/agents/verifier.md. End your output with a single line of the form 'Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>' so this script can capture the recommendation."
+
+# Append the mvn exit code to the log so the verifier sees it in the same file
+# it reads for empirical evidence (saves a separate Read or env-var dance).
+if [[ -n "$MVN_LOG" && -f "$MVN_LOG" ]]; then
+  echo "--- mvn exit code: $MVN_EXIT ---" >> "$MVN_LOG"
+fi
+
+claude -p "$VERIFIER_PROMPT" \
   --allowedTools "$VERIFIER_ALLOWED_TOOLS" \
   --permission-mode default \
   | tee "$CRITIQUE_FILE"

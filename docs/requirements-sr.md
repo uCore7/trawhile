@@ -37,6 +37,7 @@ System requirements derive from the user requirements in `docs/requirements-ur.m
 **UR-00-C08** — API-key access boundary.
 
 - **SR-00-C08.F01** (type F): The system shall classify every external-actor endpoint as either *session-only* (mutating Account Holder operations; reads of the Account Holder's own profile data; System Admin operations; operations requiring OIDC interaction) or *session-or-API-key* (Viewer, Tracker, Node Admin operations). The authentication layer (architecture §5.2 Security/OIDC adapter) shall reject API-key-authenticated requests on session-only endpoints with HTTP 403 and a Problem response identifying the authentication mismatch. [Rationale: UR-00-C08]
+- **SR-00-C08.F02** (type F): The MCP transport at `/api/mcp` (per `spec/openapi.yaml`) shall accept API-key-bearer authentication only; OIDC-session-cookie authentication shall not be honoured on this endpoint. The authentication layer shall reject session-cookie-only requests with HTTP 401 before dispatch to the Spring AI MCP server. [Rationale: UR-00-C08 — MCP clients are the protocol variant of API clients per the glossary; the MCP transport does not carry session cookies.]
 - **SR-00-C08.C01** (type C): The classification of every endpoint shall be expressed in code (annotation or filter rule) such that adding a new endpoint forces an explicit choice; no endpoint shall default into session-or-API-key by omission. [Rationale: UR-00-C08; secure-by-default]
 
 **UR-00-C09** — automated tests of backup-creation tooling.
@@ -94,7 +95,14 @@ System requirements derive from the user requirements in `docs/requirements-ur.m
 
 **UR-00-C19** — request-rate limits.
 
-- **SR-00-C19.F01** (type F): The Caddy reverse proxy shall apply token-bucket rate limiting to all OAuth2 endpoints and to all application API endpoints; requests exceeding the bucket shall receive HTTP 429 with a generic Problem body that does not reveal the bucket configuration. Rate-limit rejections shall be observable via the Caddy metrics endpoint scraped by the external Monitoring stack. [Rationale: UR-00-C19; architecture §8.4]
+- **SR-00-C19.C01** (type C): The set of routed external endpoints reachable from outside the deployed instance is exhaustively constituted of four classes:
+  - **(a) SPA static surface** — the SPA shell, all built JS/CSS/font/image assets, the favicon, and every other static-asset path served by Caddy from the SPA build mount;
+  - **(b) OIDC authorization flow** — the Spring Security OAuth2 routes (`/oauth2/authorization/**` initiator, `/login/oauth2/code/**` callback) and the sign-out route (`/logout`);
+  - **(c) OIDC discovery** — the unauthenticated `/auth/providers` endpoint per SR-00-C02.F02;
+  - **(d) Application API surface** — every endpoint documented under `paths:` in `spec/openapi.yaml` (every `/api/*` path, which includes the MCP transport at `/api/mcp`).
+
+  No URL shall be reachable from outside the deployment that is not in one of these four classes. Adding a new external endpoint requires classifying it into one of (a)–(d). [Rationale: UR-00-C19; defining the closed set lets downstream SRs that quantify over "every external endpoint" be unambiguous and verifiable.]
+- **SR-00-C19.F01** (type F): The Caddy reverse proxy shall apply token-bucket rate limiting to **every endpoint in the set defined by SR-00-C19.C01** — the SPA static surface, the OIDC authorization flow, the OIDC discovery endpoint, and the entire application API surface (including `/api/mcp`). Requests exceeding the bucket shall receive HTTP 429 with a generic Problem body that does not reveal the bucket configuration. Rate-limit rejections shall be observable via the Caddy metrics endpoint scraped by the external Monitoring stack. [Rationale: UR-00-C19; architecture §8.4]
 
 **UR-00-C20** — security headers on every HTTP response.
 

@@ -15,6 +15,7 @@ info:
       - Mixed endpoints (session OR API key): `/api/nodes/**`, `/api/tracking/**`,
         `/api/reports/**`, `/api/about`, `/api/about/openapi`.
       - Admin endpoints: session-only, require effective `admin` on the root node.
+      - MCP endpoint: `/api/mcp` (API-key only). See the `mcp` tag.
 
     All timestamps are ISO 8601 UTC instants (UR-00-C10). User-local time-window
     semantics are the frontend's responsibility per ADR 0019; report endpoints
@@ -47,6 +48,17 @@ tags:
     description: Authenticated transparency surface.
   - name: events
     description: Server-Sent Events live-update channel.
+  - name: auth
+    description: |
+      OIDC login-flow surface exposed outside `/api/*`. Unauthenticated discovery of
+      configured providers (`GET /auth/providers`) is used by the login page to
+      render only the sign-in buttons backed by working backend config.
+  - name: mcp
+    description: |
+      Model Context Protocol (per UR-00-C08 glossary). Single-endpoint Streamable HTTP
+      transport for the trawhile MCP server (architecture §5.2.3), exposing the
+      Work-services (`NodeService`, `TrackingService`, `ReportingService`) `@Tool`
+      methods to authorized API clients. API-key auth only; session cookies rejected.
 
 paths:
 
@@ -1026,6 +1038,94 @@ paths:
           content:
             text/event-stream:
               schema: { type: string }
+
+  ## Auth
+
+  /auth/providers:
+    get:
+      tags: [auth]
+      summary: List configured OIDC provider registration IDs (SR-00-C02.F02).
+      description: |
+        Returns the registration IDs of OIDC providers configured at startup with
+        a non-empty `client-id`. Used by the login page (SR-01-F13.F02) to render
+        only the sign-in buttons backed by working backend config. Unauthenticated
+        endpoint — does not reveal company-identifying information beyond provider
+        names, per UR-00-C22.
+      security: []
+      responses:
+        '200':
+          description: Array of OIDC provider registration IDs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  description: Spring Security OAuth2 client registration ID (e.g. `google`, `keycloak`).
+
+  ## MCP
+
+  /api/mcp:
+    post:
+      tags: [mcp]
+      summary: MCP JSON-RPC 2.0 request endpoint (Streamable HTTP transport).
+      description: |
+        Single-endpoint Streamable HTTP transport for the trawhile MCP server
+        (architecture §5.2.3, *MCP* glossary entry). Accepts MCP JSON-RPC 2.0
+        request envelopes (`initialize`, `tools/list`, `tools/call`, `ping`,
+        etc.); the server registers Work-services methods annotated `@Tool`
+        and dispatches `tools/call` invocations to them.
+
+        Authentication: API-key bearer ONLY (SR-00-C08.F02). OIDC session
+        cookies are rejected by the security filter chain before dispatch.
+
+        The MCP protocol payload schema is defined by the Model Context
+        Protocol specification (https://modelcontextprotocol.io/) and is not
+        duplicated here; this entry documents the HTTP envelope only. Clients
+        signal preferred response shape via `Accept: application/json` or
+        `Accept: text/event-stream` per the Streamable HTTP transport.
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: JSON-RPC 2.0 request envelope per the MCP specification.
+      responses:
+        '200':
+          description: |
+            JSON-RPC 2.0 response envelope, returned either as a single JSON
+            response or as a `text/event-stream` stream (Streamable HTTP
+            transport — content negotiation via the request `Accept` header).
+          content:
+            application/json:
+              schema:
+                type: object
+                description: JSON-RPC 2.0 response envelope per the MCP specification.
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream of MCP messages (Streamable HTTP transport).
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    get:
+      tags: [mcp]
+      summary: MCP server-to-client SSE notification stream.
+      description: |
+        Server-Sent Events stream for server-initiated MCP notifications
+        (Streamable HTTP transport). Same authentication as POST /api/mcp.
+      security:
+        - apiKey: []
+      responses:
+        '200':
+          description: SSE stream of MCP notifications.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream per the MCP specification.
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
 components:
 
