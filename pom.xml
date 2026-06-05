@@ -108,6 +108,12 @@
       <version>${swagger-annotations.version}</version>
     </dependency>
 
+    <!-- Spring Session - Redis sessions (SR-01-F14.F01) -->
+    <dependency>
+      <groupId>org.springframework.session</groupId>
+      <artifactId>spring-session-data-redis</artifactId>
+    </dependency>
+
     <!-- Test -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
