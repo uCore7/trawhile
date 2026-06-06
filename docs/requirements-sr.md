@@ -77,7 +77,7 @@ System requirements derive from the user requirements in `docs/requirements-ur.m
 
 **UR-00-C16** — application logs carry correlation identifiers.
 
-- **SR-00-C16.F01** (type F): Every log entry emitted by the application shall include the structured fields `request_id` (per inbound HTTP request), `trace_id` (per outermost call from inbound or scheduled trigger), `session_id` (where an authenticated session exists), and `actor_id` (the pseudonymous user identifier where an actor is known). Field population is the responsibility of an HTTP filter (for request-driven entries) and the lifecycle-trigger adapter (for scheduled entries). [Rationale: UR-00-C16]
+- **SR-00-C16.F01** (type F): Every log entry emitted by the application shall include the structured fields `requestId` (per inbound HTTP request), `traceId` (per outermost call from inbound or scheduled trigger), `sessionId` (where an authenticated session exists), and `actorId` (the pseudonymous user identifier where an actor is known). These are SLF4J MDC keys; the camelCase convention aligns with Spring Boot / Micrometer Tracing's auto-emitted `traceId` so the framework's value can be reused without renaming. Field population is the responsibility of an HTTP filter (for request-driven entries) and the lifecycle-trigger adapter (for scheduled entries). [Rationale: UR-00-C16]
 
 **UR-00-C17** — data retention 3 years (fixed); time records + empty old nodes purged.
 
@@ -463,7 +463,7 @@ All reporting endpoints in this epic enforce two scoping rules: (1) only nodes t
 
 **UR-05-F05** — anonymise own account via guided wizard.
 
-- **SR-05-F05.F01** (type F): The system shall expose `POST /api/account/me/anonymise` (session-only), which executes the active-user access-termination cleanup defined by SR-07-F01.F01 with the authenticated user as the target and `account_anonymised(by_self=true)` as the audit event. The endpoint shall reject the call with HTTP 401 if the caller's HTTP session does not carry an OIDC step-up event (per SR-05-F05.F02 step 2) whose timestamp is within the last 5 minutes; the step-up event consumed by this call shall be cleared from the session on success so it cannot be replayed. The operation is irreversible (SR-07-F01.C01); re-registration requires a new invitation (per the *Anonymization* glossary entry) and produces a fresh `users` row unlinked from the prior stub. [Rationale: UR-05-F05; GDPR right to erasure; step-up enforcement at the API layer so the wizard's intent guarantee cannot be bypassed by direct API calls]
+- **SR-05-F05.F01** (type F): The system shall expose `POST /api/account/me/anonymise` (session-only), which executes the active-user access-termination cleanup defined by SR-07-F01.F01 with the authenticated user as the target and `account_anonymised(bySelf=true)` as the audit event. The endpoint shall reject the call with HTTP 401 if the caller's HTTP session does not carry an OIDC step-up event (per SR-05-F05.F02 step 2) whose timestamp is within the last 5 minutes; the step-up event consumed by this call shall be cleared from the session on success so it cannot be replayed. The operation is irreversible (SR-07-F01.C01); re-registration requires a new invitation (per the *Anonymization* glossary entry) and produces a fresh `users` row unlinked from the prior stub. [Rationale: UR-05-F05; GDPR right to erasure; step-up enforcement at the API layer so the wizard's intent guarantee cannot be bypassed by direct API calls]
 - **SR-05-F05.F02** (type F): The frontend shall present account anonymisation as a multi-step confirmation wizard:
   - **step 1**: explain the consequences in the user's active language (per SR-00-C18.F01): irreversibility, the anonymisation of identifying account data, the retention of historical activity records subject to UR-00-C17 until purge removes them, the necessity of a new invitation for re-registration;
   - **step 2**: initiate an OIDC step-up re-authentication flow against one of the user's currently-linked providers, using `prompt=login` to force a fresh sign-in even when the IdP session is still valid; on successful callback the backend records a step-up event timestamp in the user's HTTP session;
@@ -493,7 +493,7 @@ All reporting endpoints in this epic enforce two scoping rules: (1) only nodes t
 
 **UR-06-F01** — emit audit-relevant events into the application log stream.
 
-- **SR-06-F01.F01** (type F): The system shall emit a structured log entry for each of the following audit-relevant events with the structured field `event_type` set to the listed value:
+- **SR-06-F01.F01** (type F): The system shall emit a structured log entry for each of the following audit-relevant events with the structured field `eventType` set to the listed value:
   - `oidc_login_succeeded`
   - `oidc_login_rejected` (carries the rejection cause: `not_invited`, `provider_error`)
   - `oidc_provider_linked` (carries the linked provider registration id)
@@ -513,16 +513,16 @@ All reporting endpoints in this epic enforce two scoping rules: (1) only nodes t
   - `invitation_withdrawn`
   - `invitation_expired`
   - `user_removed`
-  - `account_anonymised` (carries `by_self` or `by_admin`)
+  - `account_anonymised` (carries `bySelf` or `byAdmin`)
   - `api_key_generated` (carries the API key UUID and scope summary; never the raw key)
-  - `api_key_revoked` (carries the API key UUID and `by_self` or `by_admin`)
+  - `api_key_revoked` (carries the API key UUID and `bySelf` or `byAdmin`)
   - `api_key_used` (one entry per API-key-authenticated request; carries the API key UUID, not the raw key)
   - `webhook_subscription_created` (carries the subscription UUID and the endpoint host)
   - `webhook_subscription_updated` (carries the subscription UUID and the names of the changed fields)
   - `webhook_subscription_deleted` (carries the subscription UUID)
   - `purge_job_started`, `purge_job_chunk_completed`, `purge_job_completed` (carry job type and counts; per architecture §6.4)
 
-  Every such entry shall additionally carry the actor pseudonymous identifier (`actor_id`), the target pseudonymous identifier (`target_id` where applicable), a UTC timestamp (per SR-00-C10.C01), and the correlation identifiers required by SR-00-C16.F01. [Rationale: UR-06-F01; architecture §8.5]
+  Every such entry shall additionally carry the actor pseudonymous identifier (`actorId`), the target pseudonymous identifier (`targetId` where applicable), a UTC timestamp (per SR-00-C10.C01), and the correlation identifiers required by SR-00-C16.F01. [Rationale: UR-06-F01; architecture §8.5]
 - **SR-06-F01.F02** (type F): Audit log entries shall pass through the same redaction pipeline as operational log entries (SR-00-C14.F01); no audit entry shall carry an email address, profile content, request/response body, or other personal data beyond the pseudonymous identifiers listed in SR-06-F01.F01. [Rationale: UR-06-F01; UR-00-C14]
 - **SR-06-F01.C01** (type C): Audit events shall be persisted only as application log entries handled by the log pipeline (SR-00-C15.C01). The persistence schema shall not contain a security-events or audit-events table; the application code shall not write audit records to PostgreSQL or Redis. [Rationale: UR-06-F01; architecture §8.5 explicitly rejects an in-app audit store]
 
@@ -562,7 +562,7 @@ All reporting endpoints in this epic enforce two scoping rules: (1) only nodes t
   - delete the pre-created `users` row referenced by the deleted invitation.
 
   No anonymised stub is left behind for pending users (the user never had retained activity records or an active OIDC link to preserve). [Rationale: UR-07-F01; UR-00-C13; *Pending invitation* glossary entry]
-- **SR-07-F01.F03** (type F): The cleanup operations of SR-07-F01.F01 and SR-07-F01.F02 shall be invoked by exactly one shared service method (architecture §6.5 single cleanup path) regardless of trigger; the trigger source (admin removal, invitation expiry, invitation withdrawal, self-anonymisation) is recorded as the `actor_id` or `by_*` attribute on the emitted audit event (SR-06-F01.F01) but does not branch the cleanup logic. [Rationale: UR-07-F01; single cleanup path per architecture]
+- **SR-07-F01.F03** (type F): The cleanup operations of SR-07-F01.F01 and SR-07-F01.F02 shall be invoked by exactly one shared service method (architecture §6.5 single cleanup path) regardless of trigger; the trigger source (admin removal, invitation expiry, invitation withdrawal, self-anonymisation) is recorded as the `actorId` or one of the `bySelf` / `byAdmin` attributes on the emitted audit event (SR-06-F01.F01) but does not branch the cleanup logic. [Rationale: UR-07-F01; single cleanup path per architecture]
 - **SR-07-F01.C01** (type C): No scheduled or on-demand job shall delete an Anonymised Account Stub on the grounds of age, inactivity, or empty time-record set. The stub persists for the lifetime of the deployment; the data-retention policy (UR-00-C17) governs only `time_records` and `nodes` and does not extend to anonymised user records (see architecture §6.5 rationale on retention decoupling). [Rationale: UR-07-F01; UR-00-C17; architecture §6.5]
 - **SR-07-F01.C02** (type C): The cleanup transaction shall be idempotent: invoking it on a user that is already in the anonymised state (active path) or already removed (pending path) shall complete without throwing and shall make no further state change. [Rationale: UR-07-F01; defensive on replay and on partial-failure recovery]
 
@@ -600,7 +600,7 @@ All endpoints in this epic are **session-only** (per UR-00-C08(a) — API-key li
 
 **UR-08-F03** — revoke own API key.
 
-- **SR-08-F03.F01** (type F): The system shall expose `POST /api/account/me/api-keys/{id}/revoke` (session-only), accepting only requests whose caller owns the named key. The endpoint shall set `revoked_at = NOW()` on the row in one transaction; subsequent presentation of the raw key value at any authenticated endpoint shall be rejected with HTTP 401 (the SR-08-F03.C01 invariant). The endpoint shall emit the `api_key_revoked(by_self=true)` audit event. Revoking an already-revoked key is a no-op success. [Rationale: UR-08-F03]
+- **SR-08-F03.F01** (type F): The system shall expose `POST /api/account/me/api-keys/{id}/revoke` (session-only), accepting only requests whose caller owns the named key. The endpoint shall set `revoked_at = NOW()` on the row in one transaction; subsequent presentation of the raw key value at any authenticated endpoint shall be rejected with HTTP 401 (the SR-08-F03.C01 invariant). The endpoint shall emit the `api_key_revoked(bySelf=true)` audit event. Revoking an already-revoked key is a no-op success. [Rationale: UR-08-F03]
 - **SR-08-F03.C01** (type C): The authentication layer's API-key validation (architecture §5.2 Security/OIDC adapter; SR-00-C08.F01) shall, for every incoming API-key-authenticated request, reject the request when the corresponding `api_keys` row has `revoked_at IS NOT NULL` or `expires_at < NOW()`, before the request enters use-case handling. This rejection is observed as `trawhile_api_key_use_total{outcome="rejected_revoked"}` or `trawhile_api_key_use_total{outcome="rejected_expired"}` per SR-01-F10.F02. [Rationale: UR-08-F03; terminal-state invariant]
 - **SR-08-F03.C02** (type C): The persistence port for `api_keys` shall expose only the following write operations: insert a new key row (called by SR-08-F01.F01), set `revoked_at = NOW()` for a given key id (called by SR-08-F03.F01 and SR-08-F06.F01), and set `last_used_at = NOW()` for a given key id (called by the authentication layer on successful API-key use). No write operation that modifies `name`, `scope`, `expires_at`, `key_hash`, `user_id`, or `created_at` shall be exposed by the port. The application is therefore structurally incapable of mutating these columns. Rotation by revoke-and-reissue is the only way to change a key's name, scope, or expiry: the caller revokes the old key and generates a new one with the desired attributes. [Rationale: UR-08-F03; rotation-by-revoke-and-reissue pattern; immutability invariant enforced by limiting the persistence port API per ports-and-adapters architecture.]
 
@@ -610,4 +610,4 @@ All endpoints in this epic are **session-only** (per UR-00-C08(a) — API-key li
 
 **UR-08-F06** — System Admin revoke any API key.
 
-- **SR-08-F06.F01** (type F): The system shall expose `POST /api/admin/api-keys/{id}/revoke` (session-only; effective `admin` on the root node), accepting any API key regardless of owner. The endpoint shall set `revoked_at = NOW()` on the row in one transaction and emit the `api_key_revoked(by_self=false, actor=<admin uuid>)` audit event per SR-06-F01.F01. Revoking an already-revoked key is a no-op success. [Rationale: UR-08-F06]
+- **SR-08-F06.F01** (type F): The system shall expose `POST /api/admin/api-keys/{id}/revoke` (session-only; effective `admin` on the root node), accepting any API key regardless of owner. The endpoint shall set `revoked_at = NOW()` on the row in one transaction and emit the `api_key_revoked(bySelf=false, actorId=<admin uuid>)` audit event per SR-06-F01.F01. Revoking an already-revoked key is a no-op success. [Rationale: UR-08-F06]

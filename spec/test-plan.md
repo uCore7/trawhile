@@ -49,7 +49,7 @@ For C-type SRs: TEs are optional; included only when the constraint is observabl
 | TE-00-C11.F02-02 | SR-00-C11.F02 | UR-00-C11 | ACT | `anonymisedUserLabel.spec.ts` | Frontend renders the `account.anonymisedUserLabel` translation key when displayName is null and anonymised marker is implied by context |
 | TE-00-C13.F01-01 | SR-00-C13.F01 | UR-00-C13 | IT | `InvitationExpiryIT` | Lifecycle job deletes `pending_invitations` rows and their pre-created `users` rows ≥ 90 days after creation |
 | TE-00-C14.F01-01 | SR-00-C14.F01 | UR-00-C14 | IT | `LogRedactionIT` | Log entries emitted by the redaction pipeline never contain email, OIDC subject, or request body content |
-| TE-00-C16.F01-01 | SR-00-C16.F01 | UR-00-C16 | IT | `LogCorrelationIT` | Every log entry carries `trace_id`, `request_id`, `session_id` (when applicable), and pseudonymised `user_id` (when actor known) |
+| TE-00-C16.F01-01 | SR-00-C16.F01 | UR-00-C16 | IT | `LogCorrelationIT` | Every log entry carries `traceId`, `requestId`, `sessionId` (when applicable), and pseudonymised `actorId` (when actor known) |
 | TE-00-C17.F01-01 | SR-00-C17.F01 | UR-00-C17 | IT | `RetentionPurgeIT` | Purge job deletes `time_records` rows whose counted-duration end is past the 3-year boundary; rows inside boundary survive |
 | TE-00-C17.F02-01 | SR-00-C17.F02 | UR-00-C17 | IT | `RetentionPurgeIT` | Purge job deletes nodes whose subtree holds no `time_records` and whose own creation time is past 3 years, processed bottom-up |
 | TE-00-C18.F01-01 | SR-00-C18.F01 | UR-00-C18 | ACT | `localeResolution.spec.ts` | `navigator.language` `en-US` resolves to `en-GB`; `de-CH` resolves to `de-DE`; unknown language falls back to `en-GB` |
@@ -240,7 +240,7 @@ For C-type SRs: TEs are optional; included only when the constraint is observabl
 | TE-05-F04.F01-01 | SR-05-F04.F01 | UR-05-F04 | IT | `AccountIT` | Own-authorizations returns one row per explicit `node_authorizations` entry for the caller, with node id, displayName, ancestor path, and level |
 | TE-05-F04.F01-02 | SR-05-F04.F01 | UR-05-F04 | CT | `AccountCT` | `GET /api/account/me/authorizations` conforms to `spec/openapi.yaml` |
 | TE-05-F04.F02-01 | SR-05-F04.F02 | UR-05-F04 | IT | `SseTaxonomyIT` | `AuthorizationChanged` snapshot SSE event payload equals `GET /api/account/me/authorizations` response shape |
-| TE-05-F05.F01-01 | SR-05-F05.F01 | UR-05-F05 | IT | `AccountIT` | Anonymise endpoint with valid recent step-up event in session executes SR-07-F01.F01 cleanup; emits `account_anonymised(by_self=true)`; step-up event cleared |
+| TE-05-F05.F01-01 | SR-05-F05.F01 | UR-05-F05 | IT | `AccountIT` | Anonymise endpoint with valid recent step-up event in session executes SR-07-F01.F01 cleanup; emits `account_anonymised(bySelf=true)`; step-up event cleared |
 | TE-05-F05.F01-02 | SR-05-F05.F01 | UR-05-F05 | IT | `AccountIT` | Anonymise endpoint without a step-up event within 5 minutes returns HTTP 401 |
 | TE-05-F05.F01-03 | SR-05-F05.F01 | UR-05-F05 | CT | `AccountCT` | `POST /api/account/me/anonymise` conforms to `spec/openapi.yaml` |
 | TE-05-F05.F02-01 | SR-05-F05.F02 | UR-05-F05 | E2E | `anonymiseWizard.spec.ts` | Multi-step wizard: step 1 explanation in active dialect; step 2 OIDC step-up redirect; step 3 anonymise call + sign-out |
@@ -255,7 +255,7 @@ For C-type SRs: TEs are optional; included only when the constraint is observabl
 
 | TE | SR | UR | Type | Class | Test description |
 |---|---|---|---|---|---|
-| TE-06-F01.F01-01 | SR-06-F01.F01 | UR-06-F01 | IT | `AuditEventVocabularyIT` | Every event type listed in SR-06-F01.F01 is emitted with the required structured fields (`event_type`, `actor_id`, `target_id`, timestamp, correlation ids) when its triggering operation occurs |
+| TE-06-F01.F01-01 | SR-06-F01.F01 | UR-06-F01 | IT | `AuditEventVocabularyIT` | Every event type listed in SR-06-F01.F01 is emitted with the required structured fields (`eventType`, `actorId`, `targetId`, timestamp, correlation ids) when its triggering operation occurs |
 | TE-06-F01.F02-01 | SR-06-F01.F02 | UR-06-F01 | IT | `LogRedactionIT` | Audit log entries never contain email, profile content, or request/response bodies; only pseudonymous identifiers |
 | TE-06-F01.C01-01 | SR-06-F01.C01 | UR-06-F01 | CT | `SchemaCT` | No `audit_events` or `security_events` table exists in `spec/schema.sql` |
 | TE-06-F02.F01-01 | SR-06-F02.F01 | UR-06-F02 | ACT | `aboutPage.spec.ts` | About page links to the project's GHSA index via a compile-time constant URL |
@@ -300,11 +300,11 @@ For C-type SRs: TEs are optional; included only when the constraint is observabl
 | TE-08-F02.F01-01 | SR-08-F02.F01 | UR-08-F02 | IT | `ApiKeyIT` | List returns caller's keys with id, name, scope (annotated with current displayName + ancestor path), createdAt, lastUsedAt, expiresAt, derived status; never raw key |
 | TE-08-F02.F01-02 | SR-08-F02.F01 | UR-08-F02 | CT | `ApiKeyCT` | `GET /api/account/me/api-keys` conforms to `spec/openapi.yaml` |
 | TE-08-F02.F02-01 | SR-08-F02.F02 | UR-08-F02 | IT | `ApiKeyIT` | Status derivation: revoked_at non-null → revoked; else expires_at < NOW() → expired; else active |
-| TE-08-F03.F01-01 | SR-08-F03.F01 | UR-08-F03 | IT | `ApiKeyIT` | Revoke own key sets revoked_at; subsequent bearer presentation rejected with HTTP 401; emits `api_key_revoked(by_self=true)`; revoking already-revoked is no-op success |
+| TE-08-F03.F01-01 | SR-08-F03.F01 | UR-08-F03 | IT | `ApiKeyIT` | Revoke own key sets revoked_at; subsequent bearer presentation rejected with HTTP 401; emits `api_key_revoked(bySelf=true)`; revoking already-revoked is no-op success |
 | TE-08-F03.F01-02 | SR-08-F03.F01 | UR-08-F03 | CT | `ApiKeyCT` | `POST /api/account/me/api-keys/{id}/revoke` conforms to `spec/openapi.yaml` |
 | TE-08-F03.C01-01 | SR-08-F03.C01 | UR-08-F03 | IT | `AuthAdapterIT` | API-key authentication rejects revoked or expired keys before use-case handling; increments `trawhile_api_key_use_total{outcome=rejected_revoked|rejected_expired}` |
 | TE-08-F03.C02-01 | SR-08-F03.C02 | UR-08-F03 | IT | `PortShapeIT` | The `api_keys` persistence port exposes only insert, markRevoked, markLastUsed, and read methods; no update method on name/scope/expires_at/key_hash/user_id/created_at exists |
 | TE-08-F05.F01-01 | SR-08-F05.F01 | UR-08-F05 | IT | `AdminApiKeyIT` | Admin all-keys list returns SR-08-F02.F01 row shape plus owner UUID and displayName; supports pagination and name-substring filter |
 | TE-08-F05.F01-02 | SR-08-F05.F01 | UR-08-F05 | CT | `AdminApiKeyCT` | `GET /api/admin/api-keys` conforms to `spec/openapi.yaml` |
-| TE-08-F06.F01-01 | SR-08-F06.F01 | UR-08-F06 | IT | `AdminApiKeyIT` | Admin revoke of any key sets revoked_at; emits `api_key_revoked(by_self=false, actor=<admin uuid>)`; already-revoked is no-op |
+| TE-08-F06.F01-01 | SR-08-F06.F01 | UR-08-F06 | IT | `AdminApiKeyIT` | Admin revoke of any key sets revoked_at; emits `api_key_revoked(bySelf=false, actorId=<admin uuid>)`; already-revoked is no-op |
 | TE-08-F06.F01-02 | SR-08-F06.F01 | UR-08-F06 | CT | `AdminApiKeyCT` | `POST /api/admin/api-keys/{id}/revoke` conforms to `spec/openapi.yaml` |
