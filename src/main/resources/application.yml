@@ -38,6 +38,13 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
   forward-headers-strategy: native   # trust X-Forwarded-* from Caddy (UR-00-C12)
+  tomcat:
+    remove-server-header: true   # SR-00-C22.F01 — do not emit `Server: Apache-Coyote/...`
+  error:
+    include-stacktrace: never        # SR-00-C22.F01 — never reveal stack traces
+    include-message: never           # SR-00-C22.F01 — never reveal exception messages
+    include-binding-errors: never    # SR-00-C22.F01 — never reveal validation paths
+    include-exception: false         # SR-00-C22.F01 — never reveal exception class
 
 management:
   server:

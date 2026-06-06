@@ -139,6 +139,12 @@ public class SecurityConfig {
                                 request, response, accessDeniedException);
                     }
                 })
+                .authenticationEntryPoint((request, response, authException) -> {
+                    // SR-00-C22.F01: generic 401 with no body content that could fingerprint
+                    // the deployment. The full RFC 7807 Problem body shape lands with the
+                    // SR-00-C18 brief; for now an empty body satisfies the no-disclosure rule.
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                })
             );
 
         if (clientRegistrationRepository.getIfAvailable() != null) {

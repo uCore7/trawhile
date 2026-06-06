@@ -11,7 +11,7 @@ Translate one or more system requirements (SRs) and their planned test entries (
 
 # Inputs (canonical, read-only for this run)
 
-1. The task brief at `.local/tasks/tests/<id>.md` — names the SRs and TEs in scope, the test class to create, and the test type (`IT`, `UT`, `SIT`, `CT`, `E2E`).
+1. The task brief at `.local/tasks/tests/<id>.md` — names the SRs and TEs in scope, the test class to create, and the test type (`IT`, `UT`, `SIT`, `CT`, `E2E`). The brief MUST also carry a single-line `**Test-classes:** FooIT[, BarIT, ...]` field naming every JUnit class the pipeline should run for the verifier's empirical mvn.log; the pipeline fails fast if it is missing.
 2. `AGENTS.md` — project-wide conventions and anti-patterns (loaded automatically into your system prompt).
 3. `docs/requirements-sr.md` — for the SR text being tested.
 4. `docs/requirements-ur.md` — for parent UR context.

@@ -66,6 +66,23 @@ if [[ -z "$ROLE" ]]; then
 fi
 ROLE=$(echo "$ROLE" | awk '{print $1}')   # take first if multi-choice
 
+# `**Test-classes:** A, B, C` — required for test-writer and impl-backend so the
+# pipeline knows which JUnit classes to run for the verifier's empirical mvn.log.
+# Parsed early so we fail fast if missing, before spending tokens on the generator.
+TEST_CLASSES=""
+if [[ "$ROLE" == "test-writer" || "$ROLE" == "impl-backend" ]]; then
+  TEST_CLASSES=$(grep -m1 '^\*\*Test-classes:\*\*' "$TASK_FILE" \
+    | sed -E 's/^\*\*Test-classes:\*\* +//; s/[[:space:]]+//g' || true)
+  if [[ -z "$TEST_CLASSES" ]]; then
+    echo "Error: task brief $TASK_FILE has no '**Test-classes:**' line." >&2
+    echo "  Add a single-line declaration like:" >&2
+    echo "    **Test-classes:** FooIT, BarIT, BazIT" >&2
+    echo "  This is required for test-writer and impl-backend briefs so the pipeline" >&2
+    echo "  knows which classes to mvn-test for the verifier's empirical evidence." >&2
+    exit 1
+  fi
+fi
+
 case "$ROLE" in
   test-writer)
     ALLOWED_TOOLS='Read(**),Grep(**),Glob(**),Edit(src/test/**),Write(src/test/**),Bash(./scripts/mvn-local.sh test:*),Bash(./scripts/mvn-local.sh test-compile)'
@@ -148,26 +165,16 @@ fi
 
 # Capture mvn output for test-writer / impl-backend so the verifier (which has
 # no Bash tool) can read empirical compile/test results from a file artefact.
-# Test classes are extracted from the brief's referenced src/test/java/**/*.java
-# paths; if none are referenced, the mvn step is skipped.
+# The test classes come from the brief's `**Test-classes:**` field (parsed earlier).
 MVN_LOG=""
-if [[ "$ROLE" == "test-writer" || "$ROLE" == "impl-backend" ]]; then
-  TEST_CLASSES=$(grep -oE 'src/test/java/[^[:space:]`)]+\.java' "$TASK_FILE" \
-    | sed -E 's|.*/||; s|\.java$||' \
-    | sort -u \
-    | tr '\n' ',' \
-    | sed 's/,$//')
-  if [[ -n "$TEST_CLASSES" ]]; then
-    MVN_LOG="$RUN_DIR/mvn.log"
-    echo "      capturing mvn test output to $MVN_LOG (classes: $TEST_CLASSES)..."
-    set +e
-    "$REPO_ROOT/scripts/mvn-local.sh" test -Dtest="$TEST_CLASSES" > "$MVN_LOG" 2>&1
-    MVN_EXIT=$?
-    set -e
-    echo "      mvn exit code: $MVN_EXIT (recorded as artefact; not propagated)"
-  else
-    echo "      no test classes referenced in brief; skipping mvn capture"
-  fi
+if [[ -n "$TEST_CLASSES" ]]; then
+  MVN_LOG="$RUN_DIR/mvn.log"
+  echo "      capturing mvn test output to $MVN_LOG (classes: $TEST_CLASSES)..."
+  set +e
+  "$REPO_ROOT/scripts/mvn-local.sh" test -Dtest="$TEST_CLASSES" > "$MVN_LOG" 2>&1
+  MVN_EXIT=$?
+  set -e
+  echo "      mvn exit code: $MVN_EXIT (recorded as artefact; not propagated)"
 fi
 
 echo "[3/3] running verifier subagent..."
