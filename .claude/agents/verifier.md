@@ -37,9 +37,20 @@ A structured critique in the following format, written to stdout:
 ### Anti-pattern check (from AGENTS.md)
 - (same shape per anti-pattern checked)
 
-### Test correctness (impl runs only)
-- [VIOLATION | OK | NOT-CHECKED] Tests in scope actually pass
-- [VIOLATION | OK | NOT-CHECKED] Tests don't pass by stubbing assertions or skipping
+### Test correctness
+Interpret `mvn.log` by the brief's **Role**:
+
+For **test-writer** briefs the success state is the *expected red state* — compile pass + assertion failures with clear behavioural messages (e.g. `expected: 401 but was: 403`). Mark OK when:
+  - Tests compile cleanly (no `cannot find symbol`, `package ... does not exist`, etc.) AND
+  - Failures are pure assertion mismatches whose messages name the spec'd value (`expected X but was Y`, or a `.as(...)` message that quotes the SR) AND
+  - No failure is a thrown exception that points at test-code bugs (NPE on a setup field, `ClassCastException`, `NoSuchBeanDefinitionException`) — those are VIOLATIONs.
+  Flag VIOLATION when the test compiles but ALL assertions in scope pass, since that suggests either the impl already exists (brief is stale) or the assertions are trivially true.
+
+For **impl-backend** briefs the success state is "all tests in scope pass":
+  - [VIOLATION | OK | NOT-CHECKED] Tests in scope actually pass.
+  - [VIOLATION | OK | NOT-CHECKED] Tests don't pass by stubbing assertions, skipping, or modifying `src/test/`.
+
+For BOTH roles, a compile failure of test code is always a VIOLATION; a compile failure naming a missing prod dep (e.g. `package org.springframework.session does not exist`) points to an upstream gap that the brief's STOP clause should have triggered.
 
 ### Missed edge cases
 - <description of an edge case the diff does not handle, if any>
