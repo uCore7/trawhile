@@ -2,7 +2,7 @@
 set -euo pipefail
 
 script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+project_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <task-file> [codex-exec-args...]" >&2

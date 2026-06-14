@@ -154,6 +154,71 @@ For execution traceability, run the full suite before `./scripts/check-traceabil
 
 The same traceability check is also enforced in CI after the backend verify step, so a green local run of `./scripts/mvn-local.sh test` followed by `./scripts/check-traceability.py` should match the GitHub Actions gate.
 
+### Codex safe-local agent pipeline
+
+The safe-local Codex pipeline mirrors the generator -> verifier workflow from `scripts/run-pipeline.sh`, but keeps Codex itself out of full-access mode.
+
+```bash
+scripts/codex/run-pipeline.sh .local/tasks/tests/E-00-C16-log-correlation.md
+scripts/codex/run-pipeline.sh .local/tasks/impl/E-00-C16-log-correlation.md
+```
+
+The generator runs with `workspace-write` and `approval_policy="never"`. The verifier runs with `read-only`. Maven/Testcontainers feedback is produced by the wrapper script through fixed host-side commands, then passed back to Codex on later passes.
+
+The runner copies `${CODEX_HOME:-~/.codex}/auth.json` and, when present, `config.toml` into a temporary `CODEX_HOME` for the duration of the run, so batch execution does not mutate the normal user Codex home. If your files are elsewhere, set `CODEX_AUTH_FILE=/path/to/auth.json` or `CODEX_CONFIG_FILE=/path/to/config.toml`.
+
+For an automatic outer feedback loop:
+
+```bash
+scripts/codex/run-pipeline.sh .local/tasks/impl/E-00-C16-log-correlation.md --max-generator-passes 3
+```
+
+For a guided rerun from a previous verifier critique:
+
+```bash
+scripts/codex/run-pipeline.sh .local/tasks/impl/E-00-C16-log-correlation.md \
+  --with-guidance .local/runs/E-00-C16-log-correlation/<timestamp>/critique.md
+```
+
+Run artefacts are written to `.local/runs/<task>/<timestamp>/`, including `diff.patch`, `critique.md`, `generator-pass-*.md`, and `mvn-pass-*.log`. The pipeline also checks role file scope after each generator pass.
+
+### Codex isolated agent pipeline
+
+The isolated Codex pipeline restores the shorter in-agent feedback loop while keeping full access inside a disposable Docker boundary. It creates a temporary repository copy, starts a private Docker-in-Docker daemon for Testcontainers, copies the workspace into a runner container, runs Codex there, and copies the run artefacts back to `.local/runs/`.
+
+```bash
+scripts/codex/run-pipeline-isolated.sh .local/tasks/impl/E-00-C16-log-correlation.md
+```
+
+Guided rerun:
+
+```bash
+scripts/codex/run-pipeline-isolated.sh .local/tasks/impl/E-00-C16-log-correlation.md \
+  --with-guidance .local/runs/E-00-C16-log-correlation/<timestamp>/critique.md
+```
+
+Useful options:
+
+```bash
+scripts/codex/run-pipeline-isolated.sh <task-file> --no-build
+scripts/codex/run-pipeline-isolated.sh <task-file> --keep-workspace --keep-containers
+```
+
+The runner copies `${CODEX_HOME:-~/.codex}/auth.json` and, when present, `config.toml` into a container-local `CODEX_HOME`. If your files are elsewhere, set `CODEX_AUTH_FILE=/path/to/auth.json` or `CODEX_CONFIG_FILE=/path/to/config.toml`.
+
+By default, both isolated Codex phases run with `danger-full-access` inside the runner container. The generator needs that access for Maven, Testcontainers, and the disposable Docker daemon. The verifier only reads source, diff, and Maven-log artefacts, and the runner checks after it exits that the verifier did not mutate the workspace. You may set `CODEX_ISOLATED_VERIFIER_SANDBOX=read-only` on hosts where Codex's inner Linux sandbox works inside Docker; on hosts without unprivileged user namespaces, that mode can fail before any read command executes.
+
+Security notes:
+
+- The runner does not mount `/var/run/docker.sock` from the host.
+- The runner also does not keep the host checkout bind-mounted while Codex runs; the disposable workspace is copied into the container and only `.local/runs/` artefacts are copied back.
+- Testcontainers talks to a disposable `docker:dind` sidecar through `DOCKER_HOST=tcp://codex-docker:2375`.
+- Maven has normal outbound network access inside the runner network, so dependency downloads stay in the disposable workspace at `.mvn/repository`.
+- The `docker:dind` sidecar runs privileged, so this is still a controlled-execution mode, not a hard VM boundary.
+- Prefer a dedicated Codex auth file/account for isolated automation; the runner needs Codex auth to make model calls.
+- The temporary workspace excludes `.git`, `.local/runs`, `.env*`, `config/application.yml`, build output, frontend `node_modules`, and local Maven caches.
+- The generated patch is exported as `.local/runs/<task>/<timestamp>/diff.patch`; review it before applying it to the main checkout.
+
 ### Codex in a Docker sandbox
 
 This repository also includes a `.devcontainer/` setup for running Codex inside Docker while still giving the agent full access inside that container. This follows the current Codex guidance for containerized environments: if Docker is your intended isolation boundary, run Codex inside the container with `danger-full-access` instead of trying to stack a second Linux sandbox inside it.
@@ -174,29 +239,32 @@ approval_policy = "never"
 Terminal-first workflow:
 
 ```bash
-make devcontainer-up
+docker compose -f .devcontainer/docker-compose.yml up -d --build
 ```
 
 Interactive TUI mode:
 
 ```bash
-make devcontainer-codex
+docker compose -f .devcontainer/docker-compose.yml exec \
+  workspace bash -lc "cd /workspaces/timetracker && exec codex"
 ```
 
 Batch / agentic mode from a task file:
 
 ```bash
-make devcontainer-codex-task TASK=tasks/00-base-it.md
-make devcontainer-codex-task TASK=tasks/00-base-it.md ARGS='--json'
+docker compose -f .devcontainer/docker-compose.yml exec \
+  workspace bash -lc "cd /workspaces/timetracker && ./scripts/codex/run-codex-task.sh tasks/00-base-it.md"
+docker compose -f .devcontainer/docker-compose.yml exec \
+  workspace bash -lc "cd /workspaces/timetracker && ./scripts/codex/run-codex-task.sh tasks/00-base-it.md --json"
 ```
 
 Useful companion commands:
 
 ```bash
-make host-auth-check
-make devcontainer-shell
-make devcontainer-logs
-make devcontainer-down
+jq '{auth_mode, has_tokens: (.tokens != null), has_refresh_token: ((.tokens.refresh_token // "") != ""), last_refresh}' "${CODEX_HOME:-$HOME/.codex}/auth.json"
+docker compose -f .devcontainer/docker-compose.yml exec workspace bash
+docker compose -f .devcontainer/docker-compose.yml logs -f
+docker compose -f .devcontainer/docker-compose.yml down
 ```
 
 This path does not require VS Code. It uses `docker compose` directly and keeps Codex entirely inside the `workspace` container.
@@ -219,34 +287,40 @@ Reliable ChatGPT-managed flow:
 First try:
 
 ```bash
-make host-auth-check
-make devcontainer-up
-make devcontainer-sync-auth
-make devcontainer-codex-task TASK=tasks/00-base-it.md
+jq '{auth_mode, has_tokens: (.tokens != null), has_refresh_token: ((.tokens.refresh_token // "") != ""), last_refresh}' "${CODEX_HOME:-$HOME/.codex}/auth.json"
+docker compose -f .devcontainer/docker-compose.yml up -d --build
+mkdir -p .tmp
+cp "${CODEX_HOME:-$HOME/.codex}/auth.json" .tmp/devcontainer-auth.json
+chmod 600 .tmp/devcontainer-auth.json
+docker compose -f .devcontainer/docker-compose.yml exec workspace bash -lc \
+  'install -d -m 700 "${CODEX_HOME:-$HOME/.codex}" && install -m 600 /workspaces/timetracker/.tmp/devcontainer-auth.json "${CODEX_HOME:-$HOME/.codex}/auth.json"'
+rm -f .tmp/devcontainer-auth.json
+docker compose -f .devcontainer/docker-compose.yml exec \
+  workspace bash -lc "cd /workspaces/timetracker && ./scripts/codex/run-codex-task.sh tasks/00-base-it.md"
 ```
 
-If `make host-auth-check` fails, repair host auth first:
+If the host auth check fails, repair host auth first:
 
 ```bash
 codex login
-make host-auth-check
+jq '{auth_mode, has_tokens: (.tokens != null), has_refresh_token: ((.tokens.refresh_token // "") != ""), last_refresh}' "${CODEX_HOME:-$HOME/.codex}/auth.json"
 ```
 
 If you are upgrading from an older version of this devcontainer setup and see `Permission denied` for `${CODEX_HOME}/config.toml`, restart the devcontainer so Docker creates the fresh Codex home volume used by the current setup:
 
 ```bash
-make devcontainer-down
-make devcontainer-up
+docker compose -f .devcontainer/docker-compose.yml down
+docker compose -f .devcontainer/docker-compose.yml up -d --build
 ```
 
 The task runner also accepts extra `codex exec` arguments when run directly inside the container:
 
 ```bash
-./scripts/run-codex-task.sh tasks/00-base-it.md --json
-./scripts/run-codex-task.sh tasks/00-base-it.md --output-last-message /tmp/codex-last.txt
+./scripts/codex/run-codex-task.sh tasks/00-base-it.md --json
+./scripts/codex/run-codex-task.sh tasks/00-base-it.md --output-last-message /tmp/codex-last.txt
 ```
 
-If you prefer a raw Docker command instead of `make`, the equivalent startup is:
+Startup plus an interactive Codex shell:
 
 ```bash
 docker compose -f .devcontainer/docker-compose.yml up -d --build
@@ -258,7 +332,7 @@ Raw batch command:
 
 ```bash
 docker compose -f .devcontainer/docker-compose.yml exec \
-  workspace bash -lc "cd /workspaces/timetracker && ./scripts/run-codex-task.sh tasks/00-base-it.md"
+  workspace bash -lc "cd /workspaces/timetracker && ./scripts/codex/run-codex-task.sh tasks/00-base-it.md"
 ```
 
 If you do use the Codex IDE extension later, keep the repository attached to the devcontainer before you start the agent so the agent runs inside the container too.
