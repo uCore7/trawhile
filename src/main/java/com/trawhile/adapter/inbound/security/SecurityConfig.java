@@ -1,16 +1,19 @@
 package com.trawhile.adapter.inbound.security;
 
 import com.trawhile.port.outbound.persistence.ApiKeyLookupPort;
+import java.io.IOException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandlerImpl;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /**
@@ -134,6 +137,8 @@ public class SecurityConfig {
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
                     if (MCP_PATH.matches(request)) {
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    } else if (accessDeniedException instanceof CsrfException) {
+                        writeCsrfProblem(response);
                     } else {
                         new AccessDeniedHandlerImpl().handle(
                                 request, response, accessDeniedException);
@@ -156,5 +161,15 @@ public class SecurityConfig {
         }
 
         return http.build();
+    }
+
+    private static void writeCsrfProblem(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.getWriter().write(
+                "{\"type\":\"about:blank\","
+                + "\"title\":\"Forbidden\","
+                + "\"status\":403,"
+                + "\"code\":\"csrf_token_invalid\"}");
     }
 }
