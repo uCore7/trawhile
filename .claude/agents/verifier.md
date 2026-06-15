@@ -40,11 +40,22 @@ A structured critique in the following format, written to stdout:
 ### Test correctness
 Interpret `mvn.log` by the brief's **Role**:
 
-For **test-writer** briefs the success state is the *expected red state* — compile pass + assertion failures with clear behavioural messages (e.g. `expected: 401 but was: 403`). Mark OK when:
+For **test-writer** briefs the success state is the *expected red state*. Mark OK in either of two shapes:
+
+  **Shape A — compile pass, assertion fail (the common case):**
   - Tests compile cleanly (no `cannot find symbol`, `package ... does not exist`, etc.) AND
   - Failures are pure assertion mismatches whose messages name the spec'd value (`expected X but was Y`, or a `.as(...)` message that quotes the SR) AND
   - No failure is a thrown exception that points at test-code bugs (NPE on a setup field, `ClassCastException`, `NoSuchBeanDefinitionException`) — those are VIOLATIONs.
-  Flag VIOLATION when the test compiles but ALL assertions in scope pass, since that suggests either the impl already exists (brief is stale) or the assertions are trivially true.
+
+  **Shape B — compile fail because a brief-spec'd impl symbol doesn't exist yet:**
+  - The ONLY compile error in `mvn.log` is `cannot find symbol` (or equivalent) naming a project-internal class/method/type whose fully-qualified name + contract is explicitly spelled out in the brief as an upcoming impl deliverable (typically the brief names the matching impl brief, e.g. `.local/tasks/impl/E-00-XX.md`). AND
+  - The test file is on disk, well-formed, and uses the missing symbol in the shape the brief specifies (e.g. correct package, correct sealed-type names, correct method signatures). AND
+  - There are no OTHER unrelated compile errors and no test-code bugs.
+  Shape B is the natural "test-first" red state when a test depends on a project-specific helper. The matching impl brief will land the symbol; the test goes green automatically once that runs.
+
+  Flag VIOLATION when:
+  - The test compiles AND all assertions pass (suggests stale brief / trivially-true assertions / impl already shipped), OR
+  - Compile fails for reasons OTHER than Shape B (test-code bug, missing external dep that the brief's STOP clause should have triggered, etc.).
 
 For **impl-backend** briefs the success state is "all tests in scope pass":
   - [VIOLATION | OK | NOT-CHECKED] Tests in scope actually pass.

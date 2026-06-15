@@ -90,6 +90,16 @@ if [[ -z "$ROLE" ]]; then
 fi
 ROLE=$(echo "$ROLE" | awk '{print $1}')   # take first if multi-choice
 
+# `**Run-after:** <path-to-other-brief>` — optional declarative ordering hint.
+# When a brief logically depends on another brief's artefacts (most commonly an
+# impl brief that should be run AFTER its companion test brief produced the
+# failing test), the brief can name the upstream brief here. The pipeline shows
+# it in the banner so the human running the script sees the expected ordering;
+# the pipeline does NOT enforce ordering — running out of order is allowed and
+# may even be intentional (e.g. re-running a brief to refresh artefacts).
+RUN_AFTER=$(grep -m1 '^\*\*Run-after:\*\*' "$TASK_FILE" \
+  | sed -E 's/^\*\*Run-after:\*\* +//; s/ +$//' || true)
+
 # `**Test-classes:** A, B, C` — required for test-writer and impl-backend so the
 # pipeline knows which JUnit classes to run for the verifier's empirical mvn.log.
 # Parsed early so we fail fast if missing, before spending tokens on the generator.
@@ -144,6 +154,9 @@ echo " trawhile pipeline"
 echo " brief:        $TASK_FILE"
 echo " role:         $ROLE"
 echo " run dir:      $RUN_DIR"
+if [[ -n "$RUN_AFTER" ]]; then
+  echo " run-after:    $RUN_AFTER"
+fi
 if [[ -n "$VERIFIER_ONLY_DIR" ]]; then
   echo " mode:         verifier-only (reusing existing diff.patch / mvn.log)"
 fi

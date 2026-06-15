@@ -11,7 +11,7 @@ Implement Spring Boot + jOOQ code under `src/main/java/com/trawhile/` such that 
 
 # Inputs (canonical, read-only for this run)
 
-1. The task brief at `.local/tasks/impl/<id>.md` — names the SRs in scope, the failing test classes to make pass, and which cluster the work lives in. The brief MUST also carry a single-line `**Test-classes:** FooIT[, BarIT, ...]` field naming every JUnit class the pipeline should run (the in-scope class plus any regression classes that must keep passing); the pipeline fails fast if it is missing.
+1. The task brief at `.local/tasks/impl/<id>.md` — names the SRs in scope, the failing test classes to make pass, and which cluster the work lives in. The brief MUST also carry a single-line `**Test-classes:** FooIT[, BarIT, ...]` field naming every JUnit class the pipeline should run (the in-scope class plus any regression classes that must keep passing); the pipeline fails fast if it is missing. Impl briefs that depend on test-writer artefacts SHOULD also carry a `**Run-after:** .local/tasks/tests/<id>.md` line so the pipeline banner makes the expected ordering explicit.
 2. `AGENTS.md` — project-wide conventions (architecture, anti-patterns, file-location map).
 3. Failing tests under `src/test/java/com/trawhile/...` for the SRs in scope.
 4. `docs/requirements-sr.md` — the canonical SR text.
