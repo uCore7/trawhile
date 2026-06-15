@@ -60,10 +60,7 @@ capture_pipeline_diff() {
         continue
       fi
 
-      {
-        echo
-        echo "--- untracked file added by generator: $file ---"
-      } >> "$diff_file"
+      echo >> "$diff_file"
       git diff --no-index -- /dev/null "$file" >> "$diff_file" 2>/dev/null || true
     done < <(git ls-files --others --exclude-standard -z)
   )

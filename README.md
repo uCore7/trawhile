@@ -184,7 +184,7 @@ Run artefacts are written to `.local/runs/<task>/<timestamp>/`, including `diff.
 
 ### Codex isolated agent pipeline
 
-The isolated Codex pipeline restores the shorter in-agent feedback loop while keeping full access inside a disposable Docker boundary. It creates a temporary repository copy, starts a private Docker-in-Docker daemon for Testcontainers, copies the workspace into a runner container, runs Codex there, and copies the run artefacts back to `.local/runs/`.
+The isolated Codex pipeline restores the shorter in-agent feedback loop while keeping full access inside a disposable Docker boundary. It creates a temporary repository copy, starts a private Docker-in-Docker daemon for Testcontainers, copies the workspace into a runner container, runs Codex there, copies the run artefacts back to `.local/runs/`, and applies the generated diff to the host checkout.
 
 ```bash
 scripts/codex/run-pipeline-isolated.sh .local/tasks/impl/E-00-C16-log-correlation.md
@@ -211,13 +211,13 @@ By default, both isolated Codex phases run with `danger-full-access` inside the 
 Security notes:
 
 - The runner does not mount `/var/run/docker.sock` from the host.
-- The runner also does not keep the host checkout bind-mounted while Codex runs; the disposable workspace is copied into the container and only `.local/runs/` artefacts are copied back.
+- The runner also does not keep the host checkout bind-mounted while Codex runs; the disposable workspace is copied into the container, `.local/runs/` artefacts are copied back, and the captured `diff.patch` is applied with `git apply`.
 - Testcontainers talks to a disposable `docker:dind` sidecar through `DOCKER_HOST=tcp://codex-docker:2375`.
 - Maven has normal outbound network access inside the runner network, so dependency downloads stay in the disposable workspace at `.mvn/repository`.
 - The `docker:dind` sidecar runs privileged, so this is still a controlled-execution mode, not a hard VM boundary.
 - Prefer a dedicated Codex auth file/account for isolated automation; the runner needs Codex auth to make model calls.
 - The temporary workspace excludes `.git`, `.local/runs`, `.env*`, `config/application.yml`, build output, frontend `node_modules`, and local Maven caches.
-- The generated patch is exported as `.local/runs/<task>/<timestamp>/diff.patch`; review it before applying it to the main checkout.
+- The generated patch is exported as `.local/runs/<task>/<timestamp>/diff.patch` and applied to the host checkout at the end of the run so you can inspect the files directly with `git diff`.
 
 ### Codex in a Docker sandbox
 

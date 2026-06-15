@@ -248,12 +248,61 @@ mkdir -p "$repo_root/.local/runs"
 docker cp "$runner_name:/workspace/.local/runs/." "$repo_root/.local/runs/" >/dev/null 2>&1 || true
 docker cp "$runner_name:/workspace/.local/codex-isolated-last-run" "$workspace_parent/codex-isolated-last-run" >/dev/null 2>&1 || true
 
+run_rel=""
 if [[ -f "$workspace_parent/codex-isolated-last-run" ]]; then
   run_rel=$(cat "$workspace_parent/codex-isolated-last-run")
   echo "Isolated run artifacts: $repo_root/$run_rel"
   if [[ -f "$repo_root/$run_rel/diff.patch" ]]; then
-    echo "Review patch: $repo_root/$run_rel/diff.patch"
+    patch_file="$repo_root/$run_rel/diff.patch"
+    echo "Review patch: $patch_file"
+    echo "Applying isolated diff to host working tree..."
+    if git -C "$repo_root" apply --check "$patch_file"; then
+      git -C "$repo_root" apply "$patch_file"
+      echo "Applied patch to host working tree."
+    else
+      echo "Error: could not apply isolated diff to host working tree." >&2
+      echo "       Inspect the patch and host changes:" >&2
+      echo "       git apply --check $run_rel/diff.patch" >&2
+      exit 1
+    fi
   fi
 fi
+
+echo
+echo "=============================================="
+case "$runner_exit" in
+  0)
+    echo " result: ACCEPT - generator's work passes verifier review"
+    echo " next:   review the applied files, then commit when ready"
+    echo "         git diff"
+    ;;
+  2)
+    echo " result: RERUN WITH GUIDANCE - feed the critique back to the generator:"
+    echo
+    echo "         scripts/codex/run-pipeline-isolated.sh $task_rel --with-guidance $run_rel/critique.md"
+    ;;
+  3)
+    echo " result: RERUN WITH ESCALATION - use a stronger model or adjusted settings, then rerun:"
+    echo
+    echo "         CODEX_GENERATOR_MODEL=<model> scripts/codex/run-pipeline-isolated.sh $task_rel --with-guidance $run_rel/critique.md"
+    ;;
+  4)
+    echo " result: HUMAN REVIEW REQUIRED - inspect the critique and the applied files:"
+    echo
+    echo "         ${EDITOR:-vi} $run_rel/critique.md"
+    echo "         git diff"
+    ;;
+  5)
+    echo " result: verifier did not produce a parseable 'Recommended action:' line"
+    echo " next:   inspect $run_rel/critique.md"
+    ;;
+  *)
+    echo " result: isolated runner failed with exit code $runner_exit"
+    if [[ -n "${run_rel:-}" ]]; then
+      echo " next:   inspect $run_rel"
+    fi
+    ;;
+esac
+echo "=============================================="
 
 exit "$runner_exit"

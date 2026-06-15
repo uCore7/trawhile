@@ -305,25 +305,33 @@ recommendation=$(grep -i '^Recommended action:' "$critique_file" | tail -n1 | se
 case "$recommendation" in
   ACCEPT)
     echo " result: ACCEPT — generator's work passes verifier review"
+    echo " next:   review the applied files, then commit when ready"
+    echo "         git diff"
     exit 0
     ;;
   "RERUN WITH GUIDANCE")
     echo " result: RERUN WITH GUIDANCE — feed the critique back to the generator:"
     echo
-    echo "   ./scripts/codex/run-pipeline.sh $task_rel --with-guidance $critique_file"
+    echo "         scripts/codex/run-pipeline.sh $task_rel --with-guidance $critique_file"
     echo
     exit 2
     ;;
   "RERUN WITH ESCALATION")
-    echo " result: RERUN WITH ESCALATION — bump model tier and re-run"
+    echo " result: RERUN WITH ESCALATION — use a stronger model or adjusted settings, then rerun:"
+    echo
+    echo "         CODEX_GENERATOR_MODEL=<model> scripts/codex/run-pipeline.sh $task_rel --with-guidance $critique_file"
     exit 3
     ;;
   "HUMAN REVIEW REQUIRED")
     echo " result: HUMAN REVIEW REQUIRED — manual judgement needed on the critique above"
+    echo " next:   inspect the critique and the applied files"
+    echo "         ${EDITOR:-vi} $critique_file"
+    echo "         git diff"
     exit 4
     ;;
   *)
     echo " result: verifier did not produce a parseable 'Recommended action:' line"
+    echo " next:   inspect $critique_file"
     exit 5
     ;;
 esac
