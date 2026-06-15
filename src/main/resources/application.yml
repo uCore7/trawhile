@@ -64,3 +64,4 @@ logging:
   level:
     com.trawhile: INFO
     org.springframework.security: INFO
+    org.springframework.web.servlet.DispatcherServlet: ERROR
