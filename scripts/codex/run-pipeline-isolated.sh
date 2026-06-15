@@ -19,6 +19,7 @@ Usage:
 
 Options:
   --with-guidance <critique-file>  Feed a previous verifier critique to the generator.
+  --verifier-only <run-dir>        Re-run only the verifier against an existing run dir.
   --image <name>                   Runner image name (default: trawhile-codex-runner:latest).
   --no-build                       Do not build the runner image before execution.
   --keep-workspace                 Keep the temporary workspace after the run.
@@ -37,21 +38,16 @@ Exit codes match scripts/codex/runner/entrypoint.sh, which follows the verifier 
 EOF
 }
 
-if [[ $# -lt 1 || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+if [[ $# -lt 1 ]]; then
   usage
-  if [[ $# -lt 1 ]]; then
-    exit 1
-  fi
-  exit 0
+  exit 1
 fi
 
-task_file=$1
-shift
-
 repo_root=$(codex_repo_root)
-[[ -f "$task_file" ]] || die "task file not found: $task_file"
 
+task_file=""
 guidance_file=""
+verifier_only_dir=""
 image_name=${CODEX_RUNNER_IMAGE:-trawhile-codex-runner:latest}
 build_image=true
 keep_workspace=false
@@ -62,6 +58,16 @@ while [[ $# -gt 0 ]]; do
     --with-guidance)
       guidance_file="${2:-}"
       [[ -n "$guidance_file" && -f "$guidance_file" ]] || die "--with-guidance requires an existing critique file path"
+      shift 2
+      ;;
+    --verifier-only)
+      verifier_only_dir="${2:-}"
+      [[ -n "$verifier_only_dir" ]] || die "--verifier-only requires an existing run-dir path"
+      if [[ -f "$verifier_only_dir" ]]; then
+        die "--verifier-only requires a run-dir, not a task file. Usage: $0 <task-file> --verifier-only <run-dir>"
+      fi
+      [[ -d "$verifier_only_dir" ]] || die "--verifier-only requires an existing run-dir path"
+      [[ -f "$verifier_only_dir/diff.patch" ]] || die "--verifier-only run-dir is missing diff.patch: $verifier_only_dir"
       shift 2
       ;;
     --image)
@@ -85,11 +91,25 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    *)
+    --*)
       die "unknown argument: $1"
+      ;;
+    *)
+      if [[ -n "$task_file" ]]; then
+        die "unexpected extra positional argument: $1"
+      fi
+      task_file="$1"
+      shift
       ;;
   esac
 done
+
+[[ -n "$task_file" ]] || die "missing task file"
+[[ -f "$task_file" ]] || die "task file not found: $task_file"
+
+if [[ -n "$verifier_only_dir" && -n "$guidance_file" ]]; then
+  die "--verifier-only and --with-guidance are mutually exclusive"
+fi
 
 command -v docker >/dev/null 2>&1 || die "docker is required for the isolated runner"
 
@@ -109,6 +129,15 @@ if [[ -n "$guidance_file" ]]; then
   guidance_rel=${guidance_path#"$repo_root"/}
   if [[ "$guidance_rel" == "$guidance_path" ]]; then
     die "guidance file must be inside the repository so it can be copied into the runner workspace"
+  fi
+fi
+
+verifier_only_rel=""
+if [[ -n "$verifier_only_dir" ]]; then
+  verifier_only_path=$(realpath "$verifier_only_dir")
+  verifier_only_rel=${verifier_only_path#"$repo_root"/}
+  if [[ "$verifier_only_rel" == "$verifier_only_path" ]]; then
+    die "verifier-only run dir must be inside the repository so it can be copied into the runner workspace"
   fi
 fi
 
@@ -165,6 +194,10 @@ if [[ -n "$guidance_rel" ]]; then
   mkdir -p "$workspace/$(dirname "$guidance_rel")"
   cp "$guidance_path" "$workspace/$guidance_rel"
 fi
+if [[ -n "$verifier_only_rel" ]]; then
+  mkdir -p "$workspace/$(dirname "$verifier_only_rel")"
+  cp -a "$verifier_only_path" "$workspace/$verifier_only_rel"
+fi
 
 install -m 600 "$host_codex_auth" "$auth_staging/auth.json"
 if [[ -f "$host_codex_config" ]]; then
@@ -215,6 +248,9 @@ runner_args=(bash /workspace/scripts/codex/runner/entrypoint.sh "$task_rel")
 if [[ -n "$guidance_rel" ]]; then
   runner_args+=(--with-guidance "$guidance_rel")
 fi
+if [[ -n "$verifier_only_rel" ]]; then
+  runner_args+=(--verifier-only "$verifier_only_rel")
+fi
 
 echo "Running isolated Codex pipeline..."
 docker_create_args=(
@@ -254,7 +290,9 @@ run_rel=""
 if [[ -f "$workspace_parent/codex-isolated-last-run" ]]; then
   run_rel=$(cat "$workspace_parent/codex-isolated-last-run")
   echo "Isolated run artifacts: $repo_root/$run_rel"
-  if [[ -f "$repo_root/$run_rel/diff.patch" ]]; then
+  if [[ -n "$verifier_only_rel" ]]; then
+    echo "Verifier-only mode: no patch was applied to the host working tree."
+  elif [[ -f "$repo_root/$run_rel/diff.patch" ]]; then
     patch_file="$repo_root/$run_rel/diff.patch"
     echo "Review patch: $patch_file"
     echo "Applying isolated diff to host working tree..."
@@ -274,9 +312,14 @@ echo
 echo "=============================================="
 case "$runner_exit" in
   0)
-    echo " result: ACCEPT - generator's work passes verifier review"
-    echo " next:   review the applied files, then commit when ready"
-    echo "         git diff"
+    if [[ -n "$verifier_only_rel" ]]; then
+      echo " result: ACCEPT - verifier review passes"
+      echo " next:   inspect $run_rel/critique.md if needed"
+    else
+      echo " result: ACCEPT - generator's work passes verifier review"
+      echo " next:   review the applied files, then commit when ready"
+      echo "         git diff"
+    fi
     ;;
   2)
     echo " result: RERUN WITH GUIDANCE - feed the critique back to the generator:"
@@ -289,10 +332,16 @@ case "$runner_exit" in
     echo "         CODEX_GENERATOR_MODEL=<model> scripts/codex/run-pipeline-isolated.sh $task_rel --with-guidance $run_rel/critique.md"
     ;;
   4)
-    echo " result: HUMAN REVIEW REQUIRED - inspect the critique and the applied files:"
+    if [[ -n "$verifier_only_rel" ]]; then
+      echo " result: HUMAN REVIEW REQUIRED - inspect the critique:"
+    else
+      echo " result: HUMAN REVIEW REQUIRED - inspect the critique and the applied files:"
+    fi
     echo
     echo "         ${EDITOR:-vi} $run_rel/critique.md"
-    echo "         git diff"
+    if [[ -z "$verifier_only_rel" ]]; then
+      echo "         git diff"
+    fi
     ;;
   5)
     echo " result: verifier did not produce a parseable 'Recommended action:' line"

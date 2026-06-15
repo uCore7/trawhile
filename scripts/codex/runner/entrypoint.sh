@@ -12,7 +12,7 @@ source "$script_dir/common.sh"
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  scripts/codex/runner/entrypoint.sh <task-file> [--with-guidance <critique-file>]
+  scripts/codex/runner/entrypoint.sh <task-file> [--with-guidance <critique-file> | --verifier-only <run-dir>]
 EOF
 }
 
@@ -28,11 +28,17 @@ task_file=$1
 shift
 
 guidance_file=""
+verifier_only_dir=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-guidance)
       guidance_file="${2:-}"
       [[ -n "$guidance_file" ]] || die "--with-guidance requires a file path"
+      shift 2
+      ;;
+    --verifier-only)
+      verifier_only_dir="${2:-}"
+      [[ -n "$verifier_only_dir" ]] || die "--verifier-only requires a run-dir path"
       shift 2
       ;;
     *)
@@ -41,12 +47,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$verifier_only_dir" && -n "$guidance_file" ]]; then
+  die "--verifier-only and --with-guidance are mutually exclusive"
+fi
+
 cd "$repo_root"
 git config --global --add safe.directory "$repo_root"
 
 [[ -f "$task_file" ]] || die "task file not found inside runner: $task_file"
 if [[ -n "$guidance_file" ]]; then
   [[ -f "$guidance_file" ]] || die "guidance file not found inside runner: $guidance_file"
+fi
+if [[ -n "$verifier_only_dir" ]]; then
+  [[ -d "$verifier_only_dir" ]] || die "verifier-only run dir not found inside runner: $verifier_only_dir"
+  [[ -f "$verifier_only_dir/diff.patch" ]] || die "verifier-only run dir is missing diff.patch: $verifier_only_dir"
 fi
 
 install -d -m 700 "${CODEX_HOME:-/tmp/codex-home}"
@@ -70,26 +84,32 @@ case "$role" in
 esac
 
 test_classes=""
-if [[ "$role" == "test-writer" || "$role" == "impl-backend" ]]; then
+if [[ -z "$verifier_only_dir" && ( "$role" == "test-writer" || "$role" == "impl-backend" ) ]]; then
   test_classes=$(read_test_classes "$task_file")
   [[ -n "$test_classes" ]] || die "task brief $task_file has no '**Test-classes:**' line"
 fi
 
 task_basename=$(basename "$task_file" .md)
 timestamp=${CODEX_RUN_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
-run_dir="$repo_root/.local/runs/$task_basename/$timestamp"
-mkdir -p "$run_dir"
-echo ".local/runs/$task_basename/$timestamp" > "$repo_root/.local/codex-isolated-last-run"
+if [[ -n "$verifier_only_dir" ]]; then
+  run_dir=$(realpath "$verifier_only_dir")
+else
+  run_dir="$repo_root/.local/runs/$task_basename/$timestamp"
+  mkdir -p "$run_dir"
+fi
+run_rel=${run_dir#"$repo_root"/}
+echo "$run_rel" > "$repo_root/.local/codex-isolated-last-run"
 
 diff_file="$run_dir/diff.patch"
 critique_file="$run_dir/critique.md"
 generator_out="$run_dir/generator.md"
 mvn_log=""
+evidence_log=""
 
 pre_run_ref=$(git rev-parse HEAD)
 pre_run_dirty=$(git status --porcelain)
 if [[ -n "$pre_run_dirty" ]]; then
-  echo "Warning: isolated runner workspace was dirty before generator run." >&2
+  echo "Warning: isolated runner workspace was dirty before pipeline run." >&2
 fi
 
 echo "=============================================="
@@ -98,7 +118,11 @@ echo " brief:        $task_file"
 echo " role:         $role"
 echo " run dir:      $run_dir"
 echo " docker host:  ${DOCKER_HOST:-unset}"
-echo " generator:    sandbox=${CODEX_ISOLATED_GENERATOR_SANDBOX:-danger-full-access}"
+if [[ -n "$verifier_only_dir" ]]; then
+  echo " mode:         verifier-only (reusing existing diff.patch / test log)"
+else
+  echo " generator:    sandbox=${CODEX_ISOLATED_GENERATOR_SANDBOX:-danger-full-access}"
+fi
 echo " verifier:     sandbox=${CODEX_ISOLATED_VERIFIER_SANDBOX:-danger-full-access}"
 if [[ -n "$guidance_file" ]]; then
   echo " guidance:     $guidance_file"
@@ -106,8 +130,15 @@ fi
 echo "=============================================="
 echo
 
-generator_prompt="$run_dir/generator.prompt.md"
-{
+if [[ -n "$verifier_only_dir" ]]; then
+  for candidate in "$run_dir"/mvn.log "$run_dir"/mvn-pass-*.log "$run_dir"/frontend-pass-*.log; do
+    if [[ -f "$candidate" ]]; then
+      evidence_log="$candidate"
+    fi
+  done
+else
+  generator_prompt="$run_dir/generator.prompt.md"
+  {
   echo "Run the $role generator for the task brief at $task_file."
   echo
   echo "You are running inside an isolated disposable Codex runner. The host script intentionally started this runner so that you may use the normal self-correction loop from the role definition."
@@ -129,63 +160,65 @@ generator_prompt="$run_dir/generator.prompt.md"
   echo "--- TASK BRIEF: $task_file ---"
   cat "$task_file"
   echo "--- END TASK BRIEF ---"
-} > "$generator_prompt"
+  } > "$generator_prompt"
 
-echo "[1/4] running Codex generator ($role) with full access inside isolated runner..."
-generator_args=(
+  echo "[1/4] running Codex generator ($role) with full access inside isolated runner..."
+  generator_args=(
   exec
   -C "$repo_root"
   --sandbox "${CODEX_ISOLATED_GENERATOR_SANDBOX:-danger-full-access}"
   -c 'approval_policy="never"'
   -c 'shell_environment_policy.exclude=["CODEX_HOME","CODEX_AUTH_FILE","OPENAI_API_KEY","CODEX_API_KEY"]'
   -o "$generator_out"
-)
-if [[ -n "${CODEX_GENERATOR_MODEL:-}" ]]; then
-  generator_args=(-m "$CODEX_GENERATOR_MODEL" "${generator_args[@]}")
-fi
-generator_transcript="$run_dir/generator.codex.log"
-if [[ "${CODEX_PIPELINE_VERBOSE:-0}" == "1" ]]; then
-  if ! codex "${generator_args[@]}" - < "$generator_prompt" 2>&1 | tee "$generator_transcript"; then
-    echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+  )
+  if [[ -n "${CODEX_GENERATOR_MODEL:-}" ]]; then
+    generator_args=(-m "$CODEX_GENERATOR_MODEL" "${generator_args[@]}")
+  fi
+  generator_transcript="$run_dir/generator.codex.log"
+  if [[ "${CODEX_PIPELINE_VERBOSE:-0}" == "1" ]]; then
+    if ! codex "${generator_args[@]}" - < "$generator_prompt" 2>&1 | tee "$generator_transcript"; then
+      echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+      exit 1
+    fi
+  else
+    if ! codex "${generator_args[@]}" - < "$generator_prompt" > "$generator_transcript" 2>&1; then
+      echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+      tail -n 80 "$generator_transcript" >&2 || true
+      exit 1
+    fi
+    echo "      Codex transcript: $generator_transcript"
+  fi
+  if [[ -s "$generator_out" ]]; then
+    echo
+    echo "--- generator final output ---"
+    cat "$generator_out"
+    echo "--- end generator final output ---"
+    echo
+  fi
+
+  rm -f "$repo_root/.claude/settings.local.json"
+
+  echo "[2/4] checking role file scope..."
+  "$script_dir/check-scope.sh" "$role" "$pre_run_ref"
+
+  echo "[3/4] capturing generator diff..."
+  capture_pipeline_diff "$repo_root" "$pre_run_ref" "$diff_file"
+  if ! has_pipeline_diff "$repo_root" "$pre_run_ref"; then
+    echo "Error: generator produced no diff. Inspect $run_dir for context." >&2
     exit 1
   fi
-else
-  if ! codex "${generator_args[@]}" - < "$generator_prompt" > "$generator_transcript" 2>&1; then
-    echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
-    tail -n 80 "$generator_transcript" >&2 || true
-    exit 1
+
+  if [[ -n "$test_classes" ]]; then
+    mvn_log="$run_dir/mvn.log"
+    evidence_log="$mvn_log"
+    echo "      capturing Maven evidence to $mvn_log (classes: $test_classes)..."
+    set +e
+    "$repo_root/scripts/mvn-local.sh" test -Dtest="$test_classes" > "$mvn_log" 2>&1
+    mvn_exit=$?
+    set -e
+    echo "--- mvn exit code: $mvn_exit ---" >> "$mvn_log"
+    echo "      Maven exit code: $mvn_exit (recorded as verifier evidence)"
   fi
-  echo "      Codex transcript: $generator_transcript"
-fi
-if [[ -s "$generator_out" ]]; then
-  echo
-  echo "--- generator final output ---"
-  cat "$generator_out"
-  echo "--- end generator final output ---"
-  echo
-fi
-
-rm -f "$repo_root/.claude/settings.local.json"
-
-echo "[2/4] checking role file scope..."
-"$script_dir/check-scope.sh" "$role" "$pre_run_ref"
-
-echo "[3/4] capturing generator diff..."
-capture_pipeline_diff "$repo_root" "$pre_run_ref" "$diff_file"
-if ! has_pipeline_diff "$repo_root" "$pre_run_ref"; then
-  echo "Error: generator produced no diff. Inspect $run_dir for context." >&2
-  exit 1
-fi
-
-if [[ -n "$test_classes" ]]; then
-  mvn_log="$run_dir/mvn.log"
-  echo "      capturing Maven evidence to $mvn_log (classes: $test_classes)..."
-  set +e
-  "$repo_root/scripts/mvn-local.sh" test -Dtest="$test_classes" > "$mvn_log" 2>&1
-  mvn_exit=$?
-  set -e
-  echo "--- mvn exit code: $mvn_exit ---" >> "$mvn_log"
-  echo "      Maven exit code: $mvn_exit (recorded as verifier evidence)"
 fi
 
 echo "[4/4] running Codex verifier..."
@@ -197,8 +230,8 @@ verifier_prompt="$run_dir/verifier.prompt.md"
   echo "Run the verifier role against this generator output."
   echo "The task brief is at $task_file."
   echo "The generator diff is at $diff_file."
-  if [[ -n "$mvn_log" && -f "$mvn_log" ]]; then
-    echo "The captured Maven stdout+stderr is at $mvn_log. Read it for empirical compile-and-test evidence."
+  if [[ -n "$evidence_log" && -f "$evidence_log" ]]; then
+    echo "The captured test stdout+stderr is at $evidence_log. Read it for empirical compile-and-test evidence."
   fi
   echo
   echo "You are running in an isolated verifier context. You may inspect files with read-only shell commands such as sed, nl, and rg, but do not modify files and do not run tests."
@@ -265,7 +298,7 @@ case "$recommendation" in
   "RERUN WITH GUIDANCE")
     echo " result: RERUN WITH GUIDANCE - feed the critique back to the generator:"
     echo
-    echo "   ./scripts/codex/run-pipeline-isolated.sh $task_file --with-guidance .local/runs/$task_basename/$timestamp/critique.md"
+    echo "   ./scripts/codex/run-pipeline-isolated.sh $task_file --with-guidance $run_rel/critique.md"
     echo
     exit 2
     ;;

@@ -182,6 +182,13 @@ scripts/codex/run-pipeline.sh .local/tasks/impl/E-00-C16-log-correlation.md \
   --with-guidance .local/runs/E-00-C16-log-correlation/<timestamp>/critique.md
 ```
 
+To re-run only the verifier against an existing run's `diff.patch` and test log:
+
+```bash
+scripts/codex/run-pipeline.sh .local/tasks/impl/E-00-C16-log-correlation.md \
+  --verifier-only .local/runs/E-00-C16-log-correlation/<timestamp>
+```
+
 Run artefacts are written to `.local/runs/<task>/<timestamp>/`, including `diff.patch`, `critique.md`, `generator-pass-*.md`, and `mvn-pass-*.log`. The pipeline also checks role file scope after each generator pass.
 
 By default, Codex pipeline runs keep the raw Codex transcript in `.local/runs/<task>/<timestamp>/*.codex.log` and print only the generator's final summary plus the verifier's full critique. Set `CODEX_PIPELINE_VERBOSE=1` to stream the full Codex transcript to the terminal.
@@ -199,6 +206,13 @@ Guided rerun:
 ```bash
 scripts/codex/run-pipeline-isolated.sh .local/tasks/impl/E-00-C16-log-correlation.md \
   --with-guidance .local/runs/E-00-C16-log-correlation/<timestamp>/critique.md
+```
+
+Verifier-only rerun:
+
+```bash
+scripts/codex/run-pipeline-isolated.sh .local/tasks/impl/E-00-C16-log-correlation.md \
+  --verifier-only .local/runs/E-00-C16-log-correlation/<timestamp>
 ```
 
 Useful options:

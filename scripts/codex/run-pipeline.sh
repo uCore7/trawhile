@@ -18,6 +18,7 @@ Usage:
 
 Options:
   --with-guidance <critique-file>  Feed a previous verifier critique to the generator.
+  --verifier-only <run-dir>        Re-run only the verifier against an existing run dir.
   --max-generator-passes <n>       Run up to n generator/test passes before verifier (default: 1).
 
 Environment:
@@ -39,21 +40,16 @@ Exit codes:
 EOF
 }
 
-if [[ $# -lt 1 || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+if [[ $# -lt 1 ]]; then
   usage
-  if [[ $# -lt 1 ]]; then
-    exit 1
-  fi
-  exit 0
+  exit 1
 fi
 
-task_file=$1
-shift
-
-[[ -f "$task_file" ]] || die "task file not found: $task_file"
-
+task_file=""
 guidance_file=""
+verifier_only_dir=""
 max_generator_passes=1
+max_generator_passes_set=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -62,20 +58,48 @@ while [[ $# -gt 0 ]]; do
       [[ -n "$guidance_file" && -f "$guidance_file" ]] || die "--with-guidance requires an existing critique file path"
       shift 2
       ;;
+    --verifier-only)
+      verifier_only_dir="${2:-}"
+      [[ -n "$verifier_only_dir" ]] || die "--verifier-only requires an existing run-dir path"
+      if [[ -f "$verifier_only_dir" ]]; then
+        die "--verifier-only requires a run-dir, not a task file. Usage: $0 <task-file> --verifier-only <run-dir>"
+      fi
+      [[ -d "$verifier_only_dir" ]] || die "--verifier-only requires an existing run-dir path"
+      [[ -f "$verifier_only_dir/diff.patch" ]] || die "--verifier-only run-dir is missing diff.patch: $verifier_only_dir"
+      shift 2
+      ;;
     --max-generator-passes)
       max_generator_passes="${2:-}"
       [[ "$max_generator_passes" =~ ^[1-9][0-9]*$ ]] || die "--max-generator-passes requires a positive integer"
+      max_generator_passes_set=true
       shift 2
       ;;
     -h|--help)
       usage
       exit 0
       ;;
-    *)
+    --*)
       die "unknown argument: $1"
+      ;;
+    *)
+      if [[ -n "$task_file" ]]; then
+        die "unexpected extra positional argument: $1"
+      fi
+      task_file="$1"
+      shift
       ;;
   esac
 done
+
+[[ -n "$task_file" ]] || die "missing task file"
+[[ -f "$task_file" ]] || die "task file not found: $task_file"
+
+if [[ -n "$verifier_only_dir" && -n "$guidance_file" ]]; then
+  die "--verifier-only and --with-guidance are mutually exclusive"
+fi
+if [[ -n "$verifier_only_dir" && "$max_generator_passes_set" == true ]]; then
+  die "--verifier-only and --max-generator-passes are mutually exclusive"
+fi
 
 repo_root=$(codex_repo_root)
 task_path=$(realpath "$task_file")
@@ -88,27 +112,34 @@ case "$role" in
   *) die "unsupported role '$role' in $task_file (expected: test-writer | impl-backend | impl-frontend)" ;;
 esac
 
-if [[ "$role" == "test-writer" || "$role" == "impl-backend" ]]; then
+if [[ -z "$verifier_only_dir" && ( "$role" == "test-writer" || "$role" == "impl-backend" ) ]]; then
   test_classes=$(read_test_classes "$task_path")
   [[ -n "$test_classes" ]] || die "task brief $task_file has no '**Test-classes:**' line"
 fi
 
 task_basename=$(basename "$task_file" .md)
-timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-run_dir="$repo_root/.local/runs/$task_basename/$timestamp"
-mkdir -p "$run_dir"
+if [[ -n "$verifier_only_dir" ]]; then
+  run_dir=$(realpath "$verifier_only_dir")
+else
+  timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+  run_dir="$repo_root/.local/runs/$task_basename/$timestamp"
+  mkdir -p "$run_dir"
+fi
 
-blocked_bin_dir="$run_dir/blocked-bin"
-mkdir -p "$blocked_bin_dir"
-for blocked_command in mvn mvnw npm npx ng docker java javac curl wget; do
-  cat > "$blocked_bin_dir/$blocked_command" <<'EOF'
+generator_path=""
+if [[ -z "$verifier_only_dir" ]]; then
+  blocked_bin_dir="$run_dir/blocked-bin"
+  mkdir -p "$blocked_bin_dir"
+  for blocked_command in mvn mvnw npm npx ng docker java javac curl wget; do
+    cat > "$blocked_bin_dir/$blocked_command" <<'EOF'
 #!/usr/bin/env bash
 echo "Blocked in safe-local Codex generator: build/test/network commands are run by the outer pipeline, not by Codex." >&2
 exit 126
 EOF
-  chmod +x "$blocked_bin_dir/$blocked_command"
-done
-generator_path="$blocked_bin_dir:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+    chmod +x "$blocked_bin_dir/$blocked_command"
+  done
+  generator_path="$blocked_bin_dir:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+fi
 
 host_codex_auth=${CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}
 [[ -f "$host_codex_auth" ]] || die "Codex auth file not found: $host_codex_auth"
@@ -140,8 +171,12 @@ echo " trawhile Codex safe-local pipeline"
 echo " brief:        $task_rel"
 echo " role:         $role"
 echo " run dir:      $run_dir"
-echo " passes:       $max_generator_passes"
-echo " generator:    sandbox=$generator_sandbox"
+if [[ -n "$verifier_only_dir" ]]; then
+  echo " mode:         verifier-only (reusing existing diff.patch / test log)"
+else
+  echo " passes:       $max_generator_passes"
+  echo " generator:    sandbox=$generator_sandbox"
+fi
 echo " verifier:     sandbox=$verifier_sandbox"
 if [[ -n "$guidance_file" ]]; then
   echo " guidance:     $guidance_file"
@@ -149,24 +184,31 @@ fi
 echo "=============================================="
 echo
 
-pre_run_ref=$(cd "$repo_root" && git rev-parse HEAD)
-pre_run_dirty=$(cd "$repo_root" && git status --porcelain)
-pre_run_changed_files="$run_dir/pre-run-changed-files.txt"
-{
-  cd "$repo_root"
-  git diff --name-only "$pre_run_ref" --
-  git ls-files --others --exclude-standard
-} | sort -u > "$pre_run_changed_files"
-
-if [[ -n "$pre_run_dirty" ]]; then
-  echo "Warning: working tree is dirty before run; diffs include uncommitted changes." >&2
-  echo "Warning: scope checks ignore files already dirty before Codex started; use a clean worktree for strongest enforcement." >&2
-fi
-
 last_test_log=""
 last_test_exit=0
 
-for pass in $(seq 1 "$max_generator_passes"); do
+if [[ -n "$verifier_only_dir" ]]; then
+  for candidate in "$run_dir"/mvn.log "$run_dir"/mvn-pass-*.log "$run_dir"/frontend-pass-*.log; do
+    if [[ -f "$candidate" ]]; then
+      last_test_log="$candidate"
+    fi
+  done
+else
+  pre_run_ref=$(cd "$repo_root" && git rev-parse HEAD)
+  pre_run_dirty=$(cd "$repo_root" && git status --porcelain)
+  pre_run_changed_files="$run_dir/pre-run-changed-files.txt"
+  {
+    cd "$repo_root"
+    git diff --name-only "$pre_run_ref" --
+    git ls-files --others --exclude-standard
+  } | sort -u > "$pre_run_changed_files"
+
+  if [[ -n "$pre_run_dirty" ]]; then
+    echo "Warning: working tree is dirty before run; diffs include uncommitted changes." >&2
+    echo "Warning: scope checks ignore files already dirty before Codex started; use a clean worktree for strongest enforcement." >&2
+  fi
+
+  for pass in $(seq 1 "$max_generator_passes"); do
   generator_out="$run_dir/generator-pass-$pass.md"
   prompt_file="$run_dir/generator-pass-$pass.prompt.md"
 
@@ -281,7 +323,8 @@ for pass in $(seq 1 "$max_generator_passes"); do
   if [[ "$pass" -eq "$max_generator_passes" ]]; then
     echo "Generator pass budget exhausted; verifier will review the current diff and latest test log."
   fi
-done
+  done
+fi
 
 echo "[verifier] running Codex verifier..."
 verifier_prompt="$run_dir/verifier.prompt.md"
@@ -344,9 +387,14 @@ recommendation=$(grep -i '^Recommended action:' "$critique_file" | tail -n1 | se
 
 case "$recommendation" in
   ACCEPT)
-    echo " result: ACCEPT — generator's work passes verifier review"
-    echo " next:   review the applied files, then commit when ready"
-    echo "         git diff"
+    if [[ -n "$verifier_only_dir" ]]; then
+      echo " result: ACCEPT — verifier review passes"
+      echo " next:   inspect $critique_file if needed"
+    else
+      echo " result: ACCEPT — generator's work passes verifier review"
+      echo " next:   review the applied files, then commit when ready"
+      echo "         git diff"
+    fi
     exit 0
     ;;
   "RERUN WITH GUIDANCE")
