@@ -114,6 +114,7 @@ generator_prompt="$run_dir/generator.prompt.md"
   echo "You may run build/test/lint commands allowed by the role, including ./scripts/mvn-local.sh for backend tasks."
   echo "Docker/Testcontainers access points at a disposable Docker daemon via DOCKER_HOST. Do not attempt to access the host Docker socket."
   echo "Do not run git write operations such as commit, push, pull, fetch, merge, rebase, reset, stash, or branch deletion."
+  echo "In your final output, be concise: summarize changed files, verification status, and any problems, blockers, risks, or assumptions you noticed. Do not paste full diffs, full file contents, or the task brief."
   echo
   if [[ -n "$guidance_file" ]]; then
     echo "--- PRIOR VERIFIER GUIDANCE ---"
@@ -142,7 +143,27 @@ generator_args=(
 if [[ -n "${CODEX_GENERATOR_MODEL:-}" ]]; then
   generator_args=(-m "$CODEX_GENERATOR_MODEL" "${generator_args[@]}")
 fi
-codex "${generator_args[@]}" - < "$generator_prompt"
+generator_transcript="$run_dir/generator.codex.log"
+if [[ "${CODEX_PIPELINE_VERBOSE:-0}" == "1" ]]; then
+  if ! codex "${generator_args[@]}" - < "$generator_prompt" 2>&1 | tee "$generator_transcript"; then
+    echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+    exit 1
+  fi
+else
+  if ! codex "${generator_args[@]}" - < "$generator_prompt" > "$generator_transcript" 2>&1; then
+    echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+    tail -n 80 "$generator_transcript" >&2 || true
+    exit 1
+  fi
+  echo "      Codex transcript: $generator_transcript"
+fi
+if [[ -s "$generator_out" ]]; then
+  echo
+  echo "--- generator final output ---"
+  cat "$generator_out"
+  echo "--- end generator final output ---"
+  echo
+fi
 
 rm -f "$repo_root/.claude/settings.local.json"
 
@@ -186,7 +207,7 @@ verifier_prompt="$run_dir/verifier.prompt.md"
   echo "Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>"
   echo
   echo "--- VERIFIER ROLE DEFINITION ---"
-  cat "$repo_root/.claude/agents/verifier.md"
+  cat "$(role_definition_file "$repo_root" verifier)"
   echo "--- END VERIFIER ROLE DEFINITION ---"
 } > "$verifier_prompt"
 
@@ -201,7 +222,25 @@ verifier_args=(
 if [[ -n "${CODEX_VERIFIER_MODEL:-}" ]]; then
   verifier_args=(-m "$CODEX_VERIFIER_MODEL" "${verifier_args[@]}")
 fi
-codex "${verifier_args[@]}" - < "$verifier_prompt"
+verifier_transcript="$run_dir/verifier.codex.log"
+if [[ "${CODEX_PIPELINE_VERBOSE:-0}" == "1" ]]; then
+  if ! codex "${verifier_args[@]}" - < "$verifier_prompt" 2>&1 | tee "$verifier_transcript"; then
+    echo "Error: Codex verifier failed. Transcript: $verifier_transcript" >&2
+    exit 1
+  fi
+else
+  if ! codex "${verifier_args[@]}" - < "$verifier_prompt" > "$verifier_transcript" 2>&1; then
+    echo "Error: Codex verifier failed. Transcript: $verifier_transcript" >&2
+    tail -n 80 "$verifier_transcript" >&2 || true
+    exit 1
+  fi
+  echo "      Codex transcript: $verifier_transcript"
+fi
+
+echo
+echo "--- verifier critique ---"
+cat "$critique_file"
+echo "--- end verifier critique ---"
 
 diff_after_verifier="$run_dir/diff-after-verifier.patch"
 capture_pipeline_diff "$repo_root" "$pre_run_ref" "$diff_after_verifier"

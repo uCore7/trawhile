@@ -31,6 +31,7 @@ Environment:
   CODEX_CONFIG_FILE               Host config.toml to copy into the runner (default: $CODEX_HOME/config.toml or ~/.codex/config.toml).
   CODEX_ISOLATED_GENERATOR_SANDBOX Generator sandbox inside the container (default: danger-full-access).
   CODEX_ISOLATED_VERIFIER_SANDBOX  Verifier sandbox inside the container (default: danger-full-access).
+  CODEX_PIPELINE_VERBOSE           Set to 1 to stream full Codex transcripts (default: quiet logs).
 
 Exit codes match scripts/codex/runner/entrypoint.sh, which follows the verifier recommendation mapping.
 EOF
@@ -228,6 +229,7 @@ docker_create_args=(
   -e CODEX_VERIFIER_MODEL="${CODEX_VERIFIER_MODEL:-}"
   -e CODEX_ISOLATED_GENERATOR_SANDBOX="${CODEX_ISOLATED_GENERATOR_SANDBOX:-danger-full-access}"
   -e CODEX_ISOLATED_VERIFIER_SANDBOX="${CODEX_ISOLATED_VERIFIER_SANDBOX:-danger-full-access}"
+  -e CODEX_PIPELINE_VERBOSE="${CODEX_PIPELINE_VERBOSE:-0}"
 )
 if [[ -f "$host_codex_config" ]]; then
   docker_create_args+=(-e CODEX_CONFIG_FILE=/codex-auth/config.toml)

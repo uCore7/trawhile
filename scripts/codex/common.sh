@@ -34,7 +34,7 @@ read_test_classes() {
 role_definition_file() {
   local repo_root=$1
   local role=$2
-  local role_file="$repo_root/.claude/agents/$role.md"
+  local role_file="$repo_root/docs/agent-roles/$role.md"
   [[ -f "$role_file" ]] || die "role definition not found: $role_file"
   echo "$role_file"
 }

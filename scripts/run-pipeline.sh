@@ -2,7 +2,7 @@
 # Phase 7 pipeline runner: generator → verifier → human review.
 #
 # Reads the **Role:** line from the task brief to dispatch to the right
-# subagent and to apply role-specific tool allowlists. Captures the diff
+# canonical role definition and to apply role-specific tool allowlists. Captures the diff
 # produced by the generator, hands it to the verifier, prints the verifier's
 # structured critique, and exits with a recommendation-mapped exit code.
 #
@@ -21,7 +21,7 @@
 #   scripts/run-pipeline.sh <task-file> --verifier-only <run-dir>
 #       Re-run JUST the verifier against an existing <run-dir>'s diff.patch +
 #       mvn.log artefacts. Use this when the verifier ran out of tokens or you
-#       want to re-verify against a tightened verifier.md. Overwrites
+#       want to re-verify against a tightened docs/agent-roles/verifier.md. Overwrites
 #       <run-dir>/critique.md with the new verdict.
 #
 # Exit codes:
@@ -138,6 +138,17 @@ esac
 VERIFIER_ALLOWED_TOOLS='Read(**),Grep(**),Glob(**)'
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROLE_FILE="$REPO_ROOT/docs/agent-roles/$ROLE.md"
+if [[ ! -f "$ROLE_FILE" ]]; then
+  echo "Error: canonical role definition not found: $ROLE_FILE" >&2
+  exit 1
+fi
+VERIFIER_ROLE_FILE="$REPO_ROOT/docs/agent-roles/verifier.md"
+if [[ ! -f "$VERIFIER_ROLE_FILE" ]]; then
+  echo "Error: canonical verifier role definition not found: $VERIFIER_ROLE_FILE" >&2
+  exit 1
+fi
+
 TASK_BASENAME="$(basename "$TASK_FILE" .md)"
 if [[ -n "$VERIFIER_ONLY_DIR" ]]; then
   RUN_DIR="$(cd "$VERIFIER_ONLY_DIR" && pwd)"
@@ -178,22 +189,37 @@ if [[ -z "$VERIFIER_ONLY_DIR" ]]; then
   # Build the generator prompt; optionally prepend the prior critique as guidance.
   if [[ -n "$GUIDANCE_FILE" ]]; then
     GENERATOR_PROMPT=$(cat <<EOF
-Run the $ROLE subagent against the task brief at $TASK_FILE.
+Run the $ROLE role against the task brief at $TASK_FILE.
 
-A prior run of this task was reviewed by the verifier and received the following critique. Address every VIOLATION in the critique before producing your output. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md.
+A prior run of this task was reviewed by the verifier and received the following critique. Address every VIOLATION in the critique before producing your output. Read the brief and execute exactly as instructed by the canonical role definition below.
 
 --- VERIFIER CRITIQUE ---
 
 $(cat "$GUIDANCE_FILE")
 
 --- END OF CRITIQUE ---
+
+--- ROLE DEFINITION: $ROLE_FILE ---
+
+$(cat "$ROLE_FILE")
+
+--- END ROLE DEFINITION ---
 EOF
 )
   else
-    GENERATOR_PROMPT="Run the $ROLE subagent against the task brief at $TASK_FILE. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md."
+    GENERATOR_PROMPT=$(cat <<EOF
+Run the $ROLE role against the task brief at $TASK_FILE. Read the brief and execute exactly as instructed by the canonical role definition below.
+
+--- ROLE DEFINITION: $ROLE_FILE ---
+
+$(cat "$ROLE_FILE")
+
+--- END ROLE DEFINITION ---
+EOF
+)
   fi
 
-  echo "[1/3] running generator subagent ($ROLE)..."
+  echo "[1/3] running generator role ($ROLE)..."
   claude -p "$GENERATOR_PROMPT" \
     --allowedTools "$ALLOWED_TOOLS" \
     --permission-mode acceptEdits
@@ -232,12 +258,18 @@ else
   fi
 fi
 
-echo "[3/3] running verifier subagent..."
-VERIFIER_PROMPT="Run the verifier subagent. The task brief is at $TASK_FILE. The diff produced by the generator is at $DIFF_FILE."
+echo "[3/3] running verifier role..."
+VERIFIER_PROMPT="Run the verifier role. The task brief is at $TASK_FILE. The diff produced by the generator is at $DIFF_FILE."
 if [[ -n "$MVN_LOG" && -f "$MVN_LOG" ]]; then
   VERIFIER_PROMPT="$VERIFIER_PROMPT The captured mvn stdout+stderr from running the touched test classes is at $MVN_LOG; Read it for empirical compile-and-test evidence (compile errors, test failures, exception stacks). The mvn exit code is included as the last line of $MVN_LOG."
 fi
-VERIFIER_PROMPT="$VERIFIER_PROMPT Output the structured critique in the exact format defined in .claude/agents/verifier.md. End your output with a single line of the form 'Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>' so this script can capture the recommendation."
+VERIFIER_PROMPT="$VERIFIER_PROMPT Output the structured critique in the exact format defined in the canonical verifier role below. End your output with a single line of the form 'Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>' so this script can capture the recommendation.
+
+--- VERIFIER ROLE DEFINITION: $VERIFIER_ROLE_FILE ---
+
+$(cat "$VERIFIER_ROLE_FILE")
+
+--- END VERIFIER ROLE DEFINITION ---"
 
 claude -p "$VERIFIER_PROMPT" \
   --allowedTools "$VERIFIER_ALLOWED_TOOLS" \

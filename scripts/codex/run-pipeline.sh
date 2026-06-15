@@ -27,6 +27,7 @@ Environment:
   CODEX_CONFIG_FILE               Host config.toml to copy into the temporary CODEX_HOME.
   CODEX_GENERATOR_SANDBOX         Generator sandbox (default: workspace-write).
   CODEX_VERIFIER_SANDBOX          Verifier sandbox (default: read-only).
+  CODEX_PIPELINE_VERBOSE          Set to 1 to stream full Codex transcripts (default: quiet logs).
 
 Exit codes:
   0 — generator completed AND verifier returned ACCEPT
@@ -180,6 +181,7 @@ for pass in $(seq 1 "$max_generator_passes"); do
     echo "Apply the substantive constraints from the role definition below, except that its self-correction Bash/test loop is owned by this outer pipeline."
     echo "If the role definition says to run tests, treat that as an instruction for the outer pipeline, not for your Codex session."
     echo "Keep edits minimal and within the role scope. If the brief or specifications conflict, stop and report the conflict instead of guessing."
+    echo "In your final output, be concise: summarize changed files, verification status, and any problems, blockers, risks, or assumptions you noticed. Do not paste full diffs, full file contents, or the task brief."
     echo
     if [[ -n "$guidance_file" ]]; then
       echo "--- PRIOR VERIFIER GUIDANCE ---"
@@ -216,7 +218,27 @@ for pass in $(seq 1 "$max_generator_passes"); do
   if [[ -n "${CODEX_GENERATOR_MODEL:-}" ]]; then
     codex_args=(-m "$CODEX_GENERATOR_MODEL" "${codex_args[@]}")
   fi
-  CODEX_HOME="$pipeline_codex_home" codex "${codex_args[@]}" - < "$prompt_file"
+  generator_transcript="$run_dir/generator-pass-$pass.codex.log"
+  if [[ "${CODEX_PIPELINE_VERBOSE:-0}" == "1" ]]; then
+    if ! CODEX_HOME="$pipeline_codex_home" codex "${codex_args[@]}" - < "$prompt_file" 2>&1 | tee "$generator_transcript"; then
+      echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+      exit 1
+    fi
+  else
+    if ! CODEX_HOME="$pipeline_codex_home" codex "${codex_args[@]}" - < "$prompt_file" > "$generator_transcript" 2>&1; then
+      echo "Error: Codex generator failed. Transcript: $generator_transcript" >&2
+      tail -n 80 "$generator_transcript" >&2 || true
+      exit 1
+    fi
+    echo "      Codex transcript: $generator_transcript"
+  fi
+  if [[ -s "$generator_out" ]]; then
+    echo
+    echo "--- generator final output ---"
+    cat "$generator_out"
+    echo "--- end generator final output ---"
+    echo
+  fi
 
   echo "[pass $pass/$max_generator_passes] checking role file scope..."
   "$script_dir/check-scope.sh" "$role" "$pre_run_ref" --ignore-file-list "$pre_run_changed_files"
@@ -277,7 +299,7 @@ verifier_prompt="$run_dir/verifier.prompt.md"
   echo "Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>"
   echo
   echo "--- VERIFIER ROLE DEFINITION ---"
-  cat "$repo_root/.claude/agents/verifier.md"
+  cat "$(role_definition_file "$repo_root" verifier)"
   echo "--- END VERIFIER ROLE DEFINITION ---"
 } > "$verifier_prompt"
 
@@ -292,7 +314,25 @@ verifier_args=(
 if [[ -n "${CODEX_VERIFIER_MODEL:-}" ]]; then
   verifier_args=(-m "$CODEX_VERIFIER_MODEL" "${verifier_args[@]}")
 fi
-CODEX_HOME="$pipeline_codex_home" codex "${verifier_args[@]}" - < "$verifier_prompt"
+verifier_transcript="$run_dir/verifier.codex.log"
+if [[ "${CODEX_PIPELINE_VERBOSE:-0}" == "1" ]]; then
+  if ! CODEX_HOME="$pipeline_codex_home" codex "${verifier_args[@]}" - < "$verifier_prompt" 2>&1 | tee "$verifier_transcript"; then
+    echo "Error: Codex verifier failed. Transcript: $verifier_transcript" >&2
+    exit 1
+  fi
+else
+  if ! CODEX_HOME="$pipeline_codex_home" codex "${verifier_args[@]}" - < "$verifier_prompt" > "$verifier_transcript" 2>&1; then
+    echo "Error: Codex verifier failed. Transcript: $verifier_transcript" >&2
+    tail -n 80 "$verifier_transcript" >&2 || true
+    exit 1
+  fi
+  echo "      Codex transcript: $verifier_transcript"
+fi
+
+echo
+echo "--- verifier critique ---"
+cat "$critique_file"
+echo "--- end verifier critique ---"
 
 echo
 echo "=============================================="

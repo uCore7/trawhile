@@ -156,6 +156,8 @@ The same traceability check is also enforced in CI after the backend verify step
 
 ### Codex safe-local agent pipeline
 
+Agent role definitions are tool-agnostic and live under `docs/agent-roles/`. Claude-specific adapters under `.claude/agents/` keep explicit Claude model/tool metadata and point back to those canonical role documents.
+
 The safe-local Codex pipeline mirrors the generator -> verifier workflow from `scripts/run-pipeline.sh`, but keeps Codex itself out of full-access mode.
 
 ```bash
@@ -182,6 +184,8 @@ scripts/codex/run-pipeline.sh .local/tasks/impl/E-00-C16-log-correlation.md \
 
 Run artefacts are written to `.local/runs/<task>/<timestamp>/`, including `diff.patch`, `critique.md`, `generator-pass-*.md`, and `mvn-pass-*.log`. The pipeline also checks role file scope after each generator pass.
 
+By default, Codex pipeline runs keep the raw Codex transcript in `.local/runs/<task>/<timestamp>/*.codex.log` and print only the generator's final summary plus the verifier's full critique. Set `CODEX_PIPELINE_VERBOSE=1` to stream the full Codex transcript to the terminal.
+
 ### Codex isolated agent pipeline
 
 The isolated Codex pipeline restores the shorter in-agent feedback loop while keeping full access inside a disposable Docker boundary. It creates a temporary repository copy, starts a private Docker-in-Docker daemon for Testcontainers, copies the workspace into a runner container, runs Codex there, copies the run artefacts back to `.local/runs/`, and applies the generated diff to the host checkout.
@@ -205,6 +209,8 @@ scripts/codex/run-pipeline-isolated.sh <task-file> --keep-workspace --keep-conta
 ```
 
 The runner copies `${CODEX_HOME:-~/.codex}/auth.json` and, when present, `config.toml` into a container-local `CODEX_HOME`. If your files are elsewhere, set `CODEX_AUTH_FILE=/path/to/auth.json` or `CODEX_CONFIG_FILE=/path/to/config.toml`.
+
+By default, the isolated runner also keeps raw Codex transcripts in `.local/runs/<task>/<timestamp>/*.codex.log` and prints only the generator's final summary plus the verifier's full critique. Set `CODEX_PIPELINE_VERBOSE=1` to stream the full transcript from inside the runner container.
 
 By default, both isolated Codex phases run with `danger-full-access` inside the runner container. The generator needs that access for Maven, Testcontainers, and the disposable Docker daemon. The verifier only reads source, diff, and Maven-log artefacts, and the runner checks after it exits that the verifier did not mutate the workspace. You may set `CODEX_ISOLATED_VERIFIER_SANDBOX=read-only` on hosts where Codex's inner Linux sandbox works inside Docker; on hosts without unprivileged user namespaces, that mode can fail before any read command executes.
 
