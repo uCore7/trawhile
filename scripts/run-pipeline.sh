@@ -18,6 +18,12 @@
 #       Guided rerun: generator receives <critique-file> as additional context
 #       (typically the previous run's critique). Then verifier runs again.
 #
+#   scripts/run-pipeline.sh <task-file> --verifier-only <run-dir>
+#       Re-run JUST the verifier against an existing <run-dir>'s diff.patch +
+#       mvn.log artefacts. Use this when the verifier ran out of tokens or you
+#       want to re-verify against a tightened verifier.md. Overwrites
+#       <run-dir>/critique.md with the new verdict.
+#
 # Exit codes:
 #   0 — generator completed AND verifier returned ACCEPT
 #   1 — generator failed or produced no diff
@@ -29,7 +35,7 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <task-file> [--with-guidance <critique-file>]" >&2
+  echo "Usage: $0 <task-file> [--with-guidance <critique-file> | --verifier-only <run-dir>]" >&2
   exit 1
 fi
 
@@ -42,12 +48,25 @@ if [[ ! -f "$TASK_FILE" ]]; then
 fi
 
 GUIDANCE_FILE=""
+VERIFIER_ONLY_DIR=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-guidance)
       GUIDANCE_FILE="${2:-}"
       if [[ -z "$GUIDANCE_FILE" || ! -f "$GUIDANCE_FILE" ]]; then
         echo "Error: --with-guidance requires an existing critique file path" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --verifier-only)
+      VERIFIER_ONLY_DIR="${2:-}"
+      if [[ -z "$VERIFIER_ONLY_DIR" || ! -d "$VERIFIER_ONLY_DIR" ]]; then
+        echo "Error: --verifier-only requires an existing run-dir path" >&2
+        exit 1
+      fi
+      if [[ ! -f "$VERIFIER_ONLY_DIR/diff.patch" ]]; then
+        echo "Error: --verifier-only run-dir is missing diff.patch: $VERIFIER_ONLY_DIR" >&2
         exit 1
       fi
       shift 2
@@ -59,6 +78,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$VERIFIER_ONLY_DIR" && -n "$GUIDANCE_FILE" ]]; then
+  echo "Error: --verifier-only and --with-guidance are mutually exclusive" >&2
+  exit 1
+fi
+
 ROLE=$(grep -m1 '^\*\*Role:\*\*' "$TASK_FILE" | sed -E 's/^\*\*Role:\*\* +//; s/ +$//' || true)
 if [[ -z "$ROLE" ]]; then
   echo "Error: task brief $TASK_FILE has no '**Role:**' line" >&2
@@ -69,8 +93,10 @@ ROLE=$(echo "$ROLE" | awk '{print $1}')   # take first if multi-choice
 # `**Test-classes:** A, B, C` — required for test-writer and impl-backend so the
 # pipeline knows which JUnit classes to run for the verifier's empirical mvn.log.
 # Parsed early so we fail fast if missing, before spending tokens on the generator.
+# Skipped in --verifier-only mode (no generator run, no mvn run — we reuse the
+# existing mvn.log artefact).
 TEST_CLASSES=""
-if [[ "$ROLE" == "test-writer" || "$ROLE" == "impl-backend" ]]; then
+if [[ -z "$VERIFIER_ONLY_DIR" && ( "$ROLE" == "test-writer" || "$ROLE" == "impl-backend" ) ]]; then
   TEST_CLASSES=$(grep -m1 '^\*\*Test-classes:\*\*' "$TASK_FILE" \
     | sed -E 's/^\*\*Test-classes:\*\* +//; s/[[:space:]]+//g' || true)
   if [[ -z "$TEST_CLASSES" ]]; then
@@ -103,9 +129,13 @@ VERIFIER_ALLOWED_TOOLS='Read(**),Grep(**),Glob(**)'
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TASK_BASENAME="$(basename "$TASK_FILE" .md)"
-TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-RUN_DIR="$REPO_ROOT/.local/runs/$TASK_BASENAME/$TIMESTAMP"
-mkdir -p "$RUN_DIR"
+if [[ -n "$VERIFIER_ONLY_DIR" ]]; then
+  RUN_DIR="$(cd "$VERIFIER_ONLY_DIR" && pwd)"
+else
+  TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+  RUN_DIR="$REPO_ROOT/.local/runs/$TASK_BASENAME/$TIMESTAMP"
+  mkdir -p "$RUN_DIR"
+fi
 DIFF_FILE="$RUN_DIR/diff.patch"
 CRITIQUE_FILE="$RUN_DIR/critique.md"
 
@@ -114,21 +144,27 @@ echo " trawhile pipeline"
 echo " brief:        $TASK_FILE"
 echo " role:         $ROLE"
 echo " run dir:      $RUN_DIR"
+if [[ -n "$VERIFIER_ONLY_DIR" ]]; then
+  echo " mode:         verifier-only (reusing existing diff.patch / mvn.log)"
+fi
 if [[ -n "$GUIDANCE_FILE" ]]; then
   echo " guidance:     $GUIDANCE_FILE"
 fi
 echo "=============================================="
 echo
 
-PRE_RUN_REF=$(git rev-parse HEAD)
-PRE_RUN_DIRTY=$(git status --porcelain)
-if [[ -n "$PRE_RUN_DIRTY" ]]; then
-  echo "Warning: working tree is dirty before run; diff will include uncommitted changes." >&2
-fi
+MVN_LOG=""
 
-# Build the generator prompt; optionally prepend the prior critique as guidance.
-if [[ -n "$GUIDANCE_FILE" ]]; then
-  GENERATOR_PROMPT=$(cat <<EOF
+if [[ -z "$VERIFIER_ONLY_DIR" ]]; then
+  PRE_RUN_REF=$(git rev-parse HEAD)
+  PRE_RUN_DIRTY=$(git status --porcelain)
+  if [[ -n "$PRE_RUN_DIRTY" ]]; then
+    echo "Warning: working tree is dirty before run; diff will include uncommitted changes." >&2
+  fi
+
+  # Build the generator prompt; optionally prepend the prior critique as guidance.
+  if [[ -n "$GUIDANCE_FILE" ]]; then
+    GENERATOR_PROMPT=$(cat <<EOF
 Run the $ROLE subagent against the task brief at $TASK_FILE.
 
 A prior run of this task was reviewed by the verifier and received the following critique. Address every VIOLATION in the critique before producing your output. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md.
@@ -140,41 +176,47 @@ $(cat "$GUIDANCE_FILE")
 --- END OF CRITIQUE ---
 EOF
 )
-else
-  GENERATOR_PROMPT="Run the $ROLE subagent against the task brief at $TASK_FILE. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md."
-fi
+  else
+    GENERATOR_PROMPT="Run the $ROLE subagent against the task brief at $TASK_FILE. Read the brief and execute exactly as instructed by the role definition in .claude/agents/$ROLE.md."
+  fi
 
-echo "[1/3] running generator subagent ($ROLE)..."
-claude -p "$GENERATOR_PROMPT" \
-  --allowedTools "$ALLOWED_TOOLS" \
-  --permission-mode acceptEdits
+  echo "[1/3] running generator subagent ($ROLE)..."
+  claude -p "$GENERATOR_PROMPT" \
+    --allowedTools "$ALLOWED_TOOLS" \
+    --permission-mode acceptEdits
 
-echo
-echo "[2/3] capturing generator diff to $DIFF_FILE..."
-git diff "$PRE_RUN_REF" -- > "$DIFF_FILE"
-{
   echo
-  echo "--- untracked files added by generator ---"
-  git ls-files --others --exclude-standard
-} >> "$DIFF_FILE"
+  echo "[2/3] capturing generator diff to $DIFF_FILE..."
+  git diff "$PRE_RUN_REF" -- > "$DIFF_FILE"
+  {
+    echo
+    echo "--- untracked files added by generator ---"
+    git ls-files --others --exclude-standard
+  } >> "$DIFF_FILE"
 
-if ! grep -q '^diff --git' "$DIFF_FILE" && ! grep -q '^[^-]' "$DIFF_FILE"; then
-  echo "Error: generator produced no diff. Inspect $RUN_DIR for context." >&2
-  exit 1
-fi
+  if ! grep -q '^diff --git' "$DIFF_FILE" && ! grep -q '^[^-]' "$DIFF_FILE"; then
+    echo "Error: generator produced no diff. Inspect $RUN_DIR for context." >&2
+    exit 1
+  fi
 
-# Capture mvn output for test-writer / impl-backend so the verifier (which has
-# no Bash tool) can read empirical compile/test results from a file artefact.
-# The test classes come from the brief's `**Test-classes:**` field (parsed earlier).
-MVN_LOG=""
-if [[ -n "$TEST_CLASSES" ]]; then
-  MVN_LOG="$RUN_DIR/mvn.log"
-  echo "      capturing mvn test output to $MVN_LOG (classes: $TEST_CLASSES)..."
-  set +e
-  "$REPO_ROOT/scripts/mvn-local.sh" test -Dtest="$TEST_CLASSES" > "$MVN_LOG" 2>&1
-  MVN_EXIT=$?
-  set -e
-  echo "      mvn exit code: $MVN_EXIT (recorded as artefact; not propagated)"
+  # Capture mvn output for test-writer / impl-backend so the verifier (which has
+  # no Bash tool) can read empirical compile/test results from a file artefact.
+  # The test classes come from the brief's `**Test-classes:**` field (parsed earlier).
+  if [[ -n "$TEST_CLASSES" ]]; then
+    MVN_LOG="$RUN_DIR/mvn.log"
+    echo "      capturing mvn test output to $MVN_LOG (classes: $TEST_CLASSES)..."
+    set +e
+    "$REPO_ROOT/scripts/mvn-local.sh" test -Dtest="$TEST_CLASSES" > "$MVN_LOG" 2>&1
+    MVN_EXIT=$?
+    set -e
+    echo "      mvn exit code: $MVN_EXIT (recorded as artefact; not propagated)"
+    echo "--- mvn exit code: $MVN_EXIT ---" >> "$MVN_LOG"
+  fi
+else
+  # --verifier-only: reuse existing artefacts from the named run dir.
+  if [[ -f "$RUN_DIR/mvn.log" ]]; then
+    MVN_LOG="$RUN_DIR/mvn.log"
+  fi
 fi
 
 echo "[3/3] running verifier subagent..."
@@ -183,12 +225,6 @@ if [[ -n "$MVN_LOG" && -f "$MVN_LOG" ]]; then
   VERIFIER_PROMPT="$VERIFIER_PROMPT The captured mvn stdout+stderr from running the touched test classes is at $MVN_LOG; Read it for empirical compile-and-test evidence (compile errors, test failures, exception stacks). The mvn exit code is included as the last line of $MVN_LOG."
 fi
 VERIFIER_PROMPT="$VERIFIER_PROMPT Output the structured critique in the exact format defined in .claude/agents/verifier.md. End your output with a single line of the form 'Recommended action: <ACCEPT | RERUN WITH GUIDANCE | RERUN WITH ESCALATION | HUMAN REVIEW REQUIRED>' so this script can capture the recommendation."
-
-# Append the mvn exit code to the log so the verifier sees it in the same file
-# it reads for empirical evidence (saves a separate Read or env-var dance).
-if [[ -n "$MVN_LOG" && -f "$MVN_LOG" ]]; then
-  echo "--- mvn exit code: $MVN_EXIT ---" >> "$MVN_LOG"
-fi
 
 claude -p "$VERIFIER_PROMPT" \
   --allowedTools "$VERIFIER_ALLOWED_TOOLS" \

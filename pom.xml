@@ -79,6 +79,12 @@
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
+    <!-- SR-00-C16.F01: Brave bridge enables Spring Boot auto-config to emit
+         traceId and spanId into SLF4J MDC for every traced request. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-brave</artifactId>
+    </dependency>
 
     <!-- Database — compile scope needed for PGobject in JdbcConfig converters -->
     <dependency>
@@ -131,6 +137,14 @@
       <version>1.21.4</version>
       <scope>test</scope>
     </dependency>
+    <!-- Spring Boot Testcontainers integration: enables @ServiceConnection on
+         @Container static fields so spring.datasource.* binding is framework-
+         managed rather than via manual @DynamicPropertySource. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.testcontainers</groupId>
       <artifactId>postgresql</artifactId>
@@ -176,7 +190,19 @@
           <includes>
             <include>**/*Test.java</include>
             <include>**/*IT.java</include>
+            <include>**/*SIT.java</include>
           </includes>
+          <!-- One JVM per test class. Eliminates cross-class shared mutable state
+               (Spring's TestContext cache, Brave / Logback / SecurityContextHolder
+               / MDC JVM-level statics, Testcontainers singleton container). Within
+               a class, normal Spring Boot test conventions apply; nothing is
+               shared across class boundaries by construction.
+
+               Cost: ~10–15 s per class for JVM + Spring context + container
+               startup. Pays for itself in eliminated cross-class-pollution debug
+               cycles (see BaseIT javadoc for the design discussion). -->
+          <forkCount>1</forkCount>
+          <reuseForks>false</reuseForks>
         </configuration>
       </plugin>
 
