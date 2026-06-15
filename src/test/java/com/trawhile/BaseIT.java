@@ -58,7 +58,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * predictable behaviour is a clear win for both CI and the agentic
  * pipeline.</p>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+        "spring.security.oauth2.client.registration.google.client-id=base-it-google-client",
+        "spring.security.oauth2.client.registration.google.client-secret=base-it-google-secret"
+    }
+)
 public abstract class BaseIT {
 
     /**
@@ -71,7 +77,7 @@ public abstract class BaseIT {
      * Testcontainers integration. No {@code @DynamicPropertySource} is needed.</p>
      */
     @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
+    protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
         .withDatabaseName("trawhile")
         .withUsername("trawhile")
         .withPassword("trawhile-test");
