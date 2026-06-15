@@ -80,6 +80,13 @@ public class SecurityConfig {
     private static final RequestMatcher MCP_PATH = request ->
             "/api/mcp".equals(request.getServletPath());
 
+    /**
+     * Unauthenticated provider discovery for the login page (SR-00-C02.F02).
+     */
+    private static final RequestMatcher AUTH_PROVIDERS_GET = request ->
+            "GET".equals(request.getMethod())
+                    && "/auth/providers".equals(request.getServletPath());
+
     @Bean
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
@@ -94,6 +101,7 @@ public class SecurityConfig {
             .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers("/login/**", "/oauth2/**").permitAll()
+                .requestMatchers(AUTH_PROVIDERS_GET).permitAll()
                 // Management actuator endpoints: health is public (spec); prometheus is
                 // served on the management port (not the public port) and accessible
                 // without auth because the management port is network-restricted (UR-00-C12).
