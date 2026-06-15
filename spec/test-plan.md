@@ -36,7 +36,7 @@ For C-type SRs: TEs are optional; included only when the constraint is observabl
 |---|---|---|---|---|---|
 | TE-00-C02.F01-01 | SR-00-C02.F01 | UR-00-C02 | IT | `ConfigStartupIT` | Startup with no OIDC provider configured fails with non-zero exit and an error log naming the missing property |
 | TE-00-C02.F02-01 | SR-00-C02.F02 | UR-00-C02 | IT | `ConfigStartupIT` | Startup with one configured provider exposes its registration id via the discovery endpoint used by the login page |
-| TE-00-C03.F01-01 | SR-00-C03.F01 | UR-00-C03 | IT | `InvitationIT` | `mailto:` URI is built server-side from operator-supplied template and invitation token |
+| TE-00-C03.F01-01 | SR-00-C03.F01 | UR-00-C03 | IT | `InvitationIT` | `mailto:` URI is built server-side by invitation creation and contains the application base URL, invitee email, and sign-in instruction; no SMTP send or invitation token is used |
 | TE-00-C08.F01-01 | SR-00-C08.F01 | UR-00-C08 | IT | `AuthAdapterIT` | API-key bearer on `/api/account/me` is rejected (session-only endpoint per SR-05-F01.C01) |
 | TE-00-C08.F01-02 | SR-00-C08.F01 | UR-00-C08 | IT | `AuthAdapterIT` | OIDC session on a tracking endpoint succeeds; API-key bearer on same endpoint succeeds |
 | TE-00-C08.F02-01 | SR-00-C08.F02 | UR-00-C08 | IT | `AuthAdapterIT` | OIDC-session-cookie request to `/api/mcp` is rejected with HTTP 401; API-key-bearer request to `/api/mcp` is accepted (auth-success) |
