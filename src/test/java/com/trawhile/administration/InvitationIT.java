@@ -63,6 +63,8 @@ class InvitationIT extends BaseIT {
             UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID ADMIN_ID =
             UUID.fromString("00000000-0000-0000-0000-000000010f04");
+    private static final UUID NON_ADMIN_ID =
+            UUID.fromString("00000000-0000-0000-0000-00000000f502");
     private static final String ADMIN_EMAIL = "admin-e01-f04@example.invalid";
     private static final String ADMIN_OIDC_SUBJECT = "admin-e01-f04-subject";
 
@@ -562,6 +564,170 @@ class InvitationIT extends BaseIT {
                         .doesNotContain(resendInviteeEmail));
     }
 
+    @Test
+    @Tag("TE-01-F05.F01-01")
+    void adminInvitationWithdraw_runsSharedCleanupTransactionAndEmitsAuditWithByAdminAttribution()
+            throws Exception {
+        String withdrawnInviteeEmail = "withdraw-f05@example.invalid";
+        ResponseEntity<String> createResponse = postInvitation(withdrawnInviteeEmail);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+        JsonNode createBody = objectMapper.readTree(createResponse.getBody());
+        UUID invitationId = UUID.fromString(createBody.path("invitation").path("id").asText());
+        UUID userId = UUID.fromString(createBody.path("invitation").path("userId").asText());
+
+        UUID secondaryNodeId = UUID.fromString("00000000-0000-0000-0000-00000001f501");
+        jdbcTemplate.update(
+                "INSERT INTO nodes (id, parent_id, display_name, is_active, sort_order, created_at) "
+                + "VALUES (?, ?, 'withdraw-f05-node', TRUE, 0, NOW())",
+                secondaryNodeId, ROOT_NODE_ID);
+        jdbcTemplate.update(
+                "INSERT INTO node_authorizations (node_id, user_id, auth_level, granted_at) "
+                + "VALUES (?, ?, 'view'::auth_level, NOW())",
+                ROOT_NODE_ID, userId);
+        jdbcTemplate.update(
+                "INSERT INTO node_authorizations (node_id, user_id, auth_level, granted_at) "
+                + "VALUES (?, ?, 'view'::auth_level, NOW())",
+                secondaryNodeId, userId);
+
+        assertThat(countRowsById("pending_invitations", invitationId))
+                .as("withdraw precondition: pending_invitations row exists for invitationId")
+                .isEqualTo(1);
+        assertThat(countRowsById("users", userId))
+                .as("withdraw precondition: users row exists for linked pending userId")
+                .isEqualTo(1);
+        assertThat(countNodeAuthorizationsByUserId(userId))
+                .as("withdraw precondition: two node_authorizations rows exist for pending user")
+                .isEqualTo(2);
+
+        int logSnapshotSize = listAppender.list.size();
+        int usersBefore = countRows("users");
+        int invitationsBefore = countRows("pending_invitations");
+        int grantsBefore = countRows("node_authorizations");
+
+        HttpHeaders headers = authenticatedJsonHeaders();
+        headers.add("X-Forwarded-Proto", "https");
+        headers.add("X-Forwarded-Host", "trawhile.example.invalid");
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/admin/invitations/" + invitationId,
+                HttpMethod.DELETE,
+                new HttpEntity<>("", headers),
+                String.class);
+
+        assertThat(response.getStatusCode().value())
+                .as("DELETE /api/admin/invitations/{id} must withdraw the invitation with HTTP 204")
+                .isEqualTo(204);
+        assertThat(countRowsById("pending_invitations", invitationId))
+                .as("SR-07-F01.F02: pending invitation row must be deleted")
+                .isZero();
+        assertThat(countRowsById("users", userId))
+                .as("SR-07-F01.F02: pending user row must be deleted without anonymised stub")
+                .isZero();
+        assertThat(countNodeAuthorizationsByUserId(userId))
+                .as("SR-07-F01.F02: all preassigned grants for pending user must be deleted")
+                .isZero();
+
+        assertThat(countRows("users"))
+                .as("SR-07-F01.F02: cleanup must affect only the linked rows")
+                .isEqualTo(usersBefore - 1);
+        assertThat(countRows("pending_invitations"))
+                .as("SR-07-F01.F02: cleanup must affect only the linked rows")
+                .isEqualTo(invitationsBefore - 1);
+        assertThat(countRows("node_authorizations"))
+                .as("SR-07-F01.F02: cleanup must affect only the linked rows")
+                .isEqualTo(grantsBefore - 2);
+
+        List<ILoggingEvent> requestEvents = eventsSince(logSnapshotSize);
+        List<ILoggingEvent> withdrawnEvents = requestEvents.stream()
+                .filter(e -> observableLogText(e).contains("invitation_withdrawn"))
+                .toList();
+        assertThat(withdrawnEvents)
+                .as("Withdraw must emit exactly one invitation_withdrawn audit event")
+                .hasSize(1);
+        assertThat(observableLogText(withdrawnEvents.get(0)))
+                .as("invitation_withdrawn audit event must carry byAdmin attribution, "
+                    + "the invitation UUID, and the pending user UUID")
+                .contains("byAdmin")
+                .contains("invitationId")
+                .contains("pendingUserId")
+                .contains(ADMIN_ID.toString())
+                .contains(invitationId.toString())
+                .contains(userId.toString());
+        assertThat(requestEvents)
+                .as("SR-00-C14.F01: captured audit and request logs must not contain "
+                    + "the raw invitee email")
+                .allSatisfy(event -> assertThat(event.getFormattedMessage())
+                        .doesNotContain(withdrawnInviteeEmail));
+    }
+
+    @Test
+    @Tag("TE-01-F05.F01-02")
+    void adminInvitationWithdraw_byNonAdmin_returns403_andLeavesInvitationIntact()
+            throws Exception {
+        String withdrawnInviteeEmail = "withdraw-forbidden-f05@example.invalid";
+        ResponseEntity<String> createResponse = postInvitation(withdrawnInviteeEmail);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+        JsonNode createBody = objectMapper.readTree(createResponse.getBody());
+        UUID invitationId = UUID.fromString(createBody.path("invitation").path("id").asText());
+        UUID userId = UUID.fromString(createBody.path("invitation").path("userId").asText());
+
+        int usersBefore = countRows("users");
+        int invitationsBefore = countRows("pending_invitations");
+        int grantsBefore = countRows("node_authorizations");
+        int logSnapshotSize = listAppender.list.size();
+
+        SessionCredentials nonAdminSession = seedNonAdminSession(NON_ADMIN_ID);
+        int usersAfterSessionSetup = countRows("users");
+        int invitationsAfterSessionSetup = countRows("pending_invitations");
+        int grantsAfterSessionSetup = countRows("node_authorizations");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON, MediaType.APPLICATION_PROBLEM_JSON));
+        headers.add(HttpHeaders.COOKIE, "SESSION=" + nonAdminSession.cookieValue());
+        headers.add("X-CSRF-TOKEN", nonAdminSession.csrfTokenValue());
+        headers.add("X-Forwarded-Proto", "https");
+        headers.add("X-Forwarded-Host", "trawhile.example.invalid");
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/admin/invitations/" + invitationId,
+                HttpMethod.DELETE,
+                new HttpEntity<>("", headers),
+                String.class);
+
+        assertThat(response.getStatusCode().value())
+                .as("SR-01-F05.F01: withdraw requires effective admin on root "
+                    + "- non-admin caller must receive 403")
+                .isEqualTo(403);
+        assertThat(countRowsById("pending_invitations", invitationId))
+                .as("Rejected withdraw must leave the pending_invitations row intact")
+                .isEqualTo(1);
+        assertThat(countRowsById("users", userId))
+                .as("Rejected withdraw must leave the linked pending users row intact")
+                .isEqualTo(1);
+        assertThat(countRows("users"))
+                .as("Rejected withdraw must not partially execute pending-user cleanup")
+                .isEqualTo(usersAfterSessionSetup);
+        assertThat(countRows("pending_invitations"))
+                .as("Rejected withdraw must not partially execute pending-user cleanup")
+                .isEqualTo(invitationsAfterSessionSetup);
+        assertThat(countRows("node_authorizations"))
+                .as("Rejected withdraw must not partially execute pending-user cleanup")
+                .isEqualTo(grantsAfterSessionSetup);
+        assertThat(usersAfterSessionSetup)
+                .as("Non-admin setup creates only the caller row; cleanup must not touch "
+                    + "post-invitation rows")
+                .isEqualTo(usersBefore + 1);
+        assertThat(invitationsAfterSessionSetup)
+                .as("Non-admin setup must not change invitation count")
+                .isEqualTo(invitationsBefore);
+        assertThat(grantsAfterSessionSetup)
+                .as("Non-admin setup must not add authorization grants")
+                .isEqualTo(grantsBefore);
+        assertThat(eventsSince(logSnapshotSize))
+                .as("Authorization failure must happen before invitation_withdrawn audit emission")
+                .allSatisfy(event -> assertThat(observableLogText(event))
+                        .doesNotContain("invitation_withdrawn"));
+    }
+
     private ResponseEntity<String> postInvitation(String email) throws Exception {
         HttpHeaders headers = authenticatedJsonHeaders();
         headers.add("X-Forwarded-Proto", "https");
@@ -593,6 +759,49 @@ class InvitationIT extends BaseIT {
                 HttpMethod.POST,
                 new HttpEntity<>("", headers),
                 String.class);
+    }
+
+    /** Seeds an authenticated session for a user that deliberately has no root-admin grant. */
+    private SessionCredentials seedNonAdminSession(UUID userId) {
+        String email = "non-admin-f05@example.invalid";
+        jdbcTemplate.update(
+                "INSERT INTO users (id, display_name, email, anonymised_at, created_at) "
+                + "VALUES (?, 'non-admin-f05', ?, NULL, NOW())",
+                userId, email);
+
+        OidcIdToken idToken = OidcIdToken.withTokenValue("test-id-token-e01-f05-non-admin")
+                .subject("non-admin-f05-subject")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .claim("email", email)
+                .build();
+        DefaultOidcUser oidcUser = new DefaultOidcUser(
+                List.of(new SimpleGrantedAuthority("ROLE_USER")),
+                idToken);
+        OAuth2AuthenticationToken authToken = new OAuth2AuthenticationToken(
+                oidcUser,
+                oidcUser.getAuthorities(),
+                "google");
+
+        Session session = sessionRepository.createSession();
+        session.setAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                new SecurityContextImpl(authToken));
+        session.setAttribute("trawhile.userId", userId);
+
+        CsrfToken csrfToken = new DefaultCsrfToken(
+                "X-CSRF-TOKEN",
+                "_csrf",
+                "csrf-" + UUID.randomUUID());
+        session.setAttribute(
+                HttpSessionCsrfTokenRepository.class.getName() + ".CSRF_TOKEN",
+                csrfToken);
+        saveSession(session);
+
+        String cookieValue = Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(session.getId().getBytes(StandardCharsets.UTF_8));
+        return new SessionCredentials(cookieValue, xoredCsrfTokenValue(csrfToken.getToken()));
     }
 
     private HttpHeaders authenticatedJsonHeaders() {
@@ -701,6 +910,29 @@ class InvitationIT extends BaseIT {
         return count == null ? 0 : count;
     }
 
+    private int countRows(String tableName) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + tableName,
+                Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    private int countRowsById(String tableName, UUID id) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + tableName + " WHERE id = ?",
+                Integer.class,
+                id);
+        return count == null ? 0 : count;
+    }
+
+    private int countNodeAuthorizationsByUserId(UUID userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM node_authorizations WHERE user_id = ?",
+                Integer.class,
+                userId);
+        return count == null ? 0 : count;
+    }
+
     private UserRow userByEmail(String email) {
         return jdbcTemplate.queryForObject(
                 "SELECT id, display_name, email, anonymised_at FROM users WHERE email = ?",
@@ -800,5 +1032,8 @@ class InvitationIT extends BaseIT {
     }
 
     private record DecodedMailto(String recipient, String body) {
+    }
+
+    private record SessionCredentials(String cookieValue, String csrfTokenValue) {
     }
 }
