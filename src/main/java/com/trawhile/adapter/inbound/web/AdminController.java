@@ -1,0 +1,99 @@
+package com.trawhile.adapter.inbound.web;
+
+import com.trawhile.adapter.inbound.web.api.AdminApi;
+import com.trawhile.adapter.inbound.web.dto.ApiAdminInvitationsPostRequest;
+import com.trawhile.adapter.inbound.web.dto.InlineObject3;
+import com.trawhile.adapter.inbound.web.dto.Invitation;
+import com.trawhile.adapter.inbound.web.dto.Problem;
+import com.trawhile.port.inbound.administration.CreateInvitationPort;
+import com.trawhile.service.administration.InvitationConflictException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+@RestController
+public class AdminController implements AdminApi {
+
+    private final CreateInvitationPort createInvitationPort;
+    private final HttpServletRequest httpServletRequest;
+
+    public AdminController(
+            CreateInvitationPort createInvitationPort,
+            HttpServletRequest httpServletRequest) {
+        this.createInvitationPort = createInvitationPort;
+        this.httpServletRequest = httpServletRequest;
+    }
+
+    @Override
+    public ResponseEntity<InlineObject3> apiAdminInvitationsPost(
+            ApiAdminInvitationsPostRequest request) {
+        UUID actingUserId = resolveActingUserId();
+
+        String baseUrl = buildBaseUrl(httpServletRequest);
+
+        CreateInvitationPort.CreateInvitationResult result =
+                createInvitationPort.createInvitation(
+                        new CreateInvitationPort.CreateInvitationCommand(
+                                actingUserId, request.getEmail(), baseUrl));
+
+        Invitation invitationDto = new Invitation(
+                result.invitation().id(),
+                result.invitation().email(),
+                result.invitation().invitedAt(),
+                result.invitation().expiresAt(),
+                result.invitation().userId());
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(new InlineObject3(invitationDto, result.mailtoUrl()));
+    }
+
+    /**
+     * Reads the acting user's UUID from the current HTTP session's
+     * {@code trawhile.userId} attribute (the contract set by the OIDC
+     * callback flow per SR-01-F13.F01). Throws HTTP 401 if either the
+     * session is absent or the attribute is missing/wrong type, so that
+     * a confusing NPE deep in the service layer is replaced with a
+     * diagnosable client-visible failure mode.
+     */
+    private UUID resolveActingUserId() {
+        HttpSession session = httpServletRequest.getSession(false);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "no authenticated session");
+        }
+        Object userId = session.getAttribute("trawhile.userId");
+        if (!(userId instanceof UUID uuid)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "session is missing trawhile.userId");
+        }
+        return uuid;
+    }
+
+    private static String buildBaseUrl(HttpServletRequest request) {
+        String scheme = request.getScheme();
+        String host = request.getServerName();
+        int port = request.getServerPort();
+        boolean defaultPort = ("https".equals(scheme) && port == 443)
+                || ("http".equals(scheme) && port == 80);
+        return defaultPort
+                ? scheme + "://" + host
+                : scheme + "://" + host + ":" + port;
+    }
+
+    @ExceptionHandler(InvitationConflictException.class)
+    public ResponseEntity<Problem> handleInvitationConflict(InvitationConflictException ex) {
+        Problem problem = new Problem()
+                .status(409)
+                .code(ex.getConflictCode());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
+    }
+}
