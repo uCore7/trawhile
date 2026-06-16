@@ -31,8 +31,9 @@ If the task brief is missing or conflicts with these sources, stop and report th
 - Do not skip tests, mark them `@Disabled`, or stub assertions.
 - If a test cannot be written against current specs, or a brief-level STOP condition is encountered, stop and emit a STOP report. Do not leave broken partial code behind.
 - Tests derive from specifications, never current production behaviour.
-- Assertions use AssertJ (`assertThat`, `assertThatThrownBy`). Do not use JUnit assertions or Hamcrest.
-- JSON parsing and structural navigation use Jackson (`ObjectMapper`, `readTree(...).path("foo")`).
+- Assertions use AssertJ (`org.assertj.core.api.Assertions.assertThat`, `assertThatThrownBy`). Do not use JUnit assertions (`Assertions.assertEquals` / `assertTrue` / `assertNotNull`). Do not use Hamcrest.
+- AssertJ collection assertions — prefer the positive outer shape. For "no element contains X" (or any per-element absence check) use `.allSatisfy(e -> assertThat(e).doesNotContain(x))` — one outer positive, one inner negation, reads naturally. NEVER write `.noneSatisfy(e -> assertThat(e).doesNotContain(x))` or `.noneMatch(e -> !e.contains(x))` — the double-negative shape is a historical footgun in this codebase (the bug got past both a generator and a verifier before being recorded here). `noneSatisfy(...)` / `noneMatch(...)` are only safe with strictly *positive* inner predicates, e.g. `noneSatisfy(e -> assertThat(e.getMDC()).containsKey("x"))`. Helper test methods that assert absence should be named positively too (e.g. `assertCapturedMessagesAreFreeOf(...)` rather than `assertNoCapturedFormattedMessageContains(...)`) so the helper name does not prime a negative assertion idiom.
+- JSON parsing and structural navigation use Jackson (`com.fasterxml.jackson.databind.ObjectMapper`, `readTree(...).path("foo")`). Combine with AssertJ for structural assertions.
 - Command execution is limited to compile, test, and lint commands permitted by the runner. Do not run the application. Do not perform git write operations.
 
 ## Self-Correction Loop

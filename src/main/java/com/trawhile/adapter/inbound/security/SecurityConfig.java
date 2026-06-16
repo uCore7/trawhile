@@ -91,7 +91,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
         ApiKeyLookupPort apiKeyLookupPort,
-        ObjectProvider<ClientRegistrationRepository> clientRegistrationRepository
+        ObjectProvider<ClientRegistrationRepository> clientRegistrationRepository,
+        ObjectProvider<OidcCallbackHandler> oidcCallbackHandler
     ) throws Exception {
 
         ApiKeyAuthenticationFilter apiKeyFilter =
@@ -165,6 +166,11 @@ public class SecurityConfig {
                 // Success / failure handling is wired by the Auth flow adapter
                 // (architecture §5.2.3) which classifies the first-callback outcome
                 // per SR-01-F13.F01.
+                OidcCallbackHandler handler = oidcCallbackHandler.getIfAvailable();
+                if (handler != null) {
+                    login.successHandler(handler);
+                }
+                login.failureUrl("/login?error=provider_error");
             });
         }
 

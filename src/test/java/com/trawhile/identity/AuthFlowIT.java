@@ -105,7 +105,7 @@ class AuthFlowIT extends BaseIT {
         assertThat(bootstrapOutcome)
                 .as("sub-case 1 — bootstrap eligible")
                 .isInstanceOf(BootstrapEligible.class);
-        assertNoCapturedFormattedMessageContains(bootstrapSnapshot, BOOTSTRAP_EMAIL);
+        assertCapturedMessagesAreFreeOf(bootstrapSnapshot, BOOTSTRAP_EMAIL);
 
         cleanAuthState();
         seedPendingInvitation(INVITED_USER_ID, INVITED_EMAIL);
@@ -118,7 +118,7 @@ class AuthFlowIT extends BaseIT {
         assertThat(invitationOutcome)
                 .as("sub-case 2 — invitation match")
                 .isInstanceOf(InvitationMatched.class);
-        assertNoCapturedFormattedMessageContains(invitationSnapshot, INVITED_EMAIL);
+        assertCapturedMessagesAreFreeOf(invitationSnapshot, INVITED_EMAIL);
 
         cleanAuthState();
         seedActiveUser(EXISTING_USER_ID, "Existing User", EXISTING_EMAIL);
@@ -132,7 +132,7 @@ class AuthFlowIT extends BaseIT {
         assertThat(providerLinkedOutcome)
                 .as("sub-case 3 — provider linking")
                 .isInstanceOf(ProviderLinked.class);
-        assertNoCapturedFormattedMessageContains(providerLinkingSnapshot, EXISTING_EMAIL);
+        assertCapturedMessagesAreFreeOf(providerLinkingSnapshot, EXISTING_EMAIL);
 
         cleanAuthState();
         seedActiveUser(LINKED_USER_ID, "Linked User", LINKED_EMAIL);
@@ -146,7 +146,7 @@ class AuthFlowIT extends BaseIT {
         assertThat(knownIdentityOutcome)
                 .as("sub-case 4 — known identity login")
                 .isInstanceOf(KnownIdentityLogin.class);
-        assertNoCapturedFormattedMessageContains(knownIdentitySnapshot, LINKED_EMAIL);
+        assertCapturedMessagesAreFreeOf(knownIdentitySnapshot, LINKED_EMAIL);
 
         cleanAuthState();
         int rejectedSnapshot = listAppender.list.size();
@@ -165,7 +165,7 @@ class AuthFlowIT extends BaseIT {
                             .as("sub-case 5 — rejected cause")
                             .isEqualTo(RejectionCause.NOT_INVITED);
                 });
-        assertNoCapturedFormattedMessageContains(rejectedSnapshot, UNKNOWN_EMAIL);
+        assertCapturedMessagesAreFreeOf(rejectedSnapshot, UNKNOWN_EMAIL);
     }
 
     @Test
@@ -233,7 +233,7 @@ class AuthFlowIT extends BaseIT {
                         .contains("oidc_login_rejected")
                         .contains("cause=not_invited")
                         .doesNotContain(UNKNOWN_EMAIL));
-        assertNoCapturedFormattedMessageContains(unknownSnapshot, UNKNOWN_EMAIL);
+        assertCapturedMessagesAreFreeOf(unknownSnapshot, UNKNOWN_EMAIL);
 
         cleanAuthState();
         seedActiveUser(EXISTING_USER_ID, "Known But Unlinked", UNKNOWN_EMAIL);
@@ -254,7 +254,7 @@ class AuthFlowIT extends BaseIT {
         assertThat(knownButUnlinkedLogShape)
                 .as("Rejected log shape must not distinguish known emails from unknown emails")
                 .containsExactlyElementsOf(unknownLogShape);
-        assertNoCapturedFormattedMessageContains(knownButUnlinkedSnapshot, UNKNOWN_EMAIL);
+        assertCapturedMessagesAreFreeOf(knownButUnlinkedSnapshot, UNKNOWN_EMAIL);
     }
 
     private OidcCallbackCommand command(
@@ -372,10 +372,10 @@ class AuthFlowIT extends BaseIT {
                 .toList();
     }
 
-    private void assertNoCapturedFormattedMessageContains(int snapshotSize, String forbiddenText) {
+    private void assertCapturedMessagesAreFreeOf(int snapshotSize, String forbiddenText) {
         assertThat(eventsSince(snapshotSize))
                 .as("Captured log formatted messages must not contain raw email " + forbiddenText)
-                .noneSatisfy(event ->
+                .allSatisfy(event ->
                     assertThat(event.getFormattedMessage()).doesNotContain(forbiddenText));
     }
 
