@@ -439,6 +439,129 @@ class InvitationIT extends BaseIT {
                         .doesNotContain(ADMIN_EMAIL, inviteeAEmail, inviteeBEmail));
     }
 
+    @Test
+    @Tag("TE-01-F08.F01-01")
+    void adminInvitationResend_movesExpiryForwardAndReturnsFreshMailto_withoutCreatingNewUserOrGrant()
+            throws Exception {
+        // Setup phase
+        String resendInviteeEmail = "resend-f08@example.invalid";
+        ResponseEntity<String> createResponse = postInvitation(resendInviteeEmail);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+        JsonNode createBody = objectMapper.readTree(createResponse.getBody());
+        UUID invitationId = UUID.fromString(createBody.path("invitation").path("id").asText());
+        UUID userId = UUID.fromString(createBody.path("invitation").path("userId").asText());
+
+        jdbcTemplate.update(
+                "UPDATE pending_invitations "
+                + "SET expires_at = invited_at + INTERVAL '30 days' WHERE id = ?",
+                invitationId);
+        Instant staleExpiresAt = jdbcTemplate.queryForObject(
+                "SELECT expires_at FROM pending_invitations WHERE id = ?",
+                (rs, rowNum) -> rs.getTimestamp("expires_at").toInstant(),
+                invitationId);
+
+        Integer usersBefore = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE anonymised_at IS NULL", Integer.class);
+        Integer grantsBefore = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM node_authorizations", Integer.class);
+        int logSnapshotSize = listAppender.list.size();
+
+        // Action phase
+        Instant before = Instant.now();
+        ResponseEntity<String> response = resendInvitation(invitationId);
+        Instant after = Instant.now();
+
+        assertThat(response.getStatusCode().value())
+                .as("POST /api/admin/invitations/{id}/resend must return HTTP 200 "
+                    + "(not 201 — not a creation)")
+                .isEqualTo(200);
+
+        // Assertion phase — response body
+        JsonNode body = objectMapper.readTree(response.getBody());
+        JsonNode invitation = body.path("invitation");
+
+        assertThat(invitation.path("id").asText())
+                .as("SR-01-F08.F01: resend must retain the existing invitation UUID, "
+                    + "not create a new one")
+                .isEqualTo(invitationId.toString());
+        assertThat(invitation.path("userId").asText())
+                .as("SR-01-F08.F01: resend must retain the existing linked userId")
+                .isEqualTo(userId.toString());
+
+        Instant freshExpiresAt = Instant.parse(invitation.path("expiresAt").asText());
+        assertThat(freshExpiresAt)
+                .as("Resend must move expires_at strictly past staleExpiresAt + 30 days, "
+                    + "proving a genuine expiry extension rather than a no-op touch")
+                .isAfter(staleExpiresAt.plus(Duration.ofDays(30)));
+        assertThat(freshExpiresAt)
+                .as("Resend must set expires_at to NOW() + 90 days (lower bracket)")
+                .isAfterOrEqualTo(before.plus(Duration.ofDays(90)).minus(Duration.ofSeconds(2)));
+        assertThat(freshExpiresAt)
+                .as("Resend must set expires_at to NOW() + 90 days (upper bracket)")
+                .isBeforeOrEqualTo(after.plus(Duration.ofDays(90)).plus(Duration.ofSeconds(2)));
+
+        URI mailtoUri = URI.create(body.path("mailtoUrl").asText());
+        assertThat(mailtoUri.getScheme())
+                .as("Resend mailtoUrl must be a mailto URI")
+                .isEqualTo("mailto");
+        DecodedMailto decodedMailto = decodeMailto(mailtoUri);
+        assertThat(decodedMailto.recipient())
+                .as("Resend mailtoUrl recipient must be the invitee email")
+                .isEqualTo(resendInviteeEmail);
+        assertThat(decodedMailto.body())
+                .as("Resend mailtoUrl body must contain the application base URL (SR-00-C03.F01)")
+                .contains(FORWARDED_BASE_URL)
+                .as("Resend mailtoUrl body must contain the invitee email (SR-00-C03.F01)")
+                .contains(resendInviteeEmail);
+
+        // Assertion phase — database state
+        PendingInvitationRow dbRow = pendingInvitationByEmail(resendInviteeEmail);
+        assertThat(dbRow.expiresAt())
+                .as("pending_invitations.expires_at in DB must reflect freshExpiresAt (lower bracket)")
+                .isAfterOrEqualTo(freshExpiresAt.minus(Duration.ofSeconds(1)));
+        assertThat(dbRow.expiresAt())
+                .as("pending_invitations.expires_at in DB must reflect freshExpiresAt (upper bracket)")
+                .isBeforeOrEqualTo(freshExpiresAt.plus(Duration.ofSeconds(1)));
+        assertThat(dbRow.id())
+                .as("SR-01-F08.F01: pending_invitations.id must be unchanged after resend")
+                .isEqualTo(invitationId);
+        assertThat(dbRow.userId())
+                .as("pending_invitations.user_id must be unchanged after resend")
+                .isEqualTo(userId);
+
+        Integer usersAfter = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE anonymised_at IS NULL", Integer.class);
+        Integer grantsAfter = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM node_authorizations", Integer.class);
+        assertThat(usersAfter)
+                .as("SR-01-F08.F01: resend must not create new users rows")
+                .isEqualTo(usersBefore);
+        assertThat(grantsAfter)
+                .as("SR-01-F08.F01: resend must not create new node_authorizations rows")
+                .isEqualTo(grantsBefore);
+
+        // Assertion phase — audit log
+        List<ILoggingEvent> requestEvents = eventsSince(logSnapshotSize);
+        List<ILoggingEvent> resentEvents = requestEvents.stream()
+                .filter(e -> observableLogText(e).contains("invitation_resent"))
+                .toList();
+        assertThat(resentEvents)
+                .as("Resend must emit exactly one invitation_resent audit event")
+                .hasSize(1);
+        assertThat(observableLogText(resentEvents.get(0)))
+                .as("invitation_resent audit event must carry the acting admin UUID")
+                .contains(ADMIN_ID.toString());
+        assertThat(observableLogText(resentEvents.get(0)))
+                .as("invitation_resent audit event must carry the invitation UUID")
+                .contains(invitationId.toString());
+
+        assertThat(requestEvents)
+                .as("SR-00-C14.F01: no log event's formatted message may contain "
+                    + "the raw invitee email")
+                .allSatisfy(event -> assertThat(event.getFormattedMessage())
+                        .doesNotContain(resendInviteeEmail));
+    }
+
     private ResponseEntity<String> postInvitation(String email) throws Exception {
         HttpHeaders headers = authenticatedJsonHeaders();
         headers.add("X-Forwarded-Proto", "https");
@@ -458,6 +581,17 @@ class InvitationIT extends BaseIT {
                 "http://localhost:" + port + "/api/admin/invitations",
                 HttpMethod.GET,
                 new HttpEntity<>(authenticatedJsonHeaders()),
+                String.class);
+    }
+
+    private ResponseEntity<String> resendInvitation(UUID invitationId) {
+        HttpHeaders headers = authenticatedJsonHeaders();
+        headers.add("X-Forwarded-Proto", "https");
+        headers.add("X-Forwarded-Host", "trawhile.example.invalid");
+        return restTemplate.exchange(
+                "http://localhost:" + port + "/api/admin/invitations/" + invitationId + "/resend",
+                HttpMethod.POST,
+                new HttpEntity<>("", headers),
                 String.class);
     }
 
