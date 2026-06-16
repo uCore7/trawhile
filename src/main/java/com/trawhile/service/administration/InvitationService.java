@@ -4,9 +4,11 @@ import com.trawhile.adapter.outbound.logging.AppLogger;
 import com.trawhile.port.inbound.administration.CreateInvitationPort;
 import com.trawhile.port.inbound.administration.ListInvitationsPort;
 import com.trawhile.port.inbound.administration.ResendInvitationPort;
+import com.trawhile.port.inbound.administration.WithdrawInvitationPort;
 import com.trawhile.port.outbound.persistence.InvitationPersistencePort.ResendableInvitation;
 import com.trawhile.port.outbound.persistence.InvitationPersistencePort;
 import com.trawhile.service.identity.AuthorizationService;
+import com.trawhile.service.identity.UserCleanupService;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -16,18 +18,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class InvitationService implements CreateInvitationPort, ListInvitationsPort, ResendInvitationPort {
+public class InvitationService implements
+        CreateInvitationPort,
+        ListInvitationsPort,
+        ResendInvitationPort,
+        WithdrawInvitationPort {
 
     private static final AppLogger log = AppLogger.getLogger(InvitationService.class);
 
     private final InvitationPersistencePort invitationPersistencePort;
     private final AuthorizationService authorizationService;
+    private final UserCleanupService userCleanupService;
 
     public InvitationService(
             InvitationPersistencePort invitationPersistencePort,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            UserCleanupService userCleanupService) {
         this.invitationPersistencePort = invitationPersistencePort;
         this.authorizationService = authorizationService;
+        this.userCleanupService = userCleanupService;
     }
 
     @Override
@@ -108,6 +117,23 @@ public class InvitationService implements CreateInvitationPort, ListInvitationsP
                         refreshed.invitedAt(),
                         refreshed.expiresAt()),
                 mailtoUri);
+    }
+
+    @Override
+    @Transactional
+    public void withdraw(WithdrawInvitationCommand command) {
+        authorizationService.checkAdminOnRoot(command.actingUserId());
+
+        ResendableInvitation row = invitationPersistencePort.findById(command.invitationId())
+                .orElseThrow(() -> new InvitationNotFoundException(command.invitationId()));
+
+        userCleanupService.cleanupPendingUser(row.userId());
+
+        log.info("invitation_withdrawn",
+                new AppLogger.UserId(command.actingUserId()),
+                new AppLogger.RawField("byAdmin", command.actingUserId().toString()),
+                new AppLogger.RawField("invitationId", command.invitationId().toString()),
+                new AppLogger.RawField("pendingUserId", row.userId().toString()));
     }
 
     private static URI buildMailtoUri(String email, String baseUrl) {

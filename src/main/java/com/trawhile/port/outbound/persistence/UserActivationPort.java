@@ -7,4 +7,6 @@ public interface UserActivationPort {
     void insertActiveUser(UUID id, String displayName, String email);
 
     void refreshEmail(UUID userId, String email);
+
+    void deleteUserById(UUID userId);
 }

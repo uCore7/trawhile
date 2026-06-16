@@ -31,4 +31,11 @@ public class UserActivationJooqAdapter implements UserActivationPort {
                 .where(DSL.field("id", UUID.class).eq(userId))
                 .execute();
     }
+
+    @Override
+    public void deleteUserById(UUID userId) {
+        dsl.deleteFrom(DSL.table("users"))
+                .where(DSL.field("id", UUID.class).eq(userId))
+                .execute();
+    }
 }

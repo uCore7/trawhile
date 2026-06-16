@@ -9,6 +9,7 @@ import com.trawhile.adapter.inbound.web.dto.UserReference;
 import com.trawhile.port.inbound.administration.CreateInvitationPort;
 import com.trawhile.port.inbound.administration.ListInvitationsPort;
 import com.trawhile.port.inbound.administration.ResendInvitationPort;
+import com.trawhile.port.inbound.administration.WithdrawInvitationPort;
 import com.trawhile.service.administration.InvitationConflictException;
 import com.trawhile.service.administration.InvitationNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,16 +29,19 @@ public class AdminController implements AdminApi {
     private final CreateInvitationPort createInvitationPort;
     private final ListInvitationsPort listInvitationsPort;
     private final ResendInvitationPort resendInvitationPort;
+    private final WithdrawInvitationPort withdrawInvitationPort;
     private final HttpServletRequest httpServletRequest;
 
     public AdminController(
             CreateInvitationPort createInvitationPort,
             ListInvitationsPort listInvitationsPort,
             ResendInvitationPort resendInvitationPort,
+            WithdrawInvitationPort withdrawInvitationPort,
             HttpServletRequest httpServletRequest) {
         this.createInvitationPort = createInvitationPort;
         this.listInvitationsPort = listInvitationsPort;
         this.resendInvitationPort = resendInvitationPort;
+        this.withdrawInvitationPort = withdrawInvitationPort;
         this.httpServletRequest = httpServletRequest;
     }
 
@@ -90,6 +94,14 @@ public class AdminController implements AdminApi {
                 result.invitation().expiresAt(),
                 result.invitation().userId());
         return ResponseEntity.ok(new InlineObject3(dto, result.mailtoUrl()));
+    }
+
+    @Override
+    public ResponseEntity<Void> apiAdminInvitationsIdDelete(UUID id) {
+        UUID actingUserId = resolveActingUserId();
+        withdrawInvitationPort.withdraw(
+                new WithdrawInvitationPort.WithdrawInvitationCommand(actingUserId, id));
+        return ResponseEntity.noContent().build();
     }
 
     @ExceptionHandler(InvitationNotFoundException.class)
