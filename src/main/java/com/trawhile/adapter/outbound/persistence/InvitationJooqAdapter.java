@@ -3,6 +3,7 @@ package com.trawhile.adapter.outbound.persistence;
 import com.trawhile.port.outbound.persistence.InvitationPersistencePort;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.jooq.Field;
@@ -91,6 +92,50 @@ public class InvitationJooqAdapter implements InvitationPersistencePort {
                 invitationRecord.get(emailField),
                 invitationRecord.get(invitedAtField),
                 invitationRecord.get(expiresAtField));
+    }
+
+    @Override
+    public Optional<ResendableInvitation> findById(UUID invitationId) {
+        Field<UUID> idField = DSL.field("id", UUID.class);
+        Field<UUID> userIdField = DSL.field("user_id", UUID.class);
+        Field<String> emailField = DSL.field("email", String.class);
+        Field<Instant> invitedAtField = DSL.field("invited_at", Instant.class);
+        Field<Instant> expiresAtField = DSL.field("expires_at", Instant.class);
+
+        Record record = dsl
+                .select(idField, userIdField, emailField, invitedAtField, expiresAtField)
+                .from(DSL.table("pending_invitations"))
+                .where(idField.eq(invitationId))
+                .fetchOne();
+
+        if (record == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new ResendableInvitation(
+                record.get(idField),
+                record.get(userIdField),
+                record.get(emailField),
+                record.get(invitedAtField),
+                record.get(expiresAtField)));
+    }
+
+    @Override
+    public ResendableInvitation refreshExpiresAtToNinetyDaysFromNow(UUID invitationId) {
+        Field<UUID> idField = DSL.field("id", UUID.class);
+        Field<UUID> userIdField = DSL.field("user_id", UUID.class);
+        Field<String> emailField = DSL.field("email", String.class);
+        Field<Instant> invitedAtField = DSL.field("invited_at", Instant.class);
+        Field<Instant> expiresAtField = DSL.field("expires_at", Instant.class);
+
+        dsl.update(DSL.table("pending_invitations"))
+                .set(expiresAtField,
+                        DSL.field("NOW() + INTERVAL '90 days'", Instant.class))
+                .where(idField.eq(invitationId))
+                .execute();
+
+        return findById(invitationId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Invitation disappeared after update: " + invitationId));
     }
 
     @Override

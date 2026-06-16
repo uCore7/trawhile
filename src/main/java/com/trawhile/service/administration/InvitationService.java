@@ -3,6 +3,8 @@ package com.trawhile.service.administration;
 import com.trawhile.adapter.outbound.logging.AppLogger;
 import com.trawhile.port.inbound.administration.CreateInvitationPort;
 import com.trawhile.port.inbound.administration.ListInvitationsPort;
+import com.trawhile.port.inbound.administration.ResendInvitationPort;
+import com.trawhile.port.outbound.persistence.InvitationPersistencePort.ResendableInvitation;
 import com.trawhile.port.outbound.persistence.InvitationPersistencePort;
 import com.trawhile.service.identity.AuthorizationService;
 import java.net.URI;
@@ -14,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class InvitationService implements CreateInvitationPort, ListInvitationsPort {
+public class InvitationService implements CreateInvitationPort, ListInvitationsPort, ResendInvitationPort {
 
     private static final AppLogger log = AppLogger.getLogger(InvitationService.class);
 
@@ -78,6 +80,34 @@ public class InvitationService implements CreateInvitationPort, ListInvitationsP
                         row.userId(),
                         row.preAssignedGrantCount()))
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public ResendInvitationResult resend(ResendInvitationCommand command) {
+        authorizationService.checkAdminOnRoot(command.actingUserId());
+
+        ResendableInvitation row = invitationPersistencePort.findById(command.invitationId())
+                .orElseThrow(() -> new InvitationNotFoundException(command.invitationId()));
+
+        ResendableInvitation refreshed =
+                invitationPersistencePort.refreshExpiresAtToNinetyDaysFromNow(command.invitationId());
+
+        log.info("invitation_resent",
+                new AppLogger.UserId(command.actingUserId()),
+                new AppLogger.RawField("invitationId", row.id().toString()),
+                new AppLogger.RawField("pendingUserId", row.userId().toString()));
+
+        URI mailtoUri = buildMailtoUri(refreshed.email(), command.applicationBaseUrl());
+
+        return new ResendInvitationResult(
+                new ResentInvitationView(
+                        refreshed.id(),
+                        refreshed.userId(),
+                        refreshed.email(),
+                        refreshed.invitedAt(),
+                        refreshed.expiresAt()),
+                mailtoUri);
     }
 
     private static URI buildMailtoUri(String email, String baseUrl) {

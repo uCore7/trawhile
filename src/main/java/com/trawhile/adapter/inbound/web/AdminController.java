@@ -8,7 +8,9 @@ import com.trawhile.adapter.inbound.web.dto.Problem;
 import com.trawhile.adapter.inbound.web.dto.UserReference;
 import com.trawhile.port.inbound.administration.CreateInvitationPort;
 import com.trawhile.port.inbound.administration.ListInvitationsPort;
+import com.trawhile.port.inbound.administration.ResendInvitationPort;
 import com.trawhile.service.administration.InvitationConflictException;
+import com.trawhile.service.administration.InvitationNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.util.List;
@@ -25,14 +27,17 @@ public class AdminController implements AdminApi {
 
     private final CreateInvitationPort createInvitationPort;
     private final ListInvitationsPort listInvitationsPort;
+    private final ResendInvitationPort resendInvitationPort;
     private final HttpServletRequest httpServletRequest;
 
     public AdminController(
             CreateInvitationPort createInvitationPort,
             ListInvitationsPort listInvitationsPort,
+            ResendInvitationPort resendInvitationPort,
             HttpServletRequest httpServletRequest) {
         this.createInvitationPort = createInvitationPort;
         this.listInvitationsPort = listInvitationsPort;
+        this.resendInvitationPort = resendInvitationPort;
         this.httpServletRequest = httpServletRequest;
     }
 
@@ -70,6 +75,31 @@ public class AdminController implements AdminApi {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(new InlineObject3(invitationDto, result.mailtoUrl()));
+    }
+
+    @Override
+    public ResponseEntity<InlineObject3> apiAdminInvitationsIdResendPost(UUID id) {
+        UUID actingUserId = resolveActingUserId();
+        String baseUrl = buildBaseUrl(httpServletRequest);
+        ResendInvitationPort.ResendInvitationResult result = resendInvitationPort.resend(
+                new ResendInvitationPort.ResendInvitationCommand(actingUserId, id, baseUrl));
+        Invitation dto = new Invitation(
+                result.invitation().id(),
+                result.invitation().email(),
+                result.invitation().invitedAt(),
+                result.invitation().expiresAt(),
+                result.invitation().userId());
+        return ResponseEntity.ok(new InlineObject3(dto, result.mailtoUrl()));
+    }
+
+    @ExceptionHandler(InvitationNotFoundException.class)
+    public ResponseEntity<Problem> handleInvitationNotFound(InvitationNotFoundException ex) {
+        Problem problem = new Problem()
+                .status(404)
+                .code("invitation.not_found");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     private static Invitation toInvitationDto(
