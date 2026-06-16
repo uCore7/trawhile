@@ -58,6 +58,14 @@ trawhile is a small-company self-hosted time-tracking system.
 ## Core Conventions
 
 - **Time.** All timestamps in Java are `java.time.Instant` (UTC). Never `LocalDateTime`. Storage and API wire format are UTC (UR-00-C10); user-local time-window semantics are the frontend's responsibility — it converts and supplies an IANA TZ in report requests (ADR 0019).
+
+  The database clock is the single canonical source for "now" in production code. Reconciling this with the hexagonal mandate that business invariants live in services: **services name the invariant in domain vocabulary at the port surface; the adapter implements it using the DB clock.** Method names like `findNonExpired`, `existsActive`, `purgeExpired`, `existsRecentlyCreated` belong on the port; the adapter expresses them as `WHERE expires_at > NOW()`, `WHERE created_at < NOW() - INTERVAL …`, etc. Columns that record "now" on write (`invited_at`, `expires_at`, `granted_at`, `created_at`, …) use the database's `NOW()` in the SQL statement; the schema's `DEFAULT NOW()` expressions are the canonical pattern.
+
+  Corollary: **do not cross a port boundary with a clock**. Ports take no `Instant` parameter that means "now" (parameters that mean a specific user-supplied instant — a report's `from` / `to` — are fine). Do NOT introduce a `Clock` port; the clock stays implicit in the adapter.
+
+  DB-enforced integrity constraints (FK, UNIQUE, partial indexes) are *integrity* invariants and cooperate with — they do not replace — service-owned business invariants. Both layers may express the same invariant from different angles; this is intentional defence-in-depth, not duplication.
+
+  Production-code uses of `Instant.now()` are restricted to framework-owned timestamps (Logback, Micrometer) and response payloads that literally surface "server current time" (e.g. health checks). Tests are unconstrained — observing the system from outside via `Instant.now()` brackets is correct.
 - **Audit events.** Emitted to the application log stream, never to the database (architecture §8.5). Vocabulary in SR-06-F01.F01.
 - **Authorization.** Service methods carry `@Transactional` and call `AuthorizationService.check(...)` explicitly. Never `@PreAuthorize`; never inline authz in adapters. The recursive grant rule lives in PostgreSQL functions (architecture §8.2).
 - **Persistence.** jOOQ-backed outbound persistence adapter only. Never JPA, never `JdbcTemplate`. The schema is `spec/schema.sql`; Flyway migrations and jOOQ types are generated from it.
