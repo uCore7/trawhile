@@ -2,16 +2,19 @@ package com.trawhile.service.administration;
 
 import com.trawhile.adapter.outbound.logging.AppLogger;
 import com.trawhile.port.inbound.administration.CreateInvitationPort;
+import com.trawhile.port.inbound.administration.ListInvitationsPort;
 import com.trawhile.port.outbound.persistence.InvitationPersistencePort;
 import com.trawhile.service.identity.AuthorizationService;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class InvitationService implements CreateInvitationPort {
+public class InvitationService implements CreateInvitationPort, ListInvitationsPort {
 
     private static final AppLogger log = AppLogger.getLogger(InvitationService.class);
 
@@ -56,6 +59,25 @@ public class InvitationService implements CreateInvitationPort {
                         row.invitedAt(),
                         row.expiresAt()),
                 mailtoUri);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InvitationListItem> list(UUID actingUserId) {
+        authorizationService.checkAdminOnRoot(actingUserId);
+
+        return invitationPersistencePort.listAllPendingWithInviterAndGrantCount()
+                .stream()
+                .map(row -> new InvitationListItem(
+                        row.id(),
+                        row.email(),
+                        row.inviterId(),
+                        row.inviterDisplayName(),
+                        row.invitedAt(),
+                        row.expiresAt(),
+                        row.userId(),
+                        row.preAssignedGrantCount()))
+                .toList();
     }
 
     private static URI buildMailtoUri(String email, String baseUrl) {

@@ -2,10 +2,12 @@ package com.trawhile.adapter.outbound.persistence;
 
 import com.trawhile.port.outbound.persistence.InvitationPersistencePort;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.jooq.Field;
 import org.jooq.Record;
+import org.jooq.Table;
 import org.jooq.impl.DSL;
 import org.springframework.stereotype.Component;
 
@@ -89,5 +91,50 @@ public class InvitationJooqAdapter implements InvitationPersistencePort {
                 invitationRecord.get(emailField),
                 invitationRecord.get(invitedAtField),
                 invitationRecord.get(expiresAtField));
+    }
+
+    @Override
+    public List<InvitationListRow> listAllPendingWithInviterAndGrantCount() {
+        Table<?> invitations = DSL.table("pending_invitations").as("p");
+        Table<?> inviter = DSL.table("users").as("inviter");
+        Table<?> authorizations = DSL.table("node_authorizations").as("na");
+
+        Field<UUID> idField = DSL.field("p.id", UUID.class);
+        Field<String> emailField = DSL.field("p.email", String.class);
+        Field<UUID> invitedByField = DSL.field("p.invited_by", UUID.class);
+        Field<Instant> invitedAtField = DSL.field("p.invited_at", Instant.class);
+        Field<Instant> expiresAtField = DSL.field("p.expires_at", Instant.class);
+        Field<UUID> userIdField = DSL.field("p.user_id", UUID.class);
+        Field<UUID> inviterIdField = DSL.field("inviter.id", UUID.class);
+        Field<String> inviterDisplayNameField = DSL.field("inviter.display_name", String.class);
+        Field<Integer> grantCountField = DSL
+                .selectCount()
+                .from(authorizations)
+                .where(DSL.field("na.user_id", UUID.class).eq(userIdField))
+                .asField("pre_assigned_grant_count");
+
+        return dsl
+                .select(
+                        idField,
+                        emailField,
+                        inviterIdField,
+                        inviterDisplayNameField,
+                        invitedAtField,
+                        expiresAtField,
+                        userIdField,
+                        grantCountField)
+                .from(invitations)
+                .leftJoin(inviter)
+                .on(invitedByField.eq(inviterIdField))
+                .orderBy(invitedAtField.asc())
+                .fetch(record -> new InvitationListRow(
+                        record.get(idField),
+                        record.get(emailField),
+                        record.get(inviterIdField),
+                        record.get(inviterDisplayNameField),
+                        record.get(invitedAtField),
+                        record.get(expiresAtField),
+                        record.get(userIdField),
+                        record.get(grantCountField)));
     }
 }

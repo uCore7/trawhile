@@ -5,10 +5,13 @@ import com.trawhile.adapter.inbound.web.dto.ApiAdminInvitationsPostRequest;
 import com.trawhile.adapter.inbound.web.dto.InlineObject3;
 import com.trawhile.adapter.inbound.web.dto.Invitation;
 import com.trawhile.adapter.inbound.web.dto.Problem;
+import com.trawhile.adapter.inbound.web.dto.UserReference;
 import com.trawhile.port.inbound.administration.CreateInvitationPort;
+import com.trawhile.port.inbound.administration.ListInvitationsPort;
 import com.trawhile.service.administration.InvitationConflictException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,13 +24,28 @@ import org.springframework.web.server.ResponseStatusException;
 public class AdminController implements AdminApi {
 
     private final CreateInvitationPort createInvitationPort;
+    private final ListInvitationsPort listInvitationsPort;
     private final HttpServletRequest httpServletRequest;
 
     public AdminController(
             CreateInvitationPort createInvitationPort,
+            ListInvitationsPort listInvitationsPort,
             HttpServletRequest httpServletRequest) {
         this.createInvitationPort = createInvitationPort;
+        this.listInvitationsPort = listInvitationsPort;
         this.httpServletRequest = httpServletRequest;
+    }
+
+    @Override
+    public ResponseEntity<List<Invitation>> apiAdminInvitationsGet() {
+        UUID actingUserId = resolveActingUserId();
+
+        List<Invitation> invitations = listInvitationsPort.list(actingUserId)
+                .stream()
+                .map(AdminController::toInvitationDto)
+                .toList();
+
+        return ResponseEntity.ok(invitations);
     }
 
     @Override
@@ -52,6 +70,24 @@ public class AdminController implements AdminApi {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(new InlineObject3(invitationDto, result.mailtoUrl()));
+    }
+
+    private static Invitation toInvitationDto(
+            ListInvitationsPort.InvitationListItem item) {
+        Invitation invitation = new Invitation(
+                item.id(),
+                item.email(),
+                item.invitedAt(),
+                item.expiresAt(),
+                item.userId())
+                .preAssignedGrantCount(item.preAssignedGrantCount());
+
+        if (item.inviterId() != null) {
+            invitation.invitedBy(new UserReference(item.inviterId())
+                    .displayName(item.inviterDisplayName()));
+        }
+
+        return invitation;
     }
 
     /**
