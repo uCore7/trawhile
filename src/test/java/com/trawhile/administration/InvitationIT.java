@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -342,6 +343,102 @@ class InvitationIT extends BaseIT {
                 .isEqualTo(pendingUserId);
     }
 
+    @Test
+    @Tag("TE-01-F03.F01-01")
+    void adminInvitationsList_returnsAllPendingInvitationsWithInviterAndPreAssignedGrantCount()
+            throws Exception {
+        int logSnapshotSize = listAppender.list.size();
+        UUID inviteeAId = UUID.fromString("00000000-0000-0000-0000-00000001f301");
+        UUID inviteeBId = UUID.fromString("00000000-0000-0000-0000-00000001f302");
+        UUID invitationAId = UUID.fromString("00000000-0000-0000-0000-00000101f301");
+        UUID invitationBId = UUID.fromString("00000000-0000-0000-0000-00000101f302");
+        String inviteeAEmail = "invitee-a-f03@example.invalid";
+        String inviteeBEmail = "invitee-b-f03@example.invalid";
+        Instant invitedAtA = Instant.parse("2026-01-02T03:04:05Z");
+        Instant invitedAtB = Instant.parse("2026-01-03T03:04:05Z");
+        Instant expiresAtA = invitedAtA.plus(Duration.ofDays(90));
+        Instant expiresAtB = invitedAtB.plus(Duration.ofDays(90));
+
+        jdbcTemplate.update(
+                "INSERT INTO users (id, display_name, email, anonymised_at, created_at) "
+                + "VALUES (?, 'Invitee A', ?, NULL, ?)",
+                inviteeAId, inviteeAEmail, Timestamp.from(invitedAtA));
+        jdbcTemplate.update(
+                "INSERT INTO users (id, display_name, email, anonymised_at, created_at) "
+                + "VALUES (?, 'Invitee B', ?, NULL, ?)",
+                inviteeBId, inviteeBEmail, Timestamp.from(invitedAtB));
+        jdbcTemplate.update(
+                "INSERT INTO pending_invitations "
+                + "(id, user_id, email, invited_by, invited_at, expires_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?)",
+                invitationAId,
+                inviteeAId,
+                inviteeAEmail,
+                ADMIN_ID,
+                Timestamp.from(invitedAtA),
+                Timestamp.from(expiresAtA));
+        jdbcTemplate.update(
+                "INSERT INTO pending_invitations "
+                + "(id, user_id, email, invited_by, invited_at, expires_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?)",
+                invitationBId,
+                inviteeBId,
+                inviteeBEmail,
+                ADMIN_ID,
+                Timestamp.from(invitedAtB),
+                Timestamp.from(expiresAtB));
+        jdbcTemplate.update(
+                "INSERT INTO node_authorizations (node_id, user_id, auth_level, granted_at) "
+                + "VALUES (?, ?, 'view'::auth_level, ?)",
+                ROOT_NODE_ID, inviteeAId, Timestamp.from(invitedAtA));
+
+        ResponseEntity<String> response = getInvitations();
+
+        assertThat(response.getStatusCode().value())
+                .as("GET /api/admin/invitations as root admin must list pending invitations")
+                .isEqualTo(200);
+        assertThat(response.getBody())
+                .as("Invitation list response body must be a JSON array")
+                .isNotBlank();
+
+        JsonNode invitations = objectMapper.readTree(response.getBody());
+        assertThat(invitations.isArray())
+                .as("GET /api/admin/invitations must return a JSON array")
+                .isTrue();
+        assertThat(invitations)
+                .as("Only the two seeded pending invitations must be returned")
+                .hasSize(2);
+
+        JsonNode invitationA = invitationByUserId(invitations, inviteeAId);
+        assertInvitationListElement(
+                invitationA,
+                invitationAId,
+                inviteeAEmail,
+                invitedAtA,
+                expiresAtA,
+                inviteeAId,
+                1);
+        JsonNode invitationB = invitationByUserId(invitations, inviteeBId);
+        assertInvitationListElement(
+                invitationB,
+                invitationBId,
+                inviteeBEmail,
+                invitedAtB,
+                expiresAtB,
+                inviteeBId,
+                0);
+
+        assertThat(response.getBody())
+                .as("The embedded inviter reference must expose displayName, not admin email")
+                .doesNotContain(ADMIN_EMAIL);
+
+        List<ILoggingEvent> requestEvents = eventsSince(logSnapshotSize);
+        assertThat(requestEvents)
+                .as("Invitation list access logs must not include raw email literals")
+                .allSatisfy(event -> assertThat(observableLogText(event))
+                        .doesNotContain(ADMIN_EMAIL, inviteeAEmail, inviteeBEmail));
+    }
+
     private ResponseEntity<String> postInvitation(String email) throws Exception {
         HttpHeaders headers = authenticatedJsonHeaders();
         headers.add("X-Forwarded-Proto", "https");
@@ -353,6 +450,14 @@ class InvitationIT extends BaseIT {
                 "http://localhost:" + port + "/api/admin/invitations",
                 HttpMethod.POST,
                 new HttpEntity<>(requestBody, headers),
+                String.class);
+    }
+
+    private ResponseEntity<String> getInvitations() {
+        return restTemplate.exchange(
+                "http://localhost:" + port + "/api/admin/invitations",
+                HttpMethod.GET,
+                new HttpEntity<>(authenticatedJsonHeaders()),
                 String.class);
     }
 
@@ -376,6 +481,66 @@ class InvitationIT extends BaseIT {
         assertThat(problem.path("code").asText())
                 .as("Problem.code must be a stable locale-neutral conflict code")
                 .isNotBlank();
+    }
+
+    private static JsonNode invitationByUserId(JsonNode invitations, UUID userId) {
+        JsonNode match = null;
+        for (JsonNode invitation : invitations) {
+            if (userId.toString().equals(invitation.path("userId").asText())) {
+                match = invitation;
+                break;
+            }
+        }
+        assertThat(match)
+                .as("Invitation list must include the pending invitation for userId %s", userId)
+                .isNotNull();
+        return match;
+    }
+
+    private static void assertInvitationListElement(
+            JsonNode invitation,
+            UUID invitationId,
+            String email,
+            Instant invitedAt,
+            Instant expiresAt,
+            UUID userId,
+            int preAssignedGrantCount) {
+        assertThat(invitation.path("id").asText())
+                .as("Invitation.id must expose the pending_invitations id")
+                .isEqualTo(invitationId.toString());
+        assertThat(invitation.path("email").asText())
+                .as("Invitation.email must expose the invitee email")
+                .isEqualTo(email);
+        assertThat(invitation.path("invitedBy").path("id").asText())
+                .as("Invitation.invitedBy.id must expose the inviter user id")
+                .isEqualTo(ADMIN_ID.toString());
+        assertThat(invitation.path("invitedBy").path("displayName").asText())
+                .as("Invitation.invitedBy.displayName must expose the inviter display name")
+                .isEqualTo("Invitation Admin");
+        assertInstantCloseTo(
+                invitation.path("invitedAt").asText(),
+                invitedAt,
+                "Invitation.invitedAt must expose pending_invitations.invited_at");
+        assertInstantCloseTo(
+                invitation.path("expiresAt").asText(),
+                expiresAt,
+                "Invitation.expiresAt must expose pending_invitations.expires_at");
+        assertThat(invitation.path("userId").asText())
+                .as("Invitation.userId must expose the linked pre-created user id")
+                .isEqualTo(userId.toString());
+        assertThat(invitation.path("preAssignedGrantCount").asInt(-1))
+                .as("Invitation.preAssignedGrantCount must count pre-assigned node grants")
+                .isEqualTo(preAssignedGrantCount);
+    }
+
+    private static void assertInstantCloseTo(
+            String actualText,
+            Instant expected,
+            String description) {
+        Instant actual = Instant.parse(actualText);
+        assertThat(Duration.between(expected, actual).toMillis())
+                .as(description)
+                .isCloseTo(0L, offset(1000L));
     }
 
     private int countUsersByEmail(String email) {
